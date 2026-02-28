@@ -96,8 +96,7 @@ export interface AgentClientPluginSettings {
 	showFloatingButton: boolean;
 	floatingButtonImage: string;
 	floatingWindowSize: { width: number; height: number };
-	floatingWindowPosition: { x: number; y: number } | null;
-	floatingButtonPosition: { x: number; y: number } | null;
+	floatingButtonPosition: { right: number; bottom: number } | null;
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
@@ -140,8 +139,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	showFloatingButton: false,
 	floatingButtonImage: "",
 	floatingWindowSize: { width: 400, height: 500 },
-	floatingWindowPosition: null,
-	floatingButtonPosition: null,
+	floatingButtonPosition: { right: 40, bottom: 30 },
 };
 
 export default class AgentClientPlugin extends Plugin {
@@ -571,6 +569,21 @@ export default class AgentClientPlugin extends Plugin {
 	}
 
 	/**
+	 * Toggle a specific floating chat window between expanded and collapsed.
+	 * @param viewId - The viewId in "floating-chat-{id}" format (from getFloatingChatInstances())
+	 */
+	toggleFloatingChat(viewId: string): void {
+		const container = this.viewRegistry.get(viewId);
+		if (container && container instanceof FloatingViewContainer) {
+			if (container.isExpanded()) {
+				container.collapse();
+			} else {
+				container.expand();
+			}
+		}
+	}
+
+	/**
 	 * Get the Copilot agent configuration
 	 */
 	getAvailableAgents(): Array<{ id: string; displayName: string }> {
@@ -992,35 +1005,20 @@ export default class AgentClientPlugin extends Plugin {
 				}
 				return DEFAULT_SETTINGS.floatingWindowSize;
 			})(),
-			floatingWindowPosition: (() => {
-				const raw = rawSettings.floatingWindowPosition as
-					| { x?: number; y?: number }
-					| null
-					| undefined;
-				if (
-					raw &&
-					typeof raw === "object" &&
-					typeof raw.x === "number" &&
-					typeof raw.y === "number"
-				) {
-					return { x: raw.x, y: raw.y };
-				}
-				return null;
-			})(),
 			floatingButtonPosition: (() => {
 				const raw = rawSettings.floatingButtonPosition as
-					| { x?: number; y?: number }
+					| { right?: number; bottom?: number }
 					| null
 					| undefined;
 				if (
 					raw &&
 					typeof raw === "object" &&
-					typeof raw.x === "number" &&
-					typeof raw.y === "number"
+					typeof raw.right === "number" &&
+					typeof raw.bottom === "number"
 				) {
-					return { x: raw.x, y: raw.y };
+					return { right: raw.right, bottom: raw.bottom };
 				}
-				return null;
+				return DEFAULT_SETTINGS.floatingButtonPosition;
 			})(),
 		};
 	}

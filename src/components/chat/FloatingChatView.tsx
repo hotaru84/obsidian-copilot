@@ -21,6 +21,9 @@ import { InlineHeader } from "./InlineHeader";
 import { useChatController } from "../../hooks/useChatController";
 
 import { clampPosition } from "../../shared/floating-utils";
+import {
+	FLOATING_BUTTON_SIZE,
+} from "./FloatingButton";
 
 // ============================================================
 // Type Definitions
@@ -40,6 +43,7 @@ interface FloatingViewCallbacks {
 	cancelOperation: () => Promise<void>;
 	focus: () => void;
 	hasFocus: () => boolean;
+	isExpanded: () => boolean;
 	expand: () => void;
 	collapse: () => void;
 }
@@ -155,6 +159,10 @@ export class FloatingViewContainer implements IChatViewContainer {
 		this.callbacks?.collapse();
 	}
 
+	isExpanded(): boolean {
+		return this.callbacks?.isExpanded() ?? false;
+	}
+
 	getInputState(): ChatInputState | null {
 		return this.callbacks?.getInputState() ?? null;
 	}
@@ -246,7 +254,16 @@ function FloatingChatComponent({
 	// ============================================================
 	const [isExpanded, setIsExpanded] = useState(initialExpanded);
 	const [size, setSize] = useState(settings.floatingWindowSize);
+	const [buttonPosition, setButtonPosition] = useState(() => {
+		const pos = settings.floatingButtonPosition || { right: 40, bottom: 30 };
+		return {
+			x: window.innerWidth - pos.right - FLOATING_BUTTON_SIZE,
+			y: window.innerHeight - pos.bottom - FLOATING_BUTTON_SIZE,
+		};
+	});
+	const CHAT_BUTTON_MARGIN = 16;
 	const [position, setPosition] = useState(() => {
+		// If initialPosition is provided (when opening new window with offset)
 		if (initialPosition) {
 			return clampPosition(
 				initialPosition.x,
@@ -255,24 +272,29 @@ function FloatingChatComponent({
 				settings.floatingWindowSize.height,
 			);
 		}
-		if (settings.floatingWindowPosition) {
-			return clampPosition(
-				settings.floatingWindowPosition.x,
-				settings.floatingWindowPosition.y,
-				settings.floatingWindowSize.width,
-				settings.floatingWindowSize.height,
-			);
-		}
+
+		// Default: position above button, right-aligned to button
+		const defaultX = buttonPosition.x + FLOATING_BUTTON_SIZE - settings.floatingWindowSize.width;
+		const defaultY =
+			buttonPosition.y - settings.floatingWindowSize.height - CHAT_BUTTON_MARGIN;
+
 		return clampPosition(
-			window.innerWidth - settings.floatingWindowSize.width - 50,
-			window.innerHeight - settings.floatingWindowSize.height - 50,
+			defaultX,
+			defaultY,
 			settings.floatingWindowSize.width,
 			settings.floatingWindowSize.height,
 		);
 	});
-	const [isDragging, setIsDragging] = useState(false);
-	const dragOffset = useRef({ x: 0, y: 0 });
 	const containerRef = useRef<HTMLDivElement>(null);
+	const resizeStateRef = useRef<{
+		edge: "left" | "top";
+		startMouseX: number;
+		startMouseY: number;
+		startWidth: number;
+		startHeight: number;
+	} | null>(null);
+	const MIN_WIDTH = 300;
+	const MIN_HEIGHT = 460;
 
 	const acpClientRef = useRef(acpAdapter);
 
@@ -324,7 +346,7 @@ function FloatingChatComponent({
 				size.height,
 			),
 		);
-	}, [plugin, position, size.width, size.height]);
+	}, [plugin, position.x, position.y, size.width, size.height]);
 
 	const handleCloseWindow = useCallback(() => {
 		setIsExpanded(false);
@@ -351,6 +373,112 @@ function FloatingChatComponent({
 			);
 		};
 	}, [viewId]);
+
+	// Listen for button position updates
+	useEffect(() => {
+		const handleButtonMoved = (
+			event: Event,
+		) => {
+			const customEvent = event as CustomEvent<{
+				absoluteX: number;
+				absoluteY: number;
+				relativeRight: number;
+				relativeBottom: number;
+			}>;
+			setButtonPosition({
+				x: customEvent.detail.absoluteX,
+				y: customEvent.detail.absoluteY,
+			});
+		};
+
+		window.addEventListener(
+			"agent-client:floating-button-moved",
+			handleButtonMoved,
+		);
+		return () => {
+			window.removeEventListener(
+				"agent-client:floating-button-moved",
+				handleButtonMoved,
+			);
+		};
+	}, []);
+
+	// Update chat position when button moves
+	useEffect(() => {
+		// Position chat above button, right-aligned to button
+		const newX = buttonPosition.x + FLOATING_BUTTON_SIZE - size.width;
+		const newY = buttonPosition.y - size.height - CHAT_BUTTON_MARGIN;
+
+		const clampedPos = clampPosition(
+			newX,
+			newY,
+			size.width,
+			size.height,
+		);
+
+		setPosition(clampedPos);
+	}, [buttonPosition, size.width, size.height, CHAT_BUTTON_MARGIN]);
+
+	const handleLeftResizeStart = useCallback((event: React.MouseEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		resizeStateRef.current = {
+			edge: "left",
+			startMouseX: event.clientX,
+			startMouseY: event.clientY,
+			startWidth: size.width,
+			startHeight: size.height,
+		};
+	}, [size.width, size.height]);
+
+	const handleTopResizeStart = useCallback((event: React.MouseEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		resizeStateRef.current = {
+			edge: "top",
+			startMouseX: event.clientX,
+			startMouseY: event.clientY,
+			startWidth: size.width,
+			startHeight: size.height,
+		};
+	}, [size.width, size.height]);
+
+	useEffect(() => {
+		const handleMouseMove = (event: MouseEvent) => {
+			const resizeState = resizeStateRef.current;
+			if (!resizeState) return;
+
+			if (resizeState.edge === "left") {
+				const deltaX = event.clientX - resizeState.startMouseX;
+				const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - 40);
+				const nextWidth = Math.min(
+					maxWidth,
+					Math.max(MIN_WIDTH, resizeState.startWidth - deltaX),
+				);
+				setSize((prev) => ({ ...prev, width: nextWidth }));
+				return;
+			}
+
+			const deltaY = event.clientY - resizeState.startMouseY;
+			const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - 40);
+			const nextHeight = Math.min(
+				maxHeight,
+				Math.max(MIN_HEIGHT, resizeState.startHeight - deltaY),
+			);
+			setSize((prev) => ({ ...prev, height: nextHeight }));
+		};
+
+		const handleMouseUp = () => {
+			resizeStateRef.current = null;
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+		return () => {
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+		};
+	}, []);
 
 	// Sync manual resizing with state
 	useEffect(() => {
@@ -393,69 +521,7 @@ function FloatingChatComponent({
 		return () => clearTimeout(timer);
 	}, [size, plugin, settings.floatingWindowSize]);
 
-	// Save position to settings
-	useEffect(() => {
-		const savePosition = async () => {
-			if (
-				!settings.floatingWindowPosition ||
-				position.x !== settings.floatingWindowPosition.x ||
-				position.y !== settings.floatingWindowPosition.y
-			) {
-				await plugin.saveSettingsAndNotify({
-					...plugin.settings,
-					floatingWindowPosition: position,
-				});
-			}
-		};
-
-		const timer = setTimeout(() => {
-			void savePosition();
-		}, 500); // Debounce save
-		return () => clearTimeout(timer);
-	}, [position, plugin, settings.floatingWindowPosition]);
-
-	// ============================================================
-	// Dragging Logic (View-Specific)
-	// ============================================================
-	const onMouseDown = useCallback(
-		(e: React.MouseEvent) => {
-			if (!containerRef.current) return;
-			setIsDragging(true);
-			dragOffset.current = {
-				x: e.clientX - position.x,
-				y: e.clientY - position.y,
-			};
-		},
-		[position],
-	);
-
-	useEffect(() => {
-		const onMouseMove = (e: MouseEvent) => {
-			if (!isDragging) return;
-			setPosition(
-				clampPosition(
-					e.clientX - dragOffset.current.x,
-					e.clientY - dragOffset.current.y,
-					size.width,
-					size.height,
-				),
-			);
-		};
-
-		const onMouseUp = () => {
-			setIsDragging(false);
-		};
-
-		if (isDragging) {
-			window.addEventListener("mousemove", onMouseMove);
-			window.addEventListener("mouseup", onMouseUp);
-		}
-
-		return () => {
-			window.removeEventListener("mousemove", onMouseMove);
-			window.removeEventListener("mouseup", onMouseUp);
-		};
-	}, [isDragging, size.width, size.height]);
+	// Position is now relative to button, no need to save to settings
 
 	// ============================================================
 	// Callback Registration for IChatViewContainer
@@ -538,6 +604,7 @@ function FloatingChatComponent({
 					isExpanded &&
 					(containerRef.current?.contains(document.activeElement) ??
 						false),
+				isExpanded: () => isExpanded,
 				expand: () => {
 					setIsExpanded(true);
 				},
@@ -731,8 +798,15 @@ function FloatingChatComponent({
 			}}
 		>
 			<div
+				className="agent-client-floating-resize-handle agent-client-floating-resize-handle-left"
+				onMouseDown={handleLeftResizeStart}
+			/>
+			<div
+				className="agent-client-floating-resize-handle agent-client-floating-resize-handle-top"
+				onMouseDown={handleTopResizeStart}
+			/>
+			<div
 				className="agent-client-floating-header"
-				onMouseDown={onMouseDown}
 			>
 				<InlineHeader
 					variant="floating"

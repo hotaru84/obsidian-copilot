@@ -5,7 +5,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { setIcon } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import { useSettings } from "../../hooks/useSettings";
-import { clampPosition } from "../../shared/floating-utils";
+
+// Fixed button size constant
+export const FLOATING_BUTTON_SIZE = 48;
 
 interface VaultAdapterWithResourcePath {
 	getResourcePath?: (path: string) => string;
@@ -58,22 +60,23 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 	const instanceMenuRef = useRef<HTMLDivElement>(null);
 
 	// Button / menu size constants
-	const BUTTON_SIZE = 48;
 	const MENU_MIN_WIDTH = 220;
 
 	// Dragging state
-	const [position, setPosition] = useState<{ x: number; y: number } | null>(
+	const [relativePosRef, setRelativePosRef] = useState<{ right: number; bottom: number } | null>(
 		() => {
 			if (!settings.floatingButtonPosition) return null;
-			return clampPosition(
-				settings.floatingButtonPosition.x,
-				settings.floatingButtonPosition.y,
-				BUTTON_SIZE,
-				BUTTON_SIZE,
-			);
+			return {
+				right: settings.floatingButtonPosition.right,
+				bottom: settings.floatingButtonPosition.bottom,
+			};
 		},
 	);
 	const [isDragging, setIsDragging] = useState(false);
+	const [windowSize, setWindowSize] = useState({
+		width: window.innerWidth,
+		height: window.innerHeight,
+	});
 	const dragOffset = useRef({ x: 0, y: 0 });
 	const dragStartPos = useRef({ x: 0, y: 0 });
 	const wasDragged = useRef(false);
@@ -121,6 +124,18 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 		});
 	}, [plugin.viewRegistry, allInstances]);
 
+	// Calculate absolute button position from relative position
+	const absoluteButtonPos = useMemo(() => {
+		const right = relativePosRef?.right ?? 40;
+		const bottom = relativePosRef?.bottom ?? 30;
+		return {
+			x: windowSize.width - right - FLOATING_BUTTON_SIZE,
+			y: windowSize.height - bottom - FLOATING_BUTTON_SIZE,
+			right,
+			bottom,
+		};
+	}, [relativePosRef, windowSize.width, windowSize.height]);
+
 	// ============================================================
 	// Dragging Logic
 	// ============================================================
@@ -128,22 +143,16 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 
 	const handleMouseDown = useCallback(
 		(e: React.MouseEvent) => {
-			// Compute current position (from state or CSS default)
-			const currentX =
-				position?.x ?? window.innerWidth - 40 - BUTTON_SIZE;
-			const currentY =
-				position?.y ?? window.innerHeight - 30 - BUTTON_SIZE;
-
 			setIsDragging(true);
 			wasDragged.current = false;
 			dragStartPos.current = { x: e.clientX, y: e.clientY };
 			dragOffset.current = {
-				x: e.clientX - currentX,
-				y: e.clientY - currentY,
+				x: e.clientX - absoluteButtonPos.x,
+				y: e.clientY - absoluteButtonPos.y,
 			};
 			e.preventDefault();
 		},
-		[position],
+		[absoluteButtonPos],
 	);
 
 	useEffect(() => {
@@ -160,13 +169,30 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 				return;
 			}
 			wasDragged.current = true;
-			setPosition(
-				clampPosition(
-					e.clientX - dragOffset.current.x,
-					e.clientY - dragOffset.current.y,
-					BUTTON_SIZE,
-					BUTTON_SIZE,
-				),
+
+			const newX = e.clientX - dragOffset.current.x;
+			const newY = e.clientY - dragOffset.current.y;
+
+			// Clamp to viewport
+			const clampedX = Math.max(0, Math.min(newX, window.innerWidth - FLOATING_BUTTON_SIZE));
+			const clampedY = Math.max(0, Math.min(newY, window.innerHeight - FLOATING_BUTTON_SIZE));
+
+			// Convert back to relative position (right, bottom)
+			const newRight = Math.max(0, window.innerWidth - clampedX - FLOATING_BUTTON_SIZE);
+			const newBottom = Math.max(0, window.innerHeight - clampedY - FLOATING_BUTTON_SIZE);
+
+			setRelativePosRef({ right: newRight, bottom: newBottom });
+
+			// Emit custom event to notify chat views
+			window.dispatchEvent(
+				new CustomEvent("agent-client:floating-button-moved", {
+					detail: {
+						absoluteX: clampedX,
+						absoluteY: clampedY,
+						relativeRight: newRight,
+						relativeBottom: newBottom,
+					},
+				}),
 			);
 		};
 
@@ -182,34 +208,67 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 		};
 	}, [isDragging]);
 
-	// Save button position to settings (debounced)
+	// Save relative position to settings (debounced)
 	useEffect(() => {
-		if (!position) return;
+		if (!relativePosRef) return;
 		const timer = setTimeout(() => {
 			if (
 				!settings.floatingButtonPosition ||
-				position.x !== settings.floatingButtonPosition.x ||
-				position.y !== settings.floatingButtonPosition.y
+				relativePosRef.right !== settings.floatingButtonPosition.right ||
+				relativePosRef.bottom !== settings.floatingButtonPosition.bottom
 			) {
 				void plugin.saveSettingsAndNotify({
 					...plugin.settings,
-					floatingButtonPosition: position,
+					floatingButtonPosition: relativePosRef,
 				});
 			}
 		}, 500);
 		return () => clearTimeout(timer);
-	}, [position, plugin, settings.floatingButtonPosition]);
+	}, [relativePosRef, plugin, settings.floatingButtonPosition]);
+
+	// Update button position when window resizes (to maintain relative position)
+	useEffect(() => {
+		const handleWindowResize = () => {
+			// Update window size state for position recalculation
+			setWindowSize({
+				width: window.innerWidth,
+				height: window.innerHeight,
+			});
+			// Position is automatically recalculated via useMemo
+			// Emit event to notify chat views of new button position
+			if (relativePosRef) {
+				const absX = window.innerWidth - relativePosRef.right - FLOATING_BUTTON_SIZE;
+				const absY = window.innerHeight - relativePosRef.bottom - FLOATING_BUTTON_SIZE;
+				window.dispatchEvent(
+					new CustomEvent("agent-client:floating-button-moved", {
+						detail: {
+							absoluteX: absX,
+							absoluteY: absY,
+							relativeRight: relativePosRef.right,
+							relativeBottom: relativePosRef.bottom,
+						},
+					}),
+				);
+			}
+		};
+		window.addEventListener("resize", handleWindowResize);
+		return () => {
+			window.removeEventListener("resize", handleWindowResize);
+		};
+	}, [relativePosRef]);
+
+	// ============================================================
+	// Button Click Logic
 
 	// Button click handler
 	const handleButtonClick = useCallback(() => {
-		if (wasDragged.current) return;
 		const instances = plugin.getFloatingChatInstances();
 		if (instances.length === 0) {
 			// No instances, create one and expand
 			plugin.openNewFloatingChat(true);
 		} else if (instances.length === 1) {
-			// Single instance, just expand
-			plugin.expandFloatingChat(instances[0]);
+			// Single instance, toggle expand/collapse
+			plugin.toggleFloatingChat(instances[0]);
 		} else {
 			// Multiple instances, show menu
 			setShowInstanceMenu(true);
@@ -250,17 +309,17 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 			<div
 				className={buttonClassName}
 				onMouseDown={handleMouseDown}
-				onMouseUp={handleButtonClick}
-				style={
-					position
-						? {
-								left: position.x,
-								top: position.y,
-								right: "auto",
-								bottom: "auto",
-							}
-						: undefined
-				}
+				onMouseUp={() => {
+					if (!wasDragged.current) {
+						handleButtonClick();
+					}
+				}}
+				style={{
+					left: absoluteButtonPos.x,
+					top: absoluteButtonPos.y,
+					right: "auto",
+					bottom: "auto",
+				}}
 			>
 				{floatingButtonImageSrc ? (
 					<img src={floatingButtonImageSrc} alt="Open chat" />
@@ -277,28 +336,22 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 				<div
 					ref={instanceMenuRef}
 					className="agent-client-floating-instance-menu"
-					style={
-						position
+					style={{
+						bottom: window.innerHeight - absoluteButtonPos.y + 10,
+						...(absoluteButtonPos.x + MENU_MIN_WIDTH > window.innerWidth
 							? {
-									bottom:
-										window.innerHeight - position.y + 10,
-									...(position.x + MENU_MIN_WIDTH >
-									window.innerWidth
-										? {
-												right:
-													window.innerWidth -
-													(position.x + BUTTON_SIZE),
-												left: "auto",
-												top: "auto",
-											}
-										: {
-												left: position.x,
-												right: "auto",
-												top: "auto",
-											}),
-								}
-							: undefined
-					}
+									right:
+										window.innerWidth -
+										(absoluteButtonPos.x + FLOATING_BUTTON_SIZE),
+										left: "auto",
+										top: "auto",
+								  }
+							: {
+									left: absoluteButtonPos.x,
+									right: "auto",
+									top: "auto",
+							  }),
+					}}
 				>
 					<div className="agent-client-floating-instance-menu-header">
 						Select session to open
