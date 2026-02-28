@@ -1,6 +1,6 @@
 import * as React from "react";
-import { useEffect, useRef } from "react";
-import { DropdownComponent, setIcon } from "obsidian";
+import { useEffect, useRef, useState } from "react";
+import { Menu, setIcon } from "obsidian";
 import { HeaderButton } from "./HeaderButton";
 
 // Agent info for display
@@ -19,8 +19,6 @@ export interface InlineHeaderProps {
 	availableAgents: AgentInfo[];
 	/** Current agent ID */
 	currentAgentId: string;
-	/** Whether a plugin update is available */
-	isUpdateAvailable: boolean;
 	/** Whether there are messages to export */
 	hasMessages: boolean;
 	/** Callback to switch agent */
@@ -54,7 +52,6 @@ export function InlineHeader({
 	agentLabel,
 	availableAgents,
 	currentAgentId,
-	isUpdateAvailable,
 	hasMessages,
 	onAgentChange,
 	onNewSession,
@@ -65,64 +62,33 @@ export function InlineHeader({
 	onOpenNewWindow,
 	onClose,
 }: InlineHeaderProps) {
-	// Refs for agent dropdown
-	const agentDropdownRef = useRef<HTMLDivElement>(null);
-	const agentDropdownInstance = useRef<DropdownComponent | null>(null);
+	// Refs for agent selector button
+	const agentButtonRef = useRef<HTMLDivElement>(null);
+	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-	// Stable ref for onAgentChange callback
-	const onAgentChangeRef = useRef(onAgentChange);
-	onAgentChangeRef.current = onAgentChange;
+	// Handle agent selector click
+	const handleAgentSelectorClick = () => {
+		if (!agentButtonRef.current) return;
 
-	// Initialize agent dropdown
-	useEffect(() => {
-		const containerEl = agentDropdownRef.current;
-		if (!containerEl) return;
+		const menu = new Menu();
 
-		// Only show dropdown if there are multiple agents
-		if (availableAgents.length <= 1) {
-			if (agentDropdownInstance.current) {
-				containerEl.empty();
-				agentDropdownInstance.current = null;
-			}
-			return;
-		}
-
-		// Create dropdown if not exists
-		if (!agentDropdownInstance.current) {
-			const dropdown = new DropdownComponent(containerEl);
-			agentDropdownInstance.current = dropdown;
-
-			// Add options
-			for (const agent of availableAgents) {
-				dropdown.addOption(agent.id, agent.displayName);
-			}
-
-			// Set initial value
-			if (currentAgentId) {
-				dropdown.setValue(currentAgentId);
-			}
-
-			// Handle change
-			dropdown.onChange((value) => {
-				onAgentChangeRef.current?.(value);
+		for (const agent of availableAgents) {
+			const isActive = agent.id === currentAgentId;
+			menu.addItem((item) => {
+				item
+					.setTitle(agent.displayName)
+					.setIcon(isActive ? "check" : "")
+					.onClick(() => {
+						onAgentChange(agent.id);
+						setIsDropdownOpen(false);
+					});
 			});
 		}
 
-		// Cleanup on unmount or when availableAgents change
-		return () => {
-			if (agentDropdownInstance.current) {
-				containerEl.empty();
-				agentDropdownInstance.current = null;
-			}
-		};
-	}, [availableAgents]);
-
-	// Update dropdown value when currentAgentId changes
-	useEffect(() => {
-		if (agentDropdownInstance.current && currentAgentId) {
-			agentDropdownInstance.current.setValue(currentAgentId);
-		}
-	}, [currentAgentId]);
+		const rect = agentButtonRef.current.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
+		setIsDropdownOpen(true);
+	};
 
 	return (
 		<div
@@ -130,8 +96,22 @@ export function InlineHeader({
 		>
 			<div className="agent-client-inline-header-main">
 				{availableAgents.length > 1 ? (
-					<div className="agent-client-agent-selector">
-						<div ref={agentDropdownRef} />
+					<div
+						ref={agentButtonRef}
+						className="agent-client-agent-selector"
+						onClick={handleAgentSelectorClick}
+						role="button"
+						tabIndex={0}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" || e.key === " ") {
+								e.preventDefault();
+								handleAgentSelectorClick();
+							}
+						}}
+					>
+						<span className="agent-client-agent-selector-text">
+							{agentLabel}
+						</span>
 						<span
 							className="agent-client-agent-selector-icon"
 							ref={(el) => {
@@ -145,11 +125,6 @@ export function InlineHeader({
 					</span>
 				)}
 			</div>
-			{isUpdateAvailable && (
-				<p className="agent-client-chat-view-header-update">
-					Plugin update available!
-				</p>
-			)}
 			<div className="agent-client-inline-header-actions">
 				<HeaderButton
 					iconName="plus"

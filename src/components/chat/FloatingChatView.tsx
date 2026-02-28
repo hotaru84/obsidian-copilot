@@ -215,7 +215,6 @@ function FloatingChatComponent({
 		isSessionReady,
 		messages,
 		isSending,
-		isUpdateAvailable,
 		permission,
 		mentions,
 		autoMention,
@@ -740,7 +739,6 @@ function FloatingChatComponent({
 					agentLabel={activeAgentLabel}
 					availableAgents={availableAgents}
 					currentAgentId={session.agentId}
-					isUpdateAvailable={isUpdateAvailable}
 					hasMessages={messages.length > 0}
 					onAgentChange={(agentId) => void handleSwitchAgent(agentId)}
 					onNewSession={() => void handleNewChat()}

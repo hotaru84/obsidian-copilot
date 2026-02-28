@@ -37,12 +37,35 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
-	outfile: "main.js",
+	outdir: "obsidian-copilot-agent",
 	minify: prod,
 });
 
+import fs from "fs";
+import path from "path";
+
 if (prod) {
 	await context.rebuild();
+
+	// Copy manifest.json and styles.css to output directory
+	const outputDir = "obsidian-copilot-agent";
+	if (!fs.existsSync(outputDir)) {
+		fs.mkdirSync(outputDir, { recursive: true });
+	}
+
+	// Copy manifest.json
+	if (fs.existsSync("manifest.json")) {
+		fs.copyFileSync("manifest.json", path.join(outputDir, "manifest.json"));
+		console.log(`✓ Copied manifest.json to ${outputDir}/`);
+	}
+
+	// Copy styles.css
+	if (fs.existsSync("styles.css")) {
+		fs.copyFileSync("styles.css", path.join(outputDir, "styles.css"));
+		console.log(`✓ Copied styles.css to ${outputDir}/`);
+	}
+
+	console.log(`✓ Build complete! Output in ${outputDir}/`);
 	process.exit(0);
 } else {
 	await context.watch();

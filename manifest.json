@@ -1,11 +1,10 @@
 {
-	"id": "agent-client",
-	"name": "Agent Client",
-	"version": "0.8.3",
+	"id": "obsidian-copilot",
+	"name": "Copilot for Obsidian",
+	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
-	"description": "Chat with AI agents via the Agent Client Protocol directly from your vault.",
-	"author": "RAIT-09",
-	"authorUrl": "https://github.com/RAIT-09",
-	"fundingUrl": "https://www.buymeacoffee.com/rait09",
+	"description": "Chat with GitHub Copilot directly from your Obsidian vault using the Agent Client Protocol.",
+	"author": "hiroo",
+	"authorUrl": "https://github.com/hiroo",
 	"isDesktopOnly": true
 }

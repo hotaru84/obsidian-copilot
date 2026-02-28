@@ -65,7 +65,6 @@ export interface UseChatControllerReturn {
 	isSessionReady: boolean;
 	messages: ReturnType<typeof useChat>["messages"];
 	isSending: boolean;
-	isUpdateAvailable: boolean;
 	isLoadingSessionHistory: boolean;
 
 	// Hook returns
@@ -258,7 +257,6 @@ export function useChatController(
 	// ============================================================
 	// Local State
 	// ============================================================
-	const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
 	const [restoredMessage, setRestoredMessage] = useState<string | null>(null);
 
 	// Input state (for broadcast commands - sidebar only)
@@ -274,27 +272,9 @@ export function useChatController(
 	// Computed Values
 	// ============================================================
 	const activeAgentLabel = useMemo(() => {
-		const activeId = session.agentId;
-		if (activeId === plugin.settings.claude.id) {
-			return (
-				plugin.settings.claude.displayName || plugin.settings.claude.id
-			);
-		}
-		if (activeId === plugin.settings.codex.id) {
-			return (
-				plugin.settings.codex.displayName || plugin.settings.codex.id
-			);
-		}
-		if (activeId === plugin.settings.gemini.id) {
-			return (
-				plugin.settings.gemini.displayName || plugin.settings.gemini.id
-			);
-		}
-		const custom = plugin.settings.customAgents.find(
-			(agent) => agent.id === activeId,
-		);
-		return custom?.displayName || custom?.id || activeId;
-	}, [session.agentId, plugin.settings]);
+		// GitHub Copilot is the only available agent
+		return plugin.settings.copilot.displayName || plugin.settings.copilot.id;
+	}, [plugin.settings.copilot]);
 
 	const availableAgents = useMemo(() => {
 		return plugin.getAvailableAgents();
@@ -739,18 +719,6 @@ export function useChatController(
 	}, [acpAdapter, chat.updateMessage]);
 
 	// ============================================================
-	// Effects - Update Check
-	// ============================================================
-	useEffect(() => {
-		plugin
-			.checkForUpdates()
-			.then(setIsUpdateAvailable)
-			.catch((error) => {
-				logger.error("Failed to check for updates:", error);
-			});
-	}, [plugin, logger]);
-
-	// ============================================================
 	// Effects - Save Session Messages on Turn End
 	// ============================================================
 	const prevIsSendingRef = useRef<boolean>(false);
@@ -813,7 +781,6 @@ export function useChatController(
 		isSessionReady,
 		messages,
 		isSending,
-		isUpdateAvailable,
 		isLoadingSessionHistory,
 
 		// Hook returns

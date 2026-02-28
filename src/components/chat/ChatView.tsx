@@ -77,7 +77,7 @@ function ChatComponent({
 		isSessionReady,
 		messages,
 		isSending,
-		isUpdateAvailable,
+
 		permission,
 		mentions,
 		autoMention,
@@ -199,9 +199,7 @@ function ChatComponent({
 				item.setTitle("Open new view")
 					.setIcon("plus")
 					.onClick(() => {
-						void plugin.openNewChatViewWithAgent(
-							plugin.settings.defaultAgentId,
-						);
+						void plugin.openNewChatViewWithAgent("copilot");
 					});
 			});
 
@@ -537,7 +535,6 @@ function ChatComponent({
 		>
 			<ChatHeader
 				agentLabel={activeAgentLabel}
-				isUpdateAvailable={isUpdateAvailable}
 				hasHistoryCapability={sessionHistory.canShowSessionHistory}
 				onNewChat={() => void handleNewChatWithPersist()}
 				onExportChat={() => void handleExportChat()}

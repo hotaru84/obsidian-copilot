@@ -1,6 +1,6 @@
 import * as React from "react";
 const { useRef, useState, useEffect, useCallback } = React;
-import { setIcon, DropdownComponent, Notice } from "obsidian";
+import { setIcon, Notice, Menu } from "obsidian";
 
 import type AgentClientPlugin from "../../plugin";
 import type { IChatViewHost } from "./types";
@@ -183,10 +183,10 @@ export function ChatInput({
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const dragCounterRef = useRef(0);
 	const sendButtonRef = useRef<HTMLButtonElement>(null);
-	const modeDropdownRef = useRef<HTMLDivElement>(null);
-	const modeDropdownInstance = useRef<DropdownComponent | null>(null);
-	const modelDropdownRef = useRef<HTMLDivElement>(null);
-	const modelDropdownInstance = useRef<DropdownComponent | null>(null);
+	const modeButtonRef = useRef<HTMLDivElement>(null);
+	const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false);
+	const modelButtonRef = useRef<HTMLDivElement>(null);
+	const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
 	// Clear attached images when agent changes
 	useEffect(() => {
@@ -783,123 +783,67 @@ export function ChatInput({
 	const onModeChangeRef = useRef(onModeChange);
 	onModeChangeRef.current = onModeChange;
 
-	// Initialize Mode dropdown (only when availableModes change)
-	const availableModes = modes?.availableModes;
-	const currentModeId = modes?.currentModeId;
-
-	useEffect(() => {
-		const containerEl = modeDropdownRef.current;
-		if (!containerEl) return;
-
-		// Only show dropdown if there are multiple modes
-		if (!availableModes || availableModes.length <= 1) {
-			// Clean up existing dropdown if modes become unavailable
-			if (modeDropdownInstance.current) {
-				containerEl.empty();
-				modeDropdownInstance.current = null;
-			}
+	// Handle mode selector click
+	const handleModeSelectorClick = useCallback(() => {
+		if (!modeButtonRef.current || !modes?.availableModes || modes.availableModes.length <= 1) {
 			return;
 		}
 
-		// Create dropdown if not exists
-		if (!modeDropdownInstance.current) {
-			const dropdown = new DropdownComponent(containerEl);
-			modeDropdownInstance.current = dropdown;
+		const menu = new Menu();
+		const currentModeId = modes.currentModeId;
 
-			// Add options
-			for (const mode of availableModes) {
-				dropdown.addOption(mode.id, mode.name);
-			}
-
-			// Set initial value
-			if (currentModeId) {
-				dropdown.setValue(currentModeId);
-			}
-
-			// Handle change - use ref to avoid recreating dropdown on callback change
-			dropdown.onChange((value) => {
-				if (onModeChangeRef.current) {
-					onModeChangeRef.current(value);
-				}
+		for (const mode of modes.availableModes) {
+			const isActive = mode.id === currentModeId;
+			menu.addItem((item) => {
+				item
+					.setTitle(mode.name)
+					.setIcon(isActive ? "check" : "")
+					.onClick(() => {
+						if (onModeChangeRef.current) {
+							onModeChangeRef.current(mode.id);
+						}
+						setIsModeDropdownOpen(false);
+					});
 			});
 		}
 
-		// Cleanup on unmount or when availableModes change
-		return () => {
-			if (modeDropdownInstance.current) {
-				containerEl.empty();
-				modeDropdownInstance.current = null;
-			}
-		};
-	}, [availableModes]);
-
-	// Update dropdown value when currentModeId changes (separate effect)
-	useEffect(() => {
-		if (modeDropdownInstance.current && currentModeId) {
-			modeDropdownInstance.current.setValue(currentModeId);
-		}
-	}, [currentModeId]);
+		const rect = modeButtonRef.current.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
+		setIsModeDropdownOpen(true);
+	}, [modes]);
 
 	// Stable references for model callbacks
 	const onModelChangeRef = useRef(onModelChange);
 	onModelChangeRef.current = onModelChange;
 
-	// Initialize Model dropdown (only when availableModels change)
-	const availableModels = models?.availableModels;
-	const currentModelId = models?.currentModelId;
-
-	useEffect(() => {
-		const containerEl = modelDropdownRef.current;
-		if (!containerEl) return;
-
-		// Only show dropdown if there are multiple models
-		if (!availableModels || availableModels.length <= 1) {
-			// Clean up existing dropdown if models become unavailable
-			if (modelDropdownInstance.current) {
-				containerEl.empty();
-				modelDropdownInstance.current = null;
-			}
+	// Handle model selector click
+	const handleModelSelectorClick = useCallback(() => {
+		if (!modelButtonRef.current || !models?.availableModels || models.availableModels.length <= 1) {
 			return;
 		}
 
-		// Create dropdown if not exists
-		if (!modelDropdownInstance.current) {
-			const dropdown = new DropdownComponent(containerEl);
-			modelDropdownInstance.current = dropdown;
+		const menu = new Menu();
+		const currentModelId = models.currentModelId;
 
-			// Add options
-			for (const model of availableModels) {
-				dropdown.addOption(model.modelId, model.name);
-			}
-
-			// Set initial value
-			if (currentModelId) {
-				dropdown.setValue(currentModelId);
-			}
-
-			// Handle change - use ref to avoid recreating dropdown on callback change
-			dropdown.onChange((value) => {
-				if (onModelChangeRef.current) {
-					onModelChangeRef.current(value);
-				}
+		for (const model of models.availableModels) {
+			const isActive = model.modelId === currentModelId;
+			menu.addItem((item) => {
+				item
+					.setTitle(model.name)
+					.setIcon(isActive ? "check" : "")
+					.onClick(() => {
+						if (onModelChangeRef.current) {
+							onModelChangeRef.current(model.modelId);
+						}
+						setIsModelDropdownOpen(false);
+					});
 			});
 		}
 
-		// Cleanup on unmount or when availableModels change
-		return () => {
-			if (modelDropdownInstance.current) {
-				containerEl.empty();
-				modelDropdownInstance.current = null;
-			}
-		};
-	}, [availableModels]);
-
-	// Update dropdown value when currentModelId changes (separate effect)
-	useEffect(() => {
-		if (modelDropdownInstance.current && currentModelId) {
-			modelDropdownInstance.current.setValue(currentModelId);
-		}
-	}, [currentModelId]);
+		const rect = modelButtonRef.current.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
+		setIsModelDropdownOpen(true);
+	}, [models]);
 
 	// Placeholder text
 	const placeholder = `Message ${agentLabel} - @ to mention notes${availableCommands.length > 0 ? ", / for commands" : ""}`;
@@ -1037,47 +981,75 @@ export function ChatInput({
 					{/* Mode Selector */}
 					{modes && modes.availableModes.length > 1 && (
 						<div
-							className="agent-client-mode-selector"
-							title={
-								modes.availableModes.find(
-									(m) => m.id === modes.currentModeId,
-								)?.description ?? "Select mode"
+						ref={modeButtonRef}
+						className="agent-client-mode-selector"
+						onClick={handleModeSelectorClick}
+						role="button"
+						tabIndex={0}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" || e.key === " ") {
+								e.preventDefault();
+								handleModeSelectorClick();
 							}
-						>
-							<div ref={modeDropdownRef} />
-							<span
-								className="agent-client-mode-selector-icon"
-								ref={(el) => {
-									if (el) setIcon(el, "chevron-down");
-								}}
-							/>
-						</div>
-					)}
+						}}
+						title={
+							modes.availableModes.find(
+								(m) => m.id === modes.currentModeId,
+							)?.description ?? "Select mode"
+						}
+					>
+						<span className="agent-client-mode-selector-text">
+							{modes.availableModes.find(
+								(m) => m.id === modes.currentModeId,
+							)?.name ?? "Select mode"}
+						</span>
+						<span
+							className="agent-client-mode-selector-icon"
+							ref={(el) => {
+								if (el) setIcon(el, "chevron-down");
+							}}
+						/>
+					</div>
+				)}
 
 					{/* Model Selector (experimental) */}
 					{models && models.availableModels.length > 1 && (
 						<div
-							className="agent-client-model-selector"
-							title={
-								models.availableModels.find(
-									(m) => m.modelId === models.currentModelId,
-								)?.description ?? "Select model"
+						ref={modelButtonRef}
+						className="agent-client-model-selector"
+						onClick={handleModelSelectorClick}
+						role="button"
+						tabIndex={0}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" || e.key === " ") {
+								e.preventDefault();
+								handleModelSelectorClick();
 							}
-						>
-							<div ref={modelDropdownRef} />
-							<span
-								className="agent-client-model-selector-icon"
-								ref={(el) => {
-									if (el) setIcon(el, "chevron-down");
-								}}
-							/>
-						</div>
-					)}
+						}}
+						title={
+							models.availableModels.find(
+								(m) => m.modelId === models.currentModelId,
+							)?.description ?? "Select model"
+						}
+					>
+						<span className="agent-client-model-selector-text">
+							{models.availableModels.find(
+								(m) => m.modelId === models.currentModelId,
+							)?.name ?? "Select model"}
+						</span>
+				<span
+					className="agent-client-model-selector-icon"
+					ref={(el) => {
+						if (el) setIcon(el, "chevron-down");
+					}}
+				/>
+					</div>
+				)}
 
-					{/* Send/Stop Button */}
-					<button
-						ref={sendButtonRef}
-						onClick={() => void handleSendOrStop()}
+				{/* Send/Stop Button */}
+				<button
+					ref={sendButtonRef}
+					onClick={() => void handleSendOrStop()}
 						disabled={isButtonDisabled}
 						className={`agent-client-chat-send-button ${isSending ? "sending" : ""} ${isButtonDisabled ? "agent-client-disabled" : ""}`}
 						title={

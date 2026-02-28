@@ -23,22 +23,17 @@ import { AcpAdapter } from "./adapters/acp/acp.adapter";
 import {
 	sanitizeArgs,
 	normalizeEnvVars,
-	normalizeCustomAgent,
-	ensureUniqueCustomAgentIds,
 } from "./shared/settings-utils";
 import { parseChatFontSize } from "./shared/display-settings";
 import {
 	AgentEnvVar,
-	GeminiAgentSettings,
-	ClaudeAgentSettings,
-	CodexAgentSettings,
-	CustomAgentSettings,
+	CopilotAgentSettings,
 } from "./domain/models/agent-config";
 import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
 
 // Re-export for backward compatibility
-export type { AgentEnvVar, CustomAgentSettings };
+export type { AgentEnvVar };
 
 /**
  * Send message shortcut configuration.
@@ -61,12 +56,7 @@ export type ChatViewLocation =
 	| "editor-split";
 
 export interface AgentClientPluginSettings {
-	gemini: GeminiAgentSettings;
-	claude: ClaudeAgentSettings;
-	codex: CodexAgentSettings;
-	customAgents: CustomAgentSettings[];
-	/** Default agent ID for new views (renamed from activeAgentId for multi-session) */
-	defaultAgentId: string;
+	copilot: CopilotAgentSettings;
 	autoAllowPermissions: boolean;
 	autoMentionActiveNote: boolean;
 	debugMode: boolean;
@@ -111,32 +101,13 @@ export interface AgentClientPluginSettings {
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
-	claude: {
-		id: "claude-code-acp",
-		displayName: "Claude Code",
-		apiKey: "",
-		command: "",
-		args: [],
+	copilot: {
+		id: "copilot",
+		displayName: "GitHub Copilot",
+		command: "copilot",
+		args: ["--acp", "--stdio"],
 		env: [],
 	},
-	codex: {
-		id: "codex-acp",
-		displayName: "Codex",
-		apiKey: "",
-		command: "",
-		args: [],
-		env: [],
-	},
-	gemini: {
-		id: "gemini-cli",
-		displayName: "Gemini CLI",
-		apiKey: "",
-		command: "",
-		args: ["--experimental-acp"],
-		env: [],
-	},
-	customAgents: [],
-	defaultAgentId: "claude-code-acp",
 	autoAllowPermissions: false,
 	autoMentionActiveNote: true,
 	debugMode: false,
@@ -239,9 +210,7 @@ export default class AgentClientPlugin extends Plugin {
 			id: "open-new-chat-view",
 			name: "Open new chat view",
 			callback: () => {
-				void this.openNewChatViewWithAgent(
-					this.settings.defaultAgentId,
-				);
+				void this.openNewChatViewWithAgent("copilot");
 			},
 		});
 
@@ -602,29 +571,15 @@ export default class AgentClientPlugin extends Plugin {
 	}
 
 	/**
-	 * Get all available agents (claude, codex, gemini, custom)
+	 * Get the Copilot agent configuration
 	 */
 	getAvailableAgents(): Array<{ id: string; displayName: string }> {
 		return [
 			{
-				id: this.settings.claude.id,
+				id: this.settings.copilot.id,
 				displayName:
-					this.settings.claude.displayName || this.settings.claude.id,
+					this.settings.copilot.displayName || this.settings.copilot.id,
 			},
-			{
-				id: this.settings.codex.id,
-				displayName:
-					this.settings.codex.displayName || this.settings.codex.id,
-			},
-			{
-				id: this.settings.gemini.id,
-				displayName:
-					this.settings.gemini.displayName || this.settings.gemini.id,
-			},
-			...this.settings.customAgents.map((agent) => ({
-				id: agent.id,
-				displayName: agent.displayName || agent.id,
-			})),
 		];
 	}
 
@@ -833,131 +788,34 @@ export default class AgentClientPlugin extends Plugin {
 			unknown
 		>;
 
-		const claudeFromRaw =
-			typeof rawSettings.claude === "object" &&
-			rawSettings.claude !== null
-				? (rawSettings.claude as Record<string, unknown>)
-				: {};
-		const codexFromRaw =
-			typeof rawSettings.codex === "object" && rawSettings.codex !== null
-				? (rawSettings.codex as Record<string, unknown>)
-				: {};
-		const geminiFromRaw =
-			typeof rawSettings.gemini === "object" &&
-			rawSettings.gemini !== null
-				? (rawSettings.gemini as Record<string, unknown>)
+		const copilotFromRaw =
+			typeof rawSettings.copilot === "object" &&
+			rawSettings.copilot !== null
+				? (rawSettings.copilot as Record<string, unknown>)
 				: {};
 
-		const resolvedClaudeArgs = sanitizeArgs(claudeFromRaw.args);
-		const resolvedClaudeEnv = normalizeEnvVars(claudeFromRaw.env);
-		const resolvedCodexArgs = sanitizeArgs(codexFromRaw.args);
-		const resolvedCodexEnv = normalizeEnvVars(codexFromRaw.env);
-		const resolvedGeminiArgs = sanitizeArgs(geminiFromRaw.args);
-		const resolvedGeminiEnv = normalizeEnvVars(geminiFromRaw.env);
-		const customAgents = Array.isArray(rawSettings.customAgents)
-			? ensureUniqueCustomAgentIds(
-					rawSettings.customAgents.map((agent: unknown) => {
-						const agentObj =
-							typeof agent === "object" && agent !== null
-								? (agent as Record<string, unknown>)
-								: {};
-						return normalizeCustomAgent(agentObj);
-					}),
-				)
-			: [];
-
-		const availableAgentIds = [
-			DEFAULT_SETTINGS.claude.id,
-			DEFAULT_SETTINGS.codex.id,
-			DEFAULT_SETTINGS.gemini.id,
-			...customAgents.map((agent) => agent.id),
-		];
-		// Migration: support both old activeAgentId and new defaultAgentId
-		const rawDefaultId =
-			typeof rawSettings.defaultAgentId === "string"
-				? rawSettings.defaultAgentId.trim()
-				: typeof rawSettings.activeAgentId === "string"
-					? rawSettings.activeAgentId.trim()
-					: "";
-		const fallbackDefaultId =
-			availableAgentIds.find((id) => id.length > 0) ||
-			DEFAULT_SETTINGS.claude.id;
-		const defaultAgentId =
-			availableAgentIds.includes(rawDefaultId) && rawDefaultId.length > 0
-				? rawDefaultId
-				: fallbackDefaultId;
+		const resolvedCopilotArgs = sanitizeArgs(copilotFromRaw.args);
+		const resolvedCopilotEnv = normalizeEnvVars(copilotFromRaw.env);
 
 		this.settings = {
-			claude: {
-				id: DEFAULT_SETTINGS.claude.id,
+			copilot: {
+				id: DEFAULT_SETTINGS.copilot.id,
 				displayName:
-					typeof claudeFromRaw.displayName === "string" &&
-					claudeFromRaw.displayName.trim().length > 0
-						? claudeFromRaw.displayName.trim()
-						: DEFAULT_SETTINGS.claude.displayName,
-				apiKey:
-					typeof claudeFromRaw.apiKey === "string"
-						? claudeFromRaw.apiKey
-						: DEFAULT_SETTINGS.claude.apiKey,
+					typeof copilotFromRaw.displayName === "string" &&
+					copilotFromRaw.displayName.trim().length > 0
+						? copilotFromRaw.displayName.trim()
+						: DEFAULT_SETTINGS.copilot.displayName,
 				command:
-					typeof claudeFromRaw.command === "string" &&
-					claudeFromRaw.command.trim().length > 0
-						? claudeFromRaw.command.trim()
-						: typeof rawSettings.claudeCodeAcpCommandPath ===
-									"string" &&
-							  rawSettings.claudeCodeAcpCommandPath.trim()
-									.length > 0
-							? rawSettings.claudeCodeAcpCommandPath.trim()
-							: DEFAULT_SETTINGS.claude.command,
-				args: resolvedClaudeArgs.length > 0 ? resolvedClaudeArgs : [],
-				env: resolvedClaudeEnv.length > 0 ? resolvedClaudeEnv : [],
-			},
-			codex: {
-				id: DEFAULT_SETTINGS.codex.id,
-				displayName:
-					typeof codexFromRaw.displayName === "string" &&
-					codexFromRaw.displayName.trim().length > 0
-						? codexFromRaw.displayName.trim()
-						: DEFAULT_SETTINGS.codex.displayName,
-				apiKey:
-					typeof codexFromRaw.apiKey === "string"
-						? codexFromRaw.apiKey
-						: DEFAULT_SETTINGS.codex.apiKey,
-				command:
-					typeof codexFromRaw.command === "string" &&
-					codexFromRaw.command.trim().length > 0
-						? codexFromRaw.command.trim()
-						: DEFAULT_SETTINGS.codex.command,
-				args: resolvedCodexArgs.length > 0 ? resolvedCodexArgs : [],
-				env: resolvedCodexEnv.length > 0 ? resolvedCodexEnv : [],
-			},
-			gemini: {
-				id: DEFAULT_SETTINGS.gemini.id,
-				displayName:
-					typeof geminiFromRaw.displayName === "string" &&
-					geminiFromRaw.displayName.trim().length > 0
-						? geminiFromRaw.displayName.trim()
-						: DEFAULT_SETTINGS.gemini.displayName,
-				apiKey:
-					typeof geminiFromRaw.apiKey === "string"
-						? geminiFromRaw.apiKey
-						: DEFAULT_SETTINGS.gemini.apiKey,
-				command:
-					typeof geminiFromRaw.command === "string" &&
-					geminiFromRaw.command.trim().length > 0
-						? geminiFromRaw.command.trim()
-						: typeof rawSettings.geminiCommandPath === "string" &&
-							  rawSettings.geminiCommandPath.trim().length > 0
-							? rawSettings.geminiCommandPath.trim()
-							: DEFAULT_SETTINGS.gemini.command,
+					typeof copilotFromRaw.command === "string" &&
+					copilotFromRaw.command.trim().length > 0
+						? copilotFromRaw.command.trim()
+						: DEFAULT_SETTINGS.copilot.command,
 				args:
-					resolvedGeminiArgs.length > 0
-						? resolvedGeminiArgs
-						: DEFAULT_SETTINGS.gemini.args,
-				env: resolvedGeminiEnv.length > 0 ? resolvedGeminiEnv : [],
+					resolvedCopilotArgs.length > 0
+						? resolvedCopilotArgs
+						: DEFAULT_SETTINGS.copilot.args,
+				env: resolvedCopilotEnv.length > 0 ? resolvedCopilotEnv : [],
 			},
-			customAgents: customAgents,
-			defaultAgentId,
 			autoAllowPermissions:
 				typeof rawSettings.autoAllowPermissions === "boolean"
 					? rawSettings.autoAllowPermissions
@@ -1165,8 +1023,6 @@ export default class AgentClientPlugin extends Plugin {
 				return null;
 			})(),
 		};
-
-		this.ensureDefaultAgentId();
 	}
 
 	async saveSettings() {
@@ -1177,103 +1033,5 @@ export default class AgentClientPlugin extends Plugin {
 		this.settings = nextSettings;
 		await this.saveData(this.settings);
 		this.settingsStore.set(this.settings);
-	}
-
-	/**
-	 * Fetch the latest stable release version from GitHub.
-	 */
-	private async fetchLatestStable(): Promise<string | null> {
-		const response = await requestUrl({
-			url: "https://api.github.com/repos/RAIT-09/obsidian-agent-client/releases/latest",
-		});
-		const data = response.json as { tag_name?: string };
-		return data.tag_name ? semver.clean(data.tag_name) : null;
-	}
-
-	/**
-	 * Fetch the latest prerelease version from GitHub.
-	 */
-	private async fetchLatestPrerelease(): Promise<string | null> {
-		const response = await requestUrl({
-			url: "https://api.github.com/repos/RAIT-09/obsidian-agent-client/releases",
-		});
-		const releases = response.json as Array<{
-			tag_name: string;
-			prerelease: boolean;
-		}>;
-
-		// Find the first prerelease (releases are sorted by date descending)
-		const latestPrerelease = releases.find((r) => r.prerelease);
-		return latestPrerelease
-			? semver.clean(latestPrerelease.tag_name)
-			: null;
-	}
-
-	/**
-	 * Check for plugin updates.
-	 * - Stable version users: compare with latest stable release
-	 * - Prerelease users: compare with both latest stable and latest prerelease
-	 */
-	async checkForUpdates(): Promise<boolean> {
-		const currentVersion =
-			semver.clean(this.manifest.version) || this.manifest.version;
-		const isCurrentPrerelease = semver.prerelease(currentVersion) !== null;
-
-		if (isCurrentPrerelease) {
-			// Prerelease user: check both stable and prerelease
-			const [latestStable, latestPrerelease] = await Promise.all([
-				this.fetchLatestStable(),
-				this.fetchLatestPrerelease(),
-			]);
-
-			const hasNewerStable =
-				latestStable && semver.gt(latestStable, currentVersion);
-			const hasNewerPrerelease =
-				latestPrerelease && semver.gt(latestPrerelease, currentVersion);
-
-			if (hasNewerStable || hasNewerPrerelease) {
-				// Prefer stable version notification if available
-				const newestVersion = hasNewerStable
-					? latestStable
-					: latestPrerelease;
-				new Notice(
-					`[Agent Client] Update available: v${newestVersion}`,
-				);
-				return true;
-			}
-		} else {
-			// Stable version user: check stable only
-			const latestStable = await this.fetchLatestStable();
-			if (latestStable && semver.gt(latestStable, currentVersion)) {
-				new Notice(`[Agent Client] Update available: v${latestStable}`);
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	ensureDefaultAgentId(): void {
-		const availableIds = this.collectAvailableAgentIds();
-		if (availableIds.length === 0) {
-			this.settings.defaultAgentId = DEFAULT_SETTINGS.claude.id;
-			return;
-		}
-		if (!availableIds.includes(this.settings.defaultAgentId)) {
-			this.settings.defaultAgentId = availableIds[0];
-		}
-	}
-
-	private collectAvailableAgentIds(): string[] {
-		const ids = new Set<string>();
-		ids.add(this.settings.claude.id);
-		ids.add(this.settings.codex.id);
-		ids.add(this.settings.gemini.id);
-		for (const agent of this.settings.customAgents) {
-			if (agent.id && agent.id.length > 0) {
-				ids.add(agent.id);
-			}
-		}
-		return Array.from(ids);
 	}
 }

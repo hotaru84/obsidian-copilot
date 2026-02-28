@@ -1,38 +1,73 @@
 # Quick Start
 
-This guide will get you chatting with an AI agent in just a few minutes.
+Get up and running with GitHub Copilot in Obsidian in just a few minutes.
 
-## Step 1: Choose Your Agent
+## Step 1: Prerequisites
 
-Agent Client supports multiple AI agents. Choose one to start:
+Make sure you have:
+- **GitHub Copilot subscription** (paid or trial)
+- **Node.js** v16+ ([download here](https://nodejs.org))
+- **GitHub account** for authentication
 
-| Agent | Provider | Integration |
-|-------|----------|-------------|
-| **[Claude Code](/agent-setup/claude-code)** | Anthropic | via [Zed's SDK adapter](https://github.com/zed-industries/claude-agent-acp) |
-| **[Codex](/agent-setup/codex)** | OpenAI | via [Zed's adapter](https://github.com/zed-industries/codex-acp) |
-| **[Gemini CLI](/agent-setup/gemini-cli)** | Google | with `--experimental-acp` option |
-| **[Custom](/agent-setup/custom-agents)** | Various | [Any ACP-compatible agent](https://agentclientprotocol.com/overview/agents) (e.g., OpenCode, Qwen Code, Kiro) |
+## Step 2: Install GitHub Copilot CLI
 
-## Step 2: Install and Configure the Agent
+```bash
+npm install -g @github/copilot-cli
+```
 
-Follow the setup guide for your chosen agent:
+## Step 3: Authenticate with GitHub
 
-- [Claude Code Setup](/agent-setup/claude-code)
-- [Codex Setup](/agent-setup/codex)
-- [Gemini CLI Setup](/agent-setup/gemini-cli)
-- [Custom Agents](/agent-setup/custom-agents)
+```bash
+copilot auth login
+```
 
-Each guide covers installation, path configuration, and authentication.
+Follow the prompts to authorize with GitHub. A browser window will open—sign in and allow access.
 
-## Step 3: Start Chatting
+## Step 4: Find the Copilot CLI Path
+
+Run one of these commands to find where Copilot is installed:
+
+**macOS/Linux:**
+```bash
+which copilot
+```
+
+**Windows (PowerShell):**
+```powershell
+Get-Command copilot
+```
+
+Note the path (e.g., `/usr/local/bin/copilot` or `C:\Users\...\AppData\Roaming\npm\copilot.exe`)
+
+## Step 5: Configure in Obsidian
+
+1. Open Obsidian Settings
+2. Go to **Community Plugins → Copilot for Obsidian**
+3. Under **GitHub Copilot**:
+   - Paste the path from Step 4 into the **CLI Path** field
+   - Click **Authenticate** to test the connection
+
+## Step 6: Start Chatting
 
 1. Click the **robot icon** in the left ribbon, or
-2. Open the command palette (`Cmd/Ctrl + P`) and search for **"Open agent chat"**
+2. Use the keyboard shortcut (default: `Ctrl+Shift+*` / `Cmd+Shift+*`)
 
 The chat panel opens in the right sidebar. Type a message and press Enter!
 
 ## What's Next?
 
-- Learn about [Note Mentions](/usage/mentions) to reference your notes in conversations
+- Learn about [Note Mentions](/usage/mentions) to reference your vault notes
 - Explore [Slash Commands](/usage/slash-commands) for quick actions
-- Set up additional agents in [Agent Setup](/agent-setup/)
+- Set up [Session History](/usage/session-history) to resume conversations
+- Configure [Floating Chat](/usage/floating-chat) for quick access
+
+## Troubleshooting
+
+**"Command not found: copilot"**
+- Verify the CLI path in settings matches the output from Step 4
+
+**"GitHub Copilot not authenticated"**
+- Run `copilot auth login` again in your terminal
+- Restart Obsidian or click "Restart agent" in the chat menu
+
+Need more help? Check the [full setup guide](/docs/copilot-setup) or [GitHub issues](https://github.com/hiroo-obsidian/obsidian-copilot/issues).

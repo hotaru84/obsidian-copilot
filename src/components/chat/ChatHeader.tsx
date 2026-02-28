@@ -7,8 +7,6 @@ import { HeaderButton } from "./HeaderButton";
 export interface ChatHeaderProps {
 	/** Display name of the active agent */
 	agentLabel: string;
-	/** Whether a plugin update is available */
-	isUpdateAvailable: boolean;
 	/** Whether session history is supported (show History button) */
 	hasHistoryCapability?: boolean;
 	/** Callback to create a new chat session */
@@ -31,7 +29,6 @@ export interface ChatHeaderProps {
  */
 export function ChatHeader({
 	agentLabel,
-	isUpdateAvailable,
 	hasHistoryCapability = false,
 	onNewChat,
 	onExportChat,
@@ -45,11 +42,6 @@ export function ChatHeader({
 					{agentLabel}
 				</h3>
 			</div>
-			{isUpdateAvailable && (
-				<p className="agent-client-chat-view-header-update">
-					Plugin update available!
-				</p>
-			)}
 			<div className="agent-client-chat-view-header-actions">
 				<HeaderButton
 					iconName="plus"

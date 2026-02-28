@@ -12,9 +12,7 @@ import type { ISettingsAccess } from "../domain/ports/settings-access.port";
 import type { AgentClientPluginSettings } from "../plugin";
 import type {
 	BaseAgentSettings,
-	ClaudeAgentSettings,
-	GeminiAgentSettings,
-	CodexAgentSettings,
+	CopilotAgentSettings,
 } from "../domain/models/agent-config";
 import { toAgentConfig } from "../shared/settings-utils";
 
@@ -149,34 +147,24 @@ export interface UseAgentSessionReturn {
 
 /**
  * Get the default agent ID from settings (for new views).
+ * GitHub Copilot is the only available agent.
  */
 function getDefaultAgentId(settings: AgentClientPluginSettings): string {
-	return settings.defaultAgentId || settings.claude.id;
+	return "copilot";
 }
 
 /**
  * Get list of all available agents from settings.
+ * GitHub Copilot is the only available agent.
  */
 function getAvailableAgentsFromSettings(
 	settings: AgentClientPluginSettings,
 ): AgentInfo[] {
 	return [
 		{
-			id: settings.claude.id,
-			displayName: settings.claude.displayName || settings.claude.id,
+			id: settings.copilot.id,
+			displayName: settings.copilot.displayName || settings.copilot.id,
 		},
-		{
-			id: settings.codex.id,
-			displayName: settings.codex.displayName || settings.codex.id,
-		},
-		{
-			id: settings.gemini.id,
-			displayName: settings.gemini.displayName || settings.gemini.id,
-		},
-		...settings.customAgents.map((agent) => ({
-			id: agent.id,
-			displayName: agent.displayName || agent.id,
-		})),
 	];
 }
 
@@ -203,25 +191,16 @@ function getCurrentAgent(
 
 /**
  * Find agent settings by ID from plugin settings.
+ * GitHub Copilot is the only available agent.
  */
 function findAgentSettings(
 	settings: AgentClientPluginSettings,
 	agentId: string,
 ): BaseAgentSettings | null {
-	if (agentId === settings.claude.id) {
-		return settings.claude;
+	if (agentId === settings.copilot.id) {
+		return settings.copilot;
 	}
-	if (agentId === settings.codex.id) {
-		return settings.codex;
-	}
-	if (agentId === settings.gemini.id) {
-		return settings.gemini;
-	}
-	// Search in custom agents
-	const customAgent = settings.customAgents.find(
-		(agent) => agent.id === agentId,
-	);
-	return customAgent || null;
+	return null;
 }
 
 /**
@@ -235,39 +214,7 @@ function buildAgentConfigWithApiKey(
 ) {
 	const baseConfig = toAgentConfig(agentSettings, workingDirectory);
 
-	// Add API keys to environment for Claude, Codex, and Gemini
-	if (agentId === settings.claude.id) {
-		const claudeSettings = agentSettings as ClaudeAgentSettings;
-		return {
-			...baseConfig,
-			env: {
-				...baseConfig.env,
-				ANTHROPIC_API_KEY: claudeSettings.apiKey,
-			},
-		};
-	}
-	if (agentId === settings.codex.id) {
-		const codexSettings = agentSettings as CodexAgentSettings;
-		return {
-			...baseConfig,
-			env: {
-				...baseConfig.env,
-				OPENAI_API_KEY: codexSettings.apiKey,
-			},
-		};
-	}
-	if (agentId === settings.gemini.id) {
-		const geminiSettings = agentSettings as GeminiAgentSettings;
-		return {
-			...baseConfig,
-			env: {
-				...baseConfig.env,
-				GEMINI_API_KEY: geminiSettings.apiKey,
-			},
-		};
-	}
-
-	// Custom agents - no API key injection
+	// GitHub Copilot uses CLI authentication, no API key injection needed
 	return baseConfig;
 }
 
@@ -501,11 +448,27 @@ export function useAgentSession(
 			} catch (error) {
 				// Error - update to error state
 				setSession((prev) => ({ ...prev, state: "error" }));
+
+				// Generate helpful error message based on error type
+				let errorTitle = "Session Creation Failed";
+				let errorMessage = error instanceof Error ? error.message : String(error);
+				let errorSuggestion = "Please check the agent configuration and try again.";
+
+				// Check for specific error types
+				if (error instanceof Error) {
+					if (error.name === "CopilotAuthenticationError") {
+						errorTitle = "GitHub Copilot Authentication Required";
+						errorSuggestion = "Open a terminal and run: copilot auth login";
+					} else if (error.name === "CopilotNotFoundError") {
+						errorTitle = "GitHub Copilot CLI Not Found";
+						errorSuggestion = "Please install GitHub Copilot CLI or check the command path in settings.";
+					}
+				}
+
 				setErrorInfo({
-					title: "Session Creation Failed",
-					message: `Failed to create new session: ${error instanceof Error ? error.message : String(error)}`,
-					suggestion:
-						"Please check the agent configuration and try again.",
+					title: errorTitle,
+					message: errorMessage,
+					suggestion: errorSuggestion,
 				});
 			}
 		},

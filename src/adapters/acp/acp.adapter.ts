@@ -517,7 +517,12 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			this.isInitializedFlag = false;
 			this.currentAgentId = null;
 
-			throw error;
+			// Enhance error with helpful context
+			const enhancedError = this.enhanceInitializationError(
+				error,
+				config,
+			);
+			throw enhancedError;
 		}
 	}
 
@@ -577,20 +582,12 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				);
 			}
 
-			// Convert models from ACP format to domain format (experimental)
-			let models: SessionModelState | undefined;
-			if (sessionResult.models) {
-				models = {
-					availableModels: sessionResult.models.availableModels.map(
-						(m) => ({
-							modelId: m.modelId,
-							name: m.name,
-							// Convert null to undefined for type compatibility
-							description: m.description ?? undefined,
-						}),
-					),
-					currentModelId: sessionResult.models.currentModelId,
-				};
+			// Convert models from ACP format to domain format and add "auto" model
+			const models = this.convertAndAddAutoModel(
+				sessionResult.models?.availableModels,
+				sessionResult.models?.currentModelId || "auto",
+			);
+			if (models) {
 				this.logger.log(
 					`[AcpAdapter] Session models: ${models.availableModels.map((m) => m.modelId).join(", ")} (current: ${models.currentModelId})`,
 				);
@@ -606,6 +603,38 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 			throw error;
 		}
+	}
+
+	/**
+	 * Helper: Convert models from ACP format to domain format and add "auto" model if needed.
+	 * Ensures "auto" model is always available as the first option.
+	 */
+	private convertAndAddAutoModel(
+		acpModels: { modelId: string; name: string; description?: string | null }[] | undefined,
+		currentModelId: string,
+	): SessionModelState | undefined {
+		if (!acpModels) return undefined;
+
+		const models = acpModels.map((m) => ({
+			modelId: m.modelId,
+			name: m.name,
+			description: m.description ?? undefined,
+		}));
+
+		// Add "auto" model if it doesn't already exist
+		const hasAutoModel = models.some((m) => m.modelId === "auto");
+		if (!hasAutoModel) {
+			models.unshift({
+				modelId: "auto",
+				name: "Auto (自動選択)",
+				description: "Let Claude choose the most appropriate model",
+			});
+		}
+
+		return {
+			availableModels: models,
+			currentModelId,
+		};
 	}
 
 	/**
@@ -1500,19 +1529,10 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				};
 			}
 
-			let models: SessionModelState | undefined;
-			if (response.models) {
-				models = {
-					availableModels: response.models.availableModels.map(
-						(m) => ({
-							modelId: m.modelId,
-							name: m.name,
-							description: m.description ?? undefined,
-						}),
-					),
-					currentModelId: response.models.currentModelId,
-				};
-			}
+			const models = this.convertAndAddAutoModel(
+				response.models?.availableModels,
+				response.models?.currentModelId || "auto",
+			);
 
 			return {
 				sessionId,
@@ -1574,19 +1594,10 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				};
 			}
 
-			let models: SessionModelState | undefined;
-			if (response.models) {
-				models = {
-					availableModels: response.models.availableModels.map(
-						(m) => ({
-							modelId: m.modelId,
-							name: m.name,
-							description: m.description ?? undefined,
-						}),
-					),
-					currentModelId: response.models.currentModelId,
-				};
-			}
+			const models = this.convertAndAddAutoModel(
+				response.models?.availableModels,
+				response.models?.currentModelId || "auto",
+			);
 
 			return {
 				sessionId,
@@ -1651,19 +1662,10 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				};
 			}
 
-			let models: SessionModelState | undefined;
-			if (response.models) {
-				models = {
-					availableModels: response.models.availableModels.map(
-						(m) => ({
-							modelId: m.modelId,
-							name: m.name,
-							description: m.description ?? undefined,
-						}),
-					),
-					currentModelId: response.models.currentModelId,
-				};
-			}
+			const models = this.convertAndAddAutoModel(
+				response.models?.availableModels,
+				response.models?.currentModelId || "auto",
+			);
 
 			return {
 				sessionId: newSessionId,
@@ -1674,5 +1676,59 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			this.logger.error("[AcpAdapter] Fork Session Error:", error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Enhance initialization errors with helpful context and suggestions.
+	 * Detects common issues like authentication failures and provides guidance.
+	 */
+	private enhanceInitializationError(
+		error: unknown,
+		config: AgentConfig,
+	): Error {
+		const errorMessage =
+			error instanceof Error
+				? error.message
+				: String(error);
+		const errorStr = errorMessage.toLowerCase();
+
+		// Detect GitHub Copilot authentication failure
+		if (
+			config.id === "copilot" &&
+			(errorStr.includes("not authenticated") ||
+				errorStr.includes("auth") ||
+				errorStr.includes("unauthorized") ||
+				errorStr.includes("permission denied") ||
+				errorStr.includes("401") ||
+				this.recentStderr.toLowerCase().includes("not authenticated"))
+		) {
+			const authError = new Error(
+				"GitHub Copilot not authenticated\n\n" +
+					"To authenticate with GitHub Copilot, run the following command in your terminal:\n\n" +
+					"  copilot auth login\n\n" +
+					"After authenticating, please restart the plugin or create a new chat.",
+			);
+			authError.name = "CopilotAuthenticationError";
+			return authError;
+		}
+
+		// Detect command not found
+		if (
+			errorStr.includes("enoent") ||
+			errorStr.includes("command not found") ||
+			errorStr.includes("not found") ||
+			this.recentStderr.toLowerCase().includes("not found")
+		) {
+			const notFoundError = new Error(
+				`GitHub Copilot command not found: "${config.command}"\n\n` +
+					"Please ensure GitHub Copilot CLI is installed and the command path is correct.\n" +
+					"You can check the configured path in Obsidian settings under Copilot for Obsidian.",
+			);
+			notFoundError.name = "CopilotNotFoundError";
+			return notFoundError;
+		}
+
+		// Return original error if no patterns match
+		return error instanceof Error ? error : new Error(errorMessage);
 	}
 }

@@ -2,15 +2,10 @@ import {
 	App,
 	PluginSettingTab,
 	Setting,
-	DropdownComponent,
 	Platform,
 } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
-import type {
-	CustomAgentSettings,
-	AgentEnvVar,
-	ChatViewLocation,
-} from "../../plugin";
+import type { AgentEnvVar, ChatViewLocation } from "../../plugin";
 import { normalizeEnvVars } from "../../shared/settings-utils";
 import {
 	CHAT_FONT_SIZE_MAX,
@@ -20,8 +15,6 @@ import {
 
 export class AgentClientSettingTab extends PluginSettingTab {
 	plugin: AgentClientPlugin;
-	private agentSelector: DropdownComponent | null = null;
-	private unsubscribe: (() => void) | null = null;
 
 	constructor(app: App, plugin: AgentClientPlugin) {
 		super(app, plugin);
@@ -30,15 +23,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
-
 		containerEl.empty();
-		this.agentSelector = null;
-
-		// Cleanup previous subscription if exists
-		if (this.unsubscribe) {
-			this.unsubscribe();
-			this.unsubscribe = null;
-		}
 
 		// Documentation link
 		const docContainer = containerEl.createDiv({
@@ -46,29 +31,75 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		});
 		docContainer.createSpan({ text: "Need help? Check out the " });
 		docContainer.createEl("a", {
-			text: "documentation",
-			href: "https://rait-09.github.io/obsidian-agent-client/",
+			text: "GitHub Copilot documentation",
+			href: "https://docs.github.com/en/copilot/reference/acp-server",
 		});
 		docContainer.createSpan({ text: "." });
 
 		// ─────────────────────────────────────────────────────────────────────
-		// Top-level settings (no header)
+		// GitHub Copilot
 		// ─────────────────────────────────────────────────────────────────────
 
-		this.renderAgentSelector(containerEl);
+		new Setting(containerEl).setName("GitHub Copilot").setHeading();
 
-		// Subscribe to settings changes to update agent dropdown
-		this.unsubscribe = this.plugin.settingsStore.subscribe(() => {
-			this.updateAgentDropdown();
-		});
+		new Setting(containerEl)
+			.setName("Copilot CLI path")
+			.setDesc(
+				'Absolute path to GitHub Copilot CLI. Use "which copilot" (macOS/Linux) or "where copilot" (Windows) to find it. Leave empty to use "copilot" command from PATH.',
+			)
+			.addText((text) => {
+				text.setPlaceholder("copilot")
+					.setValue(this.plugin.settings.copilot.command)
+					.onChange(async (value) => {
+						this.plugin.settings.copilot.command = value.trim();
+						await this.plugin.saveSettings();
+					});
+			});
 
-		// Also update immediately on display to sync with current settings
-		this.updateAgentDropdown();
+		new Setting(containerEl)
+			.setName("Authentication")
+			.setDesc(
+				'Before using this plugin, you must authenticate with GitHub Copilot CLI. Run: copilot auth login',
+			)
+			.addButton((button) => {
+				button
+					.setButtonText("📋 View Auth Setup")
+					.onClick(() => {
+						const msg =
+							"To authenticate GitHub Copilot CLI:\n\n" +
+							"1. Open your terminal/PowerShell\n" +
+							"2. Run: copilot auth login\n" +
+							"3. Follow the authentication flow\n" +
+							"4. Verify with: copilot --version\n" +
+							"\n" +
+							"Then, you can use this plugin to chat with GitHub Copilot from Obsidian.";
+						alert(msg);
+					});
+			});
+
+		new Setting(containerEl)
+			.setName("ACP Arguments")
+			.setDesc(
+				"Command-line arguments for Copilot CLI in ACP mode. Typically: --acp --stdio",
+			)
+			.addTextArea((text) => {
+				text.setPlaceholder("--acp\n--stdio")
+					.setValue(this.formatArgs(this.plugin.settings.copilot.args))
+					.onChange(async (value) => {
+						this.plugin.settings.copilot.args = this.parseArgs(value);
+						await this.plugin.saveSettings();
+					});
+				text.inputEl.rows = 2;
+			});
+
+		// ─────────────────────────────────────────────────────────────────────
+		// Core Settings
+		// ─────────────────────────────────────────────────────────────────────
 
 		new Setting(containerEl)
 			.setName("Node.js path")
 			.setDesc(
-				'Absolute path to Node.js executable. On macOS/Linux, use "which node", and on Windows, use "where node" to find it.',
+				'Absolute path to Node.js executable. Use "which node" (macOS/Linux) or "where node" (Windows) to find it.',
 			)
 			.addText((text) => {
 				text.setPlaceholder("Absolute path to node")
@@ -82,7 +113,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Send message shortcut")
 			.setDesc(
-				"Choose the keyboard shortcut to send messages. Note: If using Cmd/Ctrl+Enter, you may need to remove any hotkeys assigned to Cmd/Ctrl+Enter (Settings → Hotkeys).",
+				"Choose the keyboard shortcut to send messages. If using Cmd/Ctrl+Enter, you may need to remove any hotkeys assigned to it (Settings → Hotkeys).",
 			)
 			.addDropdown((dropdown) =>
 				dropdown
@@ -103,16 +134,35 @@ export class AgentClientSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl)
+			.setName("Chat view location")
+			.setDesc(
+				"Where to open new chat views (sidebar or editor area)",
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("right-tab", "Right sidebar (tab)")
+					.addOption("right-split", "Right sidebar (split)")
+					.addOption("editor-tab", "Editor area (tab)")
+					.addOption("editor-split", "Editor area (split)")
+					.setValue(this.plugin.settings.chatViewLocation)
+					.onChange(async (value) => {
+						this.plugin.settings.chatViewLocation =
+							value as ChatViewLocation;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		// ─────────────────────────────────────────────────────────────────────
-		// Mentions
+		// Display Settings
 		// ─────────────────────────────────────────────────────────────────────
 
-		new Setting(containerEl).setName("Mentions").setHeading();
+		new Setting(containerEl).setName("Display").setHeading();
 
 		new Setting(containerEl)
 			.setName("Auto-mention active note")
 			.setDesc(
-				"Include the current note in your messages automatically. The agent will have access to its content without typing @notename.",
+				"Automatically include the active note in the prompt context when sending messages.",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -124,79 +174,9 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Max note length")
+			.setName("Font size")
 			.setDesc(
-				"Maximum characters per mentioned note. Notes longer than this will be truncated.",
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("10000")
-					.setValue(
-						String(
-							this.plugin.settings.displaySettings.maxNoteLength,
-						),
-					)
-					.onChange(async (value) => {
-						const num = parseInt(value, 10);
-						if (!isNaN(num) && num >= 1) {
-							this.plugin.settings.displaySettings.maxNoteLength =
-								num;
-							await this.plugin.saveSettings();
-						}
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Max selection length")
-			.setDesc(
-				"Maximum characters for text selection in auto-mention. Selections longer than this will be truncated.",
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("10000")
-					.setValue(
-						String(
-							this.plugin.settings.displaySettings
-								.maxSelectionLength,
-						),
-					)
-					.onChange(async (value) => {
-						const num = parseInt(value, 10);
-						if (!isNaN(num) && num >= 1) {
-							this.plugin.settings.displaySettings.maxSelectionLength =
-								num;
-							await this.plugin.saveSettings();
-						}
-					}),
-			);
-
-		// ─────────────────────────────────────────────────────────────────────
-		// Display
-		// ─────────────────────────────────────────────────────────────────────
-
-		new Setting(containerEl).setName("Display").setHeading();
-
-		new Setting(containerEl)
-			.setName("Chat view location")
-			.setDesc("Where to open new chat views")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("right-tab", "Right pane (tabs)")
-					.addOption("right-split", "Right pane (split)")
-					.addOption("editor-tab", "Editor area (tabs)")
-					.addOption("editor-split", "Editor area (split)")
-					.setValue(this.plugin.settings.chatViewLocation)
-					.onChange(async (value) => {
-						this.plugin.settings.chatViewLocation =
-							value as ChatViewLocation;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("Chat font size")
-			.setDesc(
-				`Adjust the font size of the chat message area (${CHAT_FONT_SIZE_MIN}-${CHAT_FONT_SIZE_MAX}px).`,
+				`Chat message font size in pixels (${CHAT_FONT_SIZE_MIN}-${CHAT_FONT_SIZE_MAX}). Leave empty for default.`,
 			)
 			.addText((text) => {
 				const getCurrentDisplayValue = (): string => {
@@ -349,7 +329,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		}
 
 		// ─────────────────────────────────────────────────────────────────────
-		// Floating chat
+		// Floating Chat
 		// ─────────────────────────────────────────────────────────────────────
 
 		new Setting(containerEl).setName("Floating chat").setHeading();
@@ -368,12 +348,9 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						this.plugin.settings.showFloatingButton = value;
 						await this.plugin.saveSettings();
 
-						// Handle dynamic toggle of floating chat
 						if (value && !wasEnabled) {
-							// Turning ON: create floating chat instance
 							this.plugin.openNewFloatingChat();
 						} else if (!value && wasEnabled) {
-							// Turning OFF: close all floating chat instances
 							const instances =
 								this.plugin.getFloatingChatInstances();
 							for (const instanceId of instances) {
@@ -407,7 +384,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Auto-allow permissions")
 			.setDesc(
-				"Automatically allow all permission requests from agents. ⚠️ Use with caution - this gives agents full access to your system.",
+				"Automatically allow all permission requests from Copilot. ⚠️ Use with caution - this gives Copilot full access to your system.",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -430,7 +407,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName("Enable WSL mode")
 				.setDesc(
-					"Run agents inside Windows Subsystem for Linux. Recommended for agents like Codex that don't work well in native Windows environments.",
+					"Run Copilot inside Windows Subsystem for Linux. Useful for better Windows compatibility.",
 				)
 				.addToggle((toggle) =>
 					toggle
@@ -438,7 +415,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						.onChange(async (value) => {
 							this.plugin.settings.windowsWslMode = value;
 							await this.plugin.saveSettings();
-							this.display(); // Refresh to show/hide distribution setting
+							this.display();
 						}),
 				);
 
@@ -465,20 +442,6 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		}
 
 		// ─────────────────────────────────────────────────────────────────────
-		// Agents
-		// ─────────────────────────────────────────────────────────────────────
-
-		new Setting(containerEl).setName("Built-in agents").setHeading();
-
-		this.renderClaudeSettings(containerEl);
-		this.renderCodexSettings(containerEl);
-		this.renderGeminiSettings(containerEl);
-
-		new Setting(containerEl).setName("Custom agents").setHeading();
-
-		this.renderCustomAgents(containerEl);
-
-		// ─────────────────────────────────────────────────────────────────────
 		// Export
 		// ─────────────────────────────────────────────────────────────────────
 
@@ -489,7 +452,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			.setDesc("Folder where chat exports will be saved")
 			.addText((text) =>
 				text
-					.setPlaceholder("Agent Client")
+					.setPlaceholder("Copilot")
 					.setValue(this.plugin.settings.exportSettings.defaultFolder)
 					.onChange(async (value) => {
 						this.plugin.settings.exportSettings.defaultFolder =
@@ -499,13 +462,13 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Filename")
+			.setName("Filename template")
 			.setDesc(
 				"Template for exported filenames. Use {date} for date and {time} for time",
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("agent_client_{date}_{time}")
+					.setPlaceholder("copilot_{date}_{time}")
 					.setValue(
 						this.plugin.settings.exportSettings.filenameTemplate,
 					)
@@ -519,11 +482,11 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Frontmatter tag")
 			.setDesc(
-				"Tag to add to exported notes. Supports nested tags (e.g., projects/agent-client). Leave empty to disable.",
+				"Tag to add to exported notes. Supports nested tags (e.g., ai/copilot). Leave empty to disable.",
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("agent-client")
+					.setPlaceholder("ai/copilot")
 					.setValue(
 						this.plugin.settings.exportSettings.frontmatterTag,
 					)
@@ -584,7 +547,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 					)
 					.addText((text) =>
 						text
-							.setPlaceholder("Agent Client")
+							.setPlaceholder("Copilot/images")
 							.setValue(
 								this.plugin.settings.exportSettings
 									.imageCustomFolder,
@@ -667,508 +630,6 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-	}
-
-	/**
-	 * Update the agent dropdown when settings change.
-	 * Only updates if the value is different to avoid infinite loops.
-	 */
-	private updateAgentDropdown(): void {
-		if (!this.agentSelector) {
-			return;
-		}
-
-		// Get latest settings from store snapshot
-		const settings = this.plugin.settingsStore.getSnapshot();
-		const currentValue = this.agentSelector.getValue();
-
-		// Only update if different to avoid triggering onChange
-		if (settings.defaultAgentId !== currentValue) {
-			this.agentSelector.setValue(settings.defaultAgentId);
-		}
-	}
-
-	/**
-	 * Called when the settings tab is hidden.
-	 * Clean up subscriptions to prevent memory leaks.
-	 */
-	hide(): void {
-		if (this.unsubscribe) {
-			this.unsubscribe();
-			this.unsubscribe = null;
-		}
-	}
-
-	private renderAgentSelector(containerEl: HTMLElement) {
-		this.plugin.ensureDefaultAgentId();
-
-		new Setting(containerEl)
-			.setName("Default agent")
-			.setDesc("Choose which agent is used when opening a new chat view.")
-			.addDropdown((dropdown) => {
-				this.agentSelector = dropdown;
-				this.populateAgentDropdown(dropdown);
-				dropdown.setValue(this.plugin.settings.defaultAgentId);
-				dropdown.onChange(async (value) => {
-					const nextSettings = {
-						...this.plugin.settings,
-						defaultAgentId: value,
-					};
-					this.plugin.ensureDefaultAgentId();
-					await this.plugin.saveSettingsAndNotify(nextSettings);
-				});
-			});
-	}
-
-	private populateAgentDropdown(dropdown: DropdownComponent) {
-		dropdown.selectEl.empty();
-		for (const option of this.getAgentOptions()) {
-			dropdown.addOption(option.id, option.label);
-		}
-	}
-
-	private refreshAgentDropdown() {
-		if (!this.agentSelector) {
-			return;
-		}
-		this.populateAgentDropdown(this.agentSelector);
-		this.agentSelector.setValue(this.plugin.settings.defaultAgentId);
-	}
-
-	private getAgentOptions(): { id: string; label: string }[] {
-		const toOption = (id: string, displayName: string) => ({
-			id,
-			label: `${displayName} (${id})`,
-		});
-		const options: { id: string; label: string }[] = [
-			toOption(
-				this.plugin.settings.claude.id,
-				this.plugin.settings.claude.displayName ||
-					this.plugin.settings.claude.id,
-			),
-			toOption(
-				this.plugin.settings.codex.id,
-				this.plugin.settings.codex.displayName ||
-					this.plugin.settings.codex.id,
-			),
-			toOption(
-				this.plugin.settings.gemini.id,
-				this.plugin.settings.gemini.displayName ||
-					this.plugin.settings.gemini.id,
-			),
-		];
-		for (const agent of this.plugin.settings.customAgents) {
-			if (agent.id && agent.id.length > 0) {
-				const labelSource =
-					agent.displayName && agent.displayName.length > 0
-						? agent.displayName
-						: agent.id;
-				options.push(toOption(agent.id, labelSource));
-			}
-		}
-		const seen = new Set<string>();
-		return options.filter(({ id }) => {
-			if (seen.has(id)) {
-				return false;
-			}
-			seen.add(id);
-			return true;
-		});
-	}
-
-	private renderGeminiSettings(sectionEl: HTMLElement) {
-		const gemini = this.plugin.settings.gemini;
-
-		new Setting(sectionEl)
-			.setName(gemini.displayName || "Gemini CLI")
-			.setHeading();
-
-		new Setting(sectionEl)
-			.setName("API key")
-			.setDesc(
-				"Gemini API key. Required if not logging in with a Google account. (Stored as plain text)",
-			)
-			.addText((text) => {
-				text.setPlaceholder("Enter your Gemini API key")
-					.setValue(gemini.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.gemini.apiKey = value.trim();
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
-
-		new Setting(sectionEl)
-			.setName("Path")
-			.setDesc(
-				'Absolute path to the Gemini CLI. On macOS/Linux, use "which gemini", and on Windows, use "where gemini" to find it.',
-			)
-			.addText((text) => {
-				text.setPlaceholder("Absolute path to gemini")
-					.setValue(gemini.command)
-					.onChange(async (value) => {
-						this.plugin.settings.gemini.command = value.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(sectionEl)
-			.setName("Arguments")
-			.setDesc(
-				'Enter one argument per line. Leave empty to run without arguments.(Currently, the Gemini CLI requires the "--experimental-acp" option.)',
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("")
-					.setValue(this.formatArgs(gemini.args))
-					.onChange(async (value) => {
-						this.plugin.settings.gemini.args =
-							this.parseArgs(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-
-		new Setting(sectionEl)
-			.setName("Environment variables")
-			.setDesc(
-				"Enter KEY=VALUE pairs, one per line. Required to authenticate with Vertex AI. GEMINI_API_KEY is derived from the field above.(Stored as plain text)",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("GOOGLE_CLOUD_PROJECT=...")
-					.setValue(this.formatEnv(gemini.env))
-					.onChange(async (value) => {
-						this.plugin.settings.gemini.env = this.parseEnv(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-	}
-
-	private renderClaudeSettings(sectionEl: HTMLElement) {
-		const claude = this.plugin.settings.claude;
-
-		new Setting(sectionEl)
-			.setName(claude.displayName || "Claude Code (ACP)")
-			.setHeading();
-
-		new Setting(sectionEl)
-			.setName("API key")
-			.setDesc(
-				"Anthropic API key. Required if not logging in with an Anthropic account. (Stored as plain text)",
-			)
-			.addText((text) => {
-				text.setPlaceholder("Enter your Anthropic API key")
-					.setValue(claude.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.claude.apiKey = value.trim();
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
-
-		new Setting(sectionEl)
-			.setName("Path")
-			.setDesc(
-				'Absolute path to the claude-agent-acp. On macOS/Linux, use "which claude-agent-acp", and on Windows, use "where claude-agent-acp" to find it.',
-			)
-			.addText((text) => {
-				text.setPlaceholder("Absolute path to claude-agent-acp")
-					.setValue(claude.command)
-					.onChange(async (value) => {
-						this.plugin.settings.claude.command = value.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(sectionEl)
-			.setName("Arguments")
-			.setDesc(
-				"Enter one argument per line. Leave empty to run without arguments.",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("")
-					.setValue(this.formatArgs(claude.args))
-					.onChange(async (value) => {
-						this.plugin.settings.claude.args =
-							this.parseArgs(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-
-		new Setting(sectionEl)
-			.setName("Environment variables")
-			.setDesc(
-				"Enter KEY=VALUE pairs, one per line. ANTHROPIC_API_KEY is derived from the field above.",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("")
-					.setValue(this.formatEnv(claude.env))
-					.onChange(async (value) => {
-						this.plugin.settings.claude.env = this.parseEnv(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-	}
-
-	private renderCodexSettings(sectionEl: HTMLElement) {
-		const codex = this.plugin.settings.codex;
-
-		new Setting(sectionEl)
-			.setName(codex.displayName || "Codex")
-			.setHeading();
-
-		new Setting(sectionEl)
-			.setName("API key")
-			.setDesc(
-				"OpenAI API key. Required if not logging in with an OpenAI account. (Stored as plain text)",
-			)
-			.addText((text) => {
-				text.setPlaceholder("Enter your OpenAI API key")
-					.setValue(codex.apiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.codex.apiKey = value.trim();
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
-
-		new Setting(sectionEl)
-			.setName("Path")
-			.setDesc(
-				'Absolute path to the codex-acp. On macOS/Linux, use "which codex-acp", and on Windows, use "where codex-acp" to find it.',
-			)
-			.addText((text) => {
-				text.setPlaceholder("Absolute path to codex-acp")
-					.setValue(codex.command)
-					.onChange(async (value) => {
-						this.plugin.settings.codex.command = value.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(sectionEl)
-			.setName("Arguments")
-			.setDesc(
-				"Enter one argument per line. Leave empty to run without arguments.",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("")
-					.setValue(this.formatArgs(codex.args))
-					.onChange(async (value) => {
-						this.plugin.settings.codex.args = this.parseArgs(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-
-		new Setting(sectionEl)
-			.setName("Environment variables")
-			.setDesc(
-				"Enter KEY=VALUE pairs, one per line. OPENAI_API_KEY is derived from the field above.",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("")
-					.setValue(this.formatEnv(codex.env))
-					.onChange(async (value) => {
-						this.plugin.settings.codex.env = this.parseEnv(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-	}
-
-	private renderCustomAgents(containerEl: HTMLElement) {
-		if (this.plugin.settings.customAgents.length === 0) {
-			containerEl.createEl("p", {
-				text: "No custom agents configured yet.",
-			});
-		} else {
-			this.plugin.settings.customAgents.forEach((agent, index) => {
-				this.renderCustomAgent(containerEl, agent, index);
-			});
-		}
-
-		new Setting(containerEl).addButton((button) => {
-			button
-				.setButtonText("Add custom agent")
-				.setCta()
-				.onClick(async () => {
-					const newId = this.generateCustomAgentId();
-					const newDisplayName =
-						this.generateCustomAgentDisplayName();
-					this.plugin.settings.customAgents.push({
-						id: newId,
-						displayName: newDisplayName,
-						command: "",
-						args: [],
-						env: [],
-					});
-					this.plugin.ensureDefaultAgentId();
-					await this.plugin.saveSettings();
-					this.display();
-				});
-		});
-	}
-
-	private renderCustomAgent(
-		containerEl: HTMLElement,
-		agent: CustomAgentSettings,
-		index: number,
-	) {
-		const blockEl = containerEl.createDiv({
-			cls: "agent-client-custom-agent",
-		});
-
-		const idSetting = new Setting(blockEl)
-			.setName("Agent ID")
-			.setDesc("Unique identifier used to reference this agent.")
-			.addText((text) => {
-				text.setPlaceholder("custom-agent")
-					.setValue(agent.id)
-					.onChange(async (value) => {
-						const previousId =
-							this.plugin.settings.customAgents[index].id;
-						const trimmed = value.trim();
-						let nextId = trimmed;
-						if (nextId.length === 0) {
-							nextId = this.generateCustomAgentId();
-							text.setValue(nextId);
-						}
-						this.plugin.settings.customAgents[index].id = nextId;
-						if (
-							this.plugin.settings.defaultAgentId === previousId
-						) {
-							this.plugin.settings.defaultAgentId = nextId;
-						}
-						this.plugin.ensureDefaultAgentId();
-						await this.plugin.saveSettings();
-						this.refreshAgentDropdown();
-					});
-			});
-
-		idSetting.addExtraButton((button) => {
-			button
-				.setIcon("trash")
-				.setTooltip("Delete this agent")
-				.onClick(async () => {
-					this.plugin.settings.customAgents.splice(index, 1);
-					this.plugin.ensureDefaultAgentId();
-					await this.plugin.saveSettings();
-					this.display();
-				});
-		});
-
-		new Setting(blockEl)
-			.setName("Display name")
-			.setDesc("Shown in menus and headers.")
-			.addText((text) => {
-				text.setPlaceholder("Custom agent")
-					.setValue(agent.displayName || agent.id)
-					.onChange(async (value) => {
-						const trimmed = value.trim();
-						this.plugin.settings.customAgents[index].displayName =
-							trimmed.length > 0
-								? trimmed
-								: this.plugin.settings.customAgents[index].id;
-						await this.plugin.saveSettings();
-						this.refreshAgentDropdown();
-					});
-			});
-
-		new Setting(blockEl)
-			.setName("Path")
-			.setDesc("Absolute path to the custom agent.")
-			.addText((text) => {
-				text.setPlaceholder("Absolute path to custom agent")
-					.setValue(agent.command)
-					.onChange(async (value) => {
-						this.plugin.settings.customAgents[index].command =
-							value.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(blockEl)
-			.setName("Arguments")
-			.setDesc(
-				"Enter one argument per line. Leave empty to run without arguments.",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("--flag\n--another=value")
-					.setValue(this.formatArgs(agent.args))
-					.onChange(async (value) => {
-						this.plugin.settings.customAgents[index].args =
-							this.parseArgs(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-
-		new Setting(blockEl)
-			.setName("Environment variables")
-			.setDesc(
-				"Enter KEY=VALUE pairs, one per line. (Stored as plain text)",
-			)
-			.addTextArea((text) => {
-				text.setPlaceholder("TOKEN=...")
-					.setValue(this.formatEnv(agent.env))
-					.onChange(async (value) => {
-						this.plugin.settings.customAgents[index].env =
-							this.parseEnv(value);
-						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 3;
-			});
-	}
-
-	private generateCustomAgentDisplayName(): string {
-		const base = "Custom agent";
-		const existing = new Set<string>();
-		existing.add(
-			this.plugin.settings.claude.displayName ||
-				this.plugin.settings.claude.id,
-		);
-		existing.add(
-			this.plugin.settings.codex.displayName ||
-				this.plugin.settings.codex.id,
-		);
-		existing.add(
-			this.plugin.settings.gemini.displayName ||
-				this.plugin.settings.gemini.id,
-		);
-		for (const item of this.plugin.settings.customAgents) {
-			existing.add(item.displayName || item.id);
-		}
-		if (!existing.has(base)) {
-			return base;
-		}
-		let counter = 2;
-		let candidate = `${base} ${counter}`;
-		while (existing.has(candidate)) {
-			counter += 1;
-			candidate = `${base} ${counter}`;
-		}
-		return candidate;
-	}
-
-	// Create a readable ID for new custom agents and avoid collisions
-	private generateCustomAgentId(): string {
-		const base = "custom-agent";
-		const existing = new Set(
-			this.plugin.settings.customAgents.map((item) => item.id),
-		);
-		if (!existing.has(base)) {
-			return base;
-		}
-		let counter = 2;
-		let candidate = `${base}-${counter}`;
-		while (existing.has(candidate)) {
-			counter += 1;
-			candidate = `${base}-${counter}`;
-		}
-		return candidate;
 	}
 
 	private formatArgs(args: string[]): string {

@@ -858,6 +858,16 @@ If your plugin does not need CSS, delete this file.
 	background-color: var(--background-modifier-hover);
 }
 
+.agent-client-mode-selector-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: var(--text-faint);
+	order: 1;
+}
+
 .agent-client-mode-selector-icon {
 	display: flex;
 	align-items: center;
@@ -918,6 +928,16 @@ If your plugin does not need CSS, delete this file.
 	background-color: var(--background-modifier-hover);
 }
 
+.agent-client-model-selector-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: var(--text-faint);
+	order: 1;
+}
+
 .agent-client-model-selector-icon {
 	display: flex;
 	align-items: center;
@@ -930,36 +950,6 @@ If your plugin does not need CSS, delete this file.
 .agent-client-model-selector-icon svg {
 	width: 12px;
 	height: 12px;
-}
-
-.agent-client-model-selector select.dropdown {
-	padding: 0 !important;
-	margin: 0 !important;
-	border: none !important;
-	border-radius: 0 !important;
-	background: none !important;
-	background-color: transparent !important;
-	background-image: none !important;
-	box-shadow: none !important;
-	color: var(--text-faint) !important;
-	font-size: 11px !important;
-	cursor: pointer !important;
-	outline: none !important;
-	appearance: none !important;
-	-webkit-appearance: none !important;
-	-moz-appearance: none !important;
-	order: 1;
-	max-width: 100px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.agent-client-model-selector select.dropdown:hover,
-.agent-client-model-selector select.dropdown:focus {
-	color: var(--text-faint) !important;
-	background-color: transparent !important;
-	box-shadow: none !important;
 }
 
 /* Send button */
@@ -2029,11 +2019,21 @@ If your plugin does not need CSS, delete this file.
 	cursor: pointer;
 	transition: background-color 0.1s ease;
 	height: 20px;
-	max-width: 160px;
+	max-width: 120px;
 }
 
 .agent-client-agent-selector:hover {
 	background-color: var(--background-modifier-hover);
+}
+
+.agent-client-agent-selector-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	color: var(--text-faint);
+	order: 1;
 }
 
 .agent-client-agent-selector-icon {
@@ -2051,7 +2051,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-agent-selector select.dropdown {
-	padding: 0 !important;
+	padding: 0 8px !important;
 	margin: 0 !important;
 	border: none !important;
 	border-radius: 0 !important;
@@ -2083,4 +2083,5 @@ If your plugin does not need CSS, delete this file.
 .agent-client-agent-label {
 	color: var(--text-normal);
 	font-size: 12px;
+	padding: 0 8px;
 }

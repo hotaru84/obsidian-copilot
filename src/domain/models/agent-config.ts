@@ -30,23 +30,22 @@ export interface AgentEnvVar {
 // ============================================================================
 
 /**
- * Base configuration shared by all agent types.
+ * Base configuration for the GitHub Copilot agent.
  *
- * Defines the common properties needed to launch and communicate
- * with any ACP-compatible agent, regardless of the specific
- * implementation (Claude Code, Gemini CLI, custom agents, etc.).
+ * Defines the properties needed to launch and communicate
+ * with GitHub Copilot CLI via the Agent Client Protocol.
  */
 export interface BaseAgentSettings {
-	/** Unique identifier for this agent (e.g., "claude", "gemini", "custom-1") */
+	/** Unique identifier for this agent (fixed as "copilot") */
 	id: string;
 
 	/** Human-readable display name shown in UI */
 	displayName: string;
 
-	/** Command to execute (full path to executable or command name) */
+	/** Command to execute (full path to copilot CLI or "copilot") */
 	command: string;
 
-	/** Command-line arguments passed to the agent */
+	/** Command-line arguments (typically ["--acp", "--stdio"]) */
 	args: string[];
 
 	/** Environment variables for the agent process */
@@ -54,39 +53,9 @@ export interface BaseAgentSettings {
 }
 
 /**
- * Configuration for Gemini CLI agent.
+ * Configuration for GitHub Copilot CLI agent.
  *
- * Extends base settings with Gemini-specific requirements.
+ * GitHub Copilot CLI natively supports ACP via `copilot --acp --stdio`.
+ * Authentication must be completed beforehand using `copilot auth login`.
  */
-export interface GeminiAgentSettings extends BaseAgentSettings {
-	/** Gemini API key (GEMINI_API_KEY) */
-	apiKey: string;
-}
-
-/**
- * Configuration for Claude Code agent.
- *
- * Extends base settings with Claude-specific requirements.
- */
-export interface ClaudeAgentSettings extends BaseAgentSettings {
-	/** Anthropic API key for Claude (ANTHROPIC_API_KEY) */
-	apiKey: string;
-}
-
-/**
- * Configuration for Codex CLI agent.
- *
- * Extends base settings with Codex-specific requirements.
- */
-export interface CodexAgentSettings extends BaseAgentSettings {
-	/** OpenAI API key for Codex (OPENAI_API_KEY) */
-	apiKey: string;
-}
-
-/**
- * Configuration for custom ACP-compatible agents.
- *
- * Uses only the base settings, allowing users to configure
- * any agent that implements the Agent Client Protocol.
- */
-export type CustomAgentSettings = BaseAgentSettings;
+export type CopilotAgentSettings = BaseAgentSettings;

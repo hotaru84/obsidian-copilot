@@ -2,36 +2,36 @@
 layout: home
 
 hero:
-  name: "Agent Client"
-  text: "AI Agents in Obsidian"
-  tagline: Chat with Claude Code, Codex, Gemini CLI, and more — right from your vault
+  name: "Copilot for Obsidian"
+  text: "GitHub Copilot in Your Vault"
+  tagline: Chat with GitHub Copilot directly from your Obsidian vault
   actions:
     - theme: brand
       text: Get Started
       link: /getting-started/
     - theme: alt
       text: View on GitHub
-      link: https://github.com/RAIT-09/obsidian-agent-client
+      link: https://github.com/hiroo-obsidian/obsidian-copilot
 
 features:
   - icon: 🤖
-    title: Direct Agent Integration
-    details: Chat with AI coding agents in a dedicated right-side panel
+    title: Direct Copilot Integration
+    details: Chat with GitHub Copilot in a dedicated right-side panel
   - icon: 📝
     title: Note Mentions
     details: Mention any note with @notename to include its content in your prompt
   - icon: ⚡
     title: Slash Commands
-    details: Use / commands to quickly trigger agent actions
-  - icon: 🔄
-    title: Multi-Agent Support
-    details: Switch between Claude Code, Codex, Gemini CLI, and custom agents
+    details: Use / commands to quickly trigger Copilot actions
   - icon: 🎛️
     title: Mode & Model Selection
-    details: Change AI models and agent modes directly from the chat
+    details: Change AI models and Copilot modes directly from the chat
   - icon: 💻
     title: Terminal Integration
-    details: Let your agent execute commands and return results in chat
+    details: Let Copilot execute commands and return results in chat
+  - icon: 📸
+    title: Image Support
+    details: Paste or drag images into the chat for analysis
 ---
 
 <div style="max-width: 800px; margin: 2rem auto;">
@@ -40,14 +40,14 @@ features:
   </video>
 </div>
 
-## What is Agent Client?
+## What is Copilot for Obsidian?
 
-Agent Client is an Obsidian plugin that brings AI coding agents directly into your vault. Built on the [Agent Client Protocol (ACP)](https://github.com/agentclientprotocol/agent-client-protocol), it enables seamless communication with various AI agents.
+Copilot for Obsidian brings GitHub Copilot directly into your vault. Built on the [Agent Client Protocol (ACP)](https://github.com/zed-industries/agent-client-protocol), it enables seamless communication with GitHub Copilot via the command line.
 
-### Supported Agents
+### Requirements
 
-| Agent | Provider | Integration |
-|-------|----------|-------------|
+| Item | Details |
+|------|---------|
 | **[Claude Code](https://github.com/anthropics/claude-code)** | Anthropic | via [Zed’s SDK adapter](https://github.com/zed-industries/claude-agent-acp) |
 | **[Codex](https://github.com/openai/codex)** | OpenAI | via [Zed’s adapter](https://github.com/zed-industries/codex-acp) |
 | **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** | Google | with `--experimental-acp` option |
