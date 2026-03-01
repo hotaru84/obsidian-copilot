@@ -667,7 +667,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	}
 
 	getDisplayText() {
-		return "Agent client";
+		return "Copilot chat";
 	}
 
 	getIcon() {
