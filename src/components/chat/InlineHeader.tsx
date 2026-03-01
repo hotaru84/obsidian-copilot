@@ -23,7 +23,7 @@ export interface InlineHeaderProps {
 	hasMessages: boolean;
 	/** Callback to switch agent */
 	onAgentChange: (agentId: string) => void;
-	/** Callback to create a new chat session */
+	/** Callback to create a new session */
 	onNewSession: () => void;
 	/** Callback to open session history */
 	onOpenHistory: () => void;
@@ -75,8 +75,7 @@ export function InlineHeader({
 		for (const agent of availableAgents) {
 			const isActive = agent.id === currentAgentId;
 			menu.addItem((item) => {
-				item
-					.setTitle(agent.displayName)
+				item.setTitle(agent.displayName)
 					.setIcon(isActive ? "check" : "")
 					.onClick(() => {
 						onAgentChange(agent.id);

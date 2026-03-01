@@ -171,6 +171,35 @@ function ChatComponent({
 	}, [plugin]);
 
 	// ============================================================
+	// New Chat Menu (Obsidian native Menu API)
+	// ============================================================
+	const handleShowNewChatMenu = useCallback(
+		(e: React.MouseEvent<HTMLButtonElement>) => {
+			const menu = new Menu();
+
+			menu.addItem((item) => {
+				item.setTitle("New chat in current tab")
+					.setIcon("file-plus")
+					.onClick(() => {
+						void handleNewChatWithPersist();
+					});
+			});
+
+			menu.addItem((item) => {
+				item.setTitle("New chat in new tab")
+					.setIcon("layout-panel-left")
+					.onClick(() => {
+						const currentAgentId = session.agentId || "copilot";
+						void plugin.openNewChatViewWithAgent(currentAgentId);
+					});
+			});
+
+			menu.showAtMouseEvent(e.nativeEvent);
+		},
+		[handleNewChatWithPersist, plugin, session.agentId],
+	);
+
+	// ============================================================
 	// Header Menu (Obsidian native Menu API)
 	// ============================================================
 	const handleShowMenu = useCallback(
@@ -536,7 +565,7 @@ function ChatComponent({
 			<ChatHeader
 				agentLabel={activeAgentLabel}
 				hasHistoryCapability={sessionHistory.canShowSessionHistory}
-				onNewChat={() => void handleNewChatWithPersist()}
+				onShowNewChatMenu={handleShowNewChatMenu}
 				onExportChat={() => void handleExportChat()}
 				onShowMenu={handleShowMenu}
 				onOpenHistory={handleOpenHistory}

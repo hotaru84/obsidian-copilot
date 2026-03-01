@@ -1,7 +1,7 @@
 import * as React from "react";
 const { useState, useRef, useEffect, useCallback, useMemo } = React;
 import { createRoot, type Root } from "react-dom/client";
-import { Notice } from "obsidian";
+import { Notice, Menu } from "obsidian";
 
 import type AgentClientPlugin from "../../plugin";
 import type {
@@ -21,9 +21,7 @@ import { InlineHeader } from "./InlineHeader";
 import { useChatController } from "../../hooks/useChatController";
 
 import { clampPosition } from "../../shared/floating-utils";
-import {
-	FLOATING_BUTTON_SIZE,
-} from "./FloatingButton";
+import { FLOATING_BUTTON_SIZE } from "./FloatingButton";
 
 // ============================================================
 // Type Definitions
@@ -255,7 +253,10 @@ function FloatingChatComponent({
 	const [isExpanded, setIsExpanded] = useState(initialExpanded);
 	const [size, setSize] = useState(settings.floatingWindowSize);
 	const [buttonPosition, setButtonPosition] = useState(() => {
-		const pos = settings.floatingButtonPosition || { right: 40, bottom: 30 };
+		const pos = settings.floatingButtonPosition || {
+			right: 40,
+			bottom: 30,
+		};
 		return {
 			x: window.innerWidth - pos.right - FLOATING_BUTTON_SIZE,
 			y: window.innerHeight - pos.bottom - FLOATING_BUTTON_SIZE,
@@ -274,9 +275,14 @@ function FloatingChatComponent({
 		}
 
 		// Default: position above button, right-aligned to button
-		const defaultX = buttonPosition.x + FLOATING_BUTTON_SIZE - settings.floatingWindowSize.width;
+		const defaultX =
+			buttonPosition.x +
+			FLOATING_BUTTON_SIZE -
+			settings.floatingWindowSize.width;
 		const defaultY =
-			buttonPosition.y - settings.floatingWindowSize.height - CHAT_BUTTON_MARGIN;
+			buttonPosition.y -
+			settings.floatingWindowSize.height -
+			CHAT_BUTTON_MARGIN;
 
 		return clampPosition(
 			defaultX,
@@ -376,9 +382,7 @@ function FloatingChatComponent({
 
 	// Listen for button position updates
 	useEffect(() => {
-		const handleButtonMoved = (
-			event: Event,
-		) => {
+		const handleButtonMoved = (event: Event) => {
 			const customEvent = event as CustomEvent<{
 				absoluteX: number;
 				absoluteY: number;
@@ -409,39 +413,40 @@ function FloatingChatComponent({
 		const newX = buttonPosition.x + FLOATING_BUTTON_SIZE - size.width;
 		const newY = buttonPosition.y - size.height - CHAT_BUTTON_MARGIN;
 
-		const clampedPos = clampPosition(
-			newX,
-			newY,
-			size.width,
-			size.height,
-		);
+		const clampedPos = clampPosition(newX, newY, size.width, size.height);
 
 		setPosition(clampedPos);
 	}, [buttonPosition, size.width, size.height, CHAT_BUTTON_MARGIN]);
 
-	const handleLeftResizeStart = useCallback((event: React.MouseEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		resizeStateRef.current = {
-			edge: "left",
-			startMouseX: event.clientX,
-			startMouseY: event.clientY,
-			startWidth: size.width,
-			startHeight: size.height,
-		};
-	}, [size.width, size.height]);
+	const handleLeftResizeStart = useCallback(
+		(event: React.MouseEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			resizeStateRef.current = {
+				edge: "left",
+				startMouseX: event.clientX,
+				startMouseY: event.clientY,
+				startWidth: size.width,
+				startHeight: size.height,
+			};
+		},
+		[size.width, size.height],
+	);
 
-	const handleTopResizeStart = useCallback((event: React.MouseEvent) => {
-		event.preventDefault();
-		event.stopPropagation();
-		resizeStateRef.current = {
-			edge: "top",
-			startMouseX: event.clientX,
-			startMouseY: event.clientY,
-			startWidth: size.width,
-			startHeight: size.height,
-		};
-	}, [size.width, size.height]);
+	const handleTopResizeStart = useCallback(
+		(event: React.MouseEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			resizeStateRef.current = {
+				edge: "top",
+				startMouseX: event.clientX,
+				startMouseY: event.clientY,
+				startWidth: size.width,
+				startHeight: size.height,
+			};
+		},
+		[size.width, size.height],
+	);
 
 	useEffect(() => {
 		const handleMouseMove = (event: MouseEvent) => {
@@ -805,9 +810,7 @@ function FloatingChatComponent({
 				className="agent-client-floating-resize-handle agent-client-floating-resize-handle-top"
 				onMouseDown={handleTopResizeStart}
 			/>
-			<div
-				className="agent-client-floating-header"
-			>
+			<div className="agent-client-floating-header">
 				<InlineHeader
 					variant="floating"
 					agentLabel={activeAgentLabel}

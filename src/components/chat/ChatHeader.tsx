@@ -9,8 +9,8 @@ export interface ChatHeaderProps {
 	agentLabel: string;
 	/** Whether session history is supported (show History button) */
 	hasHistoryCapability?: boolean;
-	/** Callback to create a new chat session */
-	onNewChat: () => void;
+	/** Callback to show the new chat menu at the click position */
+	onShowNewChatMenu: (e: React.MouseEvent<HTMLButtonElement>) => void;
 	/** Callback to export the chat */
 	onExportChat: () => void;
 	/** Callback to show the header menu at the click position */
@@ -30,7 +30,7 @@ export interface ChatHeaderProps {
 export function ChatHeader({
 	agentLabel,
 	hasHistoryCapability = false,
-	onNewChat,
+	onShowNewChatMenu,
 	onExportChat,
 	onShowMenu,
 	onOpenHistory,
@@ -46,7 +46,7 @@ export function ChatHeader({
 				<HeaderButton
 					iconName="plus"
 					tooltip="New chat"
-					onClick={onNewChat}
+					onClick={onShowNewChatMenu}
 				/>
 				{onOpenHistory && (
 					<HeaderButton
