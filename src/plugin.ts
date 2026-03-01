@@ -3,10 +3,8 @@ import {
 	WorkspaceLeaf,
 	WorkspaceSplit,
 	Notice,
-	requestUrl,
 } from "obsidian";
 import type { Root } from "react-dom/client";
-import * as semver from "semver";
 import { ChatView, VIEW_TYPE_CHAT } from "./components/chat/ChatView";
 import {
 	createFloatingChat,
@@ -173,7 +171,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		const ribbonIconEl = this.addRibbonIcon(
 			"bot-message-square",
-			"Open agent client",
+			"Open Agent Client",
 			(_evt: MouseEvent) => {
 				void this.activateView();
 			},
@@ -735,7 +733,7 @@ export default class AgentClientPlugin extends Plugin {
 	private broadcastPrompt(): void {
 		const allViews = this.viewRegistry.getAll();
 		if (allViews.length === 0) {
-			new Notice("[Agent Client] No chat views open");
+			new Notice("[Agent Client] no chat views open");
 			return;
 		}
 
@@ -746,14 +744,14 @@ export default class AgentClientPlugin extends Plugin {
 			!inputState ||
 			(inputState.text.trim() === "" && inputState.images.length === 0)
 		) {
-			new Notice("[Agent Client] No prompt to broadcast");
+			new Notice("[Agent Client] no prompt to broadcast");
 			return;
 		}
 
 		const focusedId = this.viewRegistry.getFocusedId();
 		const targetViews = allViews.filter((v) => v.viewId !== focusedId);
 		if (targetViews.length === 0) {
-			new Notice("[Agent Client] No other chat views to broadcast to");
+			new Notice("[Agent Client] no other chat views to broadcast to");
 			return;
 		}
 
@@ -768,13 +766,13 @@ export default class AgentClientPlugin extends Plugin {
 	private async broadcastSend(): Promise<void> {
 		const allViews = this.viewRegistry.getAll();
 		if (allViews.length === 0) {
-			new Notice("[Agent Client] No chat views open");
+			new Notice("[Agent Client] no chat views open");
 			return;
 		}
 
 		const sendableViews = allViews.filter((v) => v.canSend());
 		if (sendableViews.length === 0) {
-			new Notice("[Agent Client] No views ready to send");
+			new Notice("[Agent Client] no views ready to send");
 			return;
 		}
 
@@ -787,12 +785,12 @@ export default class AgentClientPlugin extends Plugin {
 	private async broadcastCancel(): Promise<void> {
 		const allViews = this.viewRegistry.getAll();
 		if (allViews.length === 0) {
-			new Notice("[Agent Client] No chat views open");
+			new Notice("[Agent Client] no chat views open");
 			return;
 		}
 
 		await Promise.allSettled(allViews.map((v) => v.cancelOperation()));
-		new Notice("[Agent Client] Cancel broadcast to all views");
+		new Notice("[Agent Client] cancel broadcast to all views");
 	}
 
 	async loadSettings() {

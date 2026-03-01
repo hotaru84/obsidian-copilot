@@ -335,7 +335,7 @@ export function useChatController(
 
 			// Skip if already empty AND not switching agents
 			if (messages.length === 0 && !isAgentSwitch) {
-				new Notice("[Agent Client] Already a new session");
+				new Notice("[Agent Client] already a new session");
 				return;
 			}
 
@@ -382,7 +382,7 @@ export function useChatController(
 
 	const handleExportChat = useCallback(async () => {
 		if (messages.length === 0) {
-			new Notice("[Agent Client] No messages to export");
+			new Notice("[Agent Client] no messages to export");
 			return;
 		}
 
@@ -399,7 +399,7 @@ export function useChatController(
 			);
 			new Notice(`[Agent Client] Chat exported to ${filePath}`);
 		} catch (error) {
-			new Notice("[Agent Client] Failed to export chat");
+			new Notice("[Agent Client] failed to export chat");
 			logger.error("Export error:", error);
 		}
 	}, [messages, session, plugin, logger]);
@@ -426,9 +426,9 @@ export function useChatController(
 
 		try {
 			await agentSession.forceRestartAgent();
-			new Notice("[Agent Client] Agent restarted");
+			new Notice("[Agent Client] agent restarted");
 		} catch (error) {
-			new Notice("[Agent Client] Failed to restart agent");
+			new Notice("[Agent Client] failed to restart agent");
 			logger.error("Restart error:", error);
 		}
 	}, [logger, messages, session, autoExport, chat, agentSession]);
@@ -452,9 +452,9 @@ export function useChatController(
 				);
 				chat.clearMessages();
 				await sessionHistory.restoreSession(sessionId, cwd);
-				new Notice("[Agent Client] Session restored");
+				new Notice("[Agent Client] session restored");
 			} catch (error) {
-				new Notice("[Agent Client] Failed to restore session");
+				new Notice("[Agent Client] failed to restore session");
 				logger.error("Session restore error:", error);
 			}
 		},
@@ -467,9 +467,9 @@ export function useChatController(
 				logger.log(`[useChatController] Forking session: ${sessionId}`);
 				chat.clearMessages();
 				await sessionHistory.forkSession(sessionId, cwd);
-				new Notice("[Agent Client] Session forked");
+				new Notice("[Agent Client] session forked");
 			} catch (error) {
-				new Notice("[Agent Client] Failed to fork session");
+				new Notice("[Agent Client] failed to fork session");
 				logger.error("Session fork error:", error);
 			}
 		},
@@ -492,9 +492,9 @@ export function useChatController(
 							`[useChatController] Deleting session: ${sessionId}`,
 						);
 						await sessionHistory.deleteSession(sessionId);
-						new Notice("[Agent Client] Session deleted");
+						new Notice("[Agent Client] session deleted");
 					} catch (error) {
-						new Notice("[Agent Client] Failed to delete session");
+						new Notice("[Agent Client] failed to delete session");
 						logger.error("Session delete error:", error);
 					}
 				},
