@@ -1,5 +1,6 @@
 import {
 	App,
+	Notice,
 	PluginSettingTab,
 	Setting,
 	Platform,
@@ -45,9 +46,10 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Copilot CLI path")
 			.setDesc(
-				'Absolute path to GitHub Copilot CLI. Use "which copilot" (macOS/Linux) or "where copilot" (Windows) to find it. Leave empty to use "copilot" command from PATH.',
+				'Absolute path to GitHub Copilot CLI. Use "which copilot" (macOS/Linux) or "where copilot" (Windows) to find it. Leave empty to use "copilot" command from path.',
 			)
 			.addText((text) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				text.setPlaceholder("copilot")
 					.setValue(this.plugin.settings.copilot.command)
 					.onChange(async (value) => {
@@ -59,30 +61,29 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Authentication")
 			.setDesc(
-				'Before using this plugin, you must authenticate with GitHub Copilot CLI. Run: copilot auth login',
+				"Before using this plugin, you must authenticate with GitHub Copilot CLI. Run: copilot auth login",
 			)
 			.addButton((button) => {
 				button
-					.setButtonText("📋 View Auth Setup")
+					.setButtonText("📋 view auth setup")
 					.onClick(() => {
-						const msg =
-							"To authenticate GitHub Copilot CLI:\n\n" +
-							"1. Open your terminal/PowerShell\n" +
-							"2. Run: copilot auth login\n" +
-							"3. Follow the authentication flow\n" +
-							"4. Verify with: copilot --version\n" +
-							"\n" +
-							"Then, you can use this plugin to chat with GitHub Copilot from Obsidian.";
-						alert(msg);
+						new Notice(
+							"To authenticate GitHub Copilot CLI:\n" +
+								"1. Open a terminal\n" +
+								"2. Run: copilot auth login\n" +
+								"3. Follow the prompts",
+							10000,
+						);
 					});
 			});
 
 		new Setting(containerEl)
-			.setName("ACP Arguments")
+			.setName("ACP arguments")
 			.setDesc(
-				"Command-line arguments for Copilot CLI in ACP mode. Typically: --acp --stdio",
+				"Command-line arguments for GitHub Copilot CLI in ACP mode.",
 			)
 			.addTextArea((text) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				text.setPlaceholder("--acp\n--stdio")
 					.setValue(this.formatArgs(this.plugin.settings.copilot.args))
 					.onChange(async (value) => {
@@ -384,7 +385,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Auto-allow permissions")
 			.setDesc(
-				"Automatically allow all permission requests from Copilot. ⚠️ Use with caution - this gives Copilot full access to your system.",
+				"Automatically allow all permission requests from GitHub Copilot. ⚠️ use with caution - this gives GitHub Copilot full access to your system.",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -401,13 +402,13 @@ export class AgentClientSettingTab extends PluginSettingTab {
 
 		if (Platform.isWin) {
 			new Setting(containerEl)
-				.setName("Windows Subsystem for Linux")
+				.setName("Windows subsystem for Linux")
 				.setHeading();
 
 			new Setting(containerEl)
 				.setName("Enable WSL mode")
 				.setDesc(
-					"Run Copilot inside Windows Subsystem for Linux. Useful for better Windows compatibility.",
+					"Run GitHub Copilot inside Windows subsystem for Linux. Useful for better Windows compatibility.",
 				)
 				.addToggle((toggle) =>
 					toggle
@@ -423,7 +424,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 				new Setting(containerEl)
 					.setName("WSL distribution")
 					.setDesc(
-						"Specify WSL distribution name (leave empty for default). Example: Ubuntu, Debian",
+						"Specify WSL distribution name (leave empty for default). Example: ubuntu, debian",
 					)
 					.addText((text) =>
 						text
@@ -486,6 +487,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			)
 			.addText((text) =>
 				text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
 					.setPlaceholder("ai/copilot")
 					.setValue(
 						this.plugin.settings.exportSettings.frontmatterTag,
@@ -499,7 +501,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Include images")
-			.setDesc("Include images in exported markdown files")
+			.setDesc("Include images in exported Markdown files")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.exportSettings.includeImages)
@@ -524,7 +526,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						.addOption("custom", "Save to custom folder")
 						.addOption(
 							"base64",
-							"Embed as Base64 (not recommended)",
+							"Embed as base64 (not recommended)",
 						)
 						.setValue(
 							this.plugin.settings.exportSettings.imageLocation,

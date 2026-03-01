@@ -184,9 +184,9 @@ export function ChatInput({
 	const dragCounterRef = useRef(0);
 	const sendButtonRef = useRef<HTMLButtonElement>(null);
 	const modeButtonRef = useRef<HTMLDivElement>(null);
-	const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false);
+	const [, setIsModeDropdownOpen] = useState(false);
 	const modelButtonRef = useRef<HTMLDivElement>(null);
-	const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+	const [, setIsModelDropdownOpen] = useState(false);
 
 	// Clear attached images when agent changes
 	useEffect(() => {
@@ -273,7 +273,7 @@ export function ChatInput({
 					addedCount++;
 				} catch (error) {
 					console.error("Failed to convert image:", error);
-					new Notice("[Agent Client] Failed to attach image");
+					new Notice("[Agent Client] failed to attach image");
 				}
 			}
 		},
@@ -307,7 +307,7 @@ export function ChatInput({
 
 			if (!supportsImages) {
 				new Notice(
-					"[Agent Client] This agent does not support image attachments",
+					"[Agent Client] this agent does not support image attachments",
 				);
 				return;
 			}
@@ -373,7 +373,7 @@ export function ChatInput({
 
 			if (!supportsImages) {
 				new Notice(
-					"[Agent Client] This agent does not support image attachments",
+					"[Agent Client] this agent does not support image attachments",
 				);
 				return;
 			}

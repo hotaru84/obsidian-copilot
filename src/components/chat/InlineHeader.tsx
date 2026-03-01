@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Menu, setIcon } from "obsidian";
 import { HeaderButton } from "./HeaderButton";
 
@@ -64,7 +64,7 @@ export function InlineHeader({
 }: InlineHeaderProps) {
 	// Refs for agent selector button
 	const agentButtonRef = useRef<HTMLDivElement>(null);
-	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+	const [, setIsDropdownOpen] = useState(false);
 
 	// Handle agent selector click
 	const handleAgentSelectorClick = () => {

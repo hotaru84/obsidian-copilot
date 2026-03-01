@@ -1,7 +1,7 @@
 import * as React from "react";
 const { useState, useRef, useEffect, useCallback, useMemo } = React;
 import { createRoot, type Root } from "react-dom/client";
-import { Notice, Menu } from "obsidian";
+import { Notice } from "obsidian";
 
 import type AgentClientPlugin from "../../plugin";
 import type {
@@ -709,7 +709,7 @@ function FloatingChatComponent({
 					const success = await permission.approveActivePermission();
 					if (!success) {
 						new Notice(
-							"[Agent Client] No active permission request",
+							"[Agent Client] no active permission request",
 						);
 					}
 				})();
@@ -731,7 +731,7 @@ function FloatingChatComponent({
 					const success = await permission.rejectActivePermission();
 					if (!success) {
 						new Notice(
-							"[Agent Client] No active permission request",
+							"[Agent Client] no active permission request",
 						);
 					}
 				})();

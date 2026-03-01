@@ -10,10 +10,7 @@ import type {
 import type { IAgentClient } from "../domain/ports/agent-client.port";
 import type { ISettingsAccess } from "../domain/ports/settings-access.port";
 import type { AgentClientPluginSettings } from "../plugin";
-import type {
-	BaseAgentSettings,
-	CopilotAgentSettings,
-} from "../domain/models/agent-config";
+import type { BaseAgentSettings } from "../domain/models/agent-config";
 import { toAgentConfig } from "../shared/settings-utils";
 
 // ============================================================================
@@ -451,7 +448,7 @@ export function useAgentSession(
 
 				// Generate helpful error message based on error type
 				let errorTitle = "Session Creation Failed";
-				let errorMessage = error instanceof Error ? error.message : String(error);
+				const errorMessage = error instanceof Error ? error.message : String(error);
 				let errorSuggestion = "Please check the agent configuration and try again.";
 
 				// Check for specific error types
