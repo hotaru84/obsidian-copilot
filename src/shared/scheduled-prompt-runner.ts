@@ -31,8 +31,11 @@ export interface SchedulerCallbacks {
 	onRecord: (record: PromptExecutionRecord) => void;
 	/** Called when execution state changes (start/finish) */
 	onStateChange?: () => void;
-	/** Return the best available chat view for sending, or null if none */
-	getView: () => IChatViewContainer | null;
+	/**
+	 * Return a chat view for sending, opening one if necessary.
+	 * Called once per execution; may open a new sidebar view when none is registered.
+	 */
+	getOrOpenView: () => Promise<IChatViewContainer | null>;
 }
 
 export interface CurrentExecutionInfo {
@@ -47,6 +50,9 @@ export interface NextScheduledExecutionInfo {
 	promptName: string;
 	runAt: string;
 }
+
+/** Maximum retry attempts while waiting for the session to become ready (1 attempt/s). */
+const MAX_SESSION_INIT_RETRY_ATTEMPTS = 30;
 
 // ──────────────────────────────────────────────────────────────
 // Time Utilities
@@ -357,18 +363,29 @@ export class ScheduledPromptRunner {
 		};
 
 		try {
-			const view = this.callbacks.getView();
+			const view = await this.callbacks.getOrOpenView();
 
 			if (!view) {
-				record.error = "No active chat view";
+				record.error = "No chat view could be opened";
 				new Notice(
-					`[Agent Client] Scheduled prompt "${prompt.name}": No active chat view`,
+					`[Agent Client] Scheduled prompt "${prompt.name}": No chat view could be opened`,
 					5000,
 				);
 				return;
 			}
 
-			const sent = await view.sendTextPrompt(prompt.content);
+			// Retry sending until the session is ready (max 30 s)
+			let sent = false;
+			for (let attempt = 0; attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS; attempt++) {
+				sent = await view.sendTextPrompt(prompt.content);
+				if (sent) break;
+				if (attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS - 1) {
+					await new Promise<void>((resolve) =>
+						window.setTimeout(resolve, 1000),
+					);
+				}
+			}
+
 			if (sent) {
 				record.success = true;
 				new Notice(

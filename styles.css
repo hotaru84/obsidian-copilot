@@ -2189,3 +2189,38 @@ If your plugin does not need CSS, delete this file.
 	font-size: 11px;
 	grid-column: 1 / -1;
 }
+
+/* Scheduler status bar item */
+.agent-client-scheduler-status {
+display: flex;
+align-items: center;
+gap: 3px;
+font-size: var(--font-smaller);
+}
+
+.agent-client-scheduler-status .agent-client-scheduler-icon {
+display: flex;
+align-items: center;
+line-height: 1;
+}
+
+.agent-client-scheduler-status .agent-client-scheduler-icon svg {
+width: 12px;
+height: 12px;
+}
+
+.agent-client-scheduler-status .agent-client-scheduler-icon.is-running {
+color: var(--color-green);
+}
+
+.agent-client-scheduler-status .agent-client-scheduler-icon.is-paused {
+color: var(--color-orange);
+}
+
+.agent-client-scheduler-status .agent-client-scheduler-icon.is-active {
+color: var(--color-blue);
+}
+
+.agent-client-scheduler-status .agent-client-scheduler-label {
+font-size: var(--font-smaller);
+}
