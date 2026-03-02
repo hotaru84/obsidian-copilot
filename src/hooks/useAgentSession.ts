@@ -448,17 +448,21 @@ export function useAgentSession(
 
 				// Generate helpful error message based on error type
 				let errorTitle = "Session Creation Failed";
-				const errorMessage = error instanceof Error ? error.message : String(error);
-				let errorSuggestion = "Please check the agent configuration and try again.";
+				const errorMessage =
+					error instanceof Error ? error.message : String(error);
+				let errorSuggestion =
+					"Please check the agent configuration and try again.";
 
 				// Check for specific error types
 				if (error instanceof Error) {
 					if (error.name === "CopilotAuthenticationError") {
 						errorTitle = "GitHub Copilot Authentication Required";
-						errorSuggestion = "Open a terminal and run: copilot auth login";
+						errorSuggestion =
+							"Open a terminal and run: copilot auth login";
 					} else if (error.name === "CopilotNotFoundError") {
 						errorTitle = "GitHub Copilot CLI Not Found";
-						errorSuggestion = "Please install GitHub Copilot CLI or check the command path in settings.";
+						errorSuggestion =
+							"Please install GitHub Copilot CLI or check the command path in settings.";
 					}
 				}
 

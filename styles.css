@@ -2100,3 +2100,58 @@ If your plugin does not need CSS, delete this file.
 	font-size: 12px;
 	padding: 0 8px;
 }
+
+/* ─────────────────────────────────────────────────────
+   Custom Prompts / Scheduler Settings
+   ───────────────────────────────────────────────────── */
+
+.agent-client-custom-prompt-item .setting-item-description {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.agent-client-settings-empty-hint {
+	color: var(--text-muted);
+	font-style: italic;
+	font-size: 13px;
+	margin: 4px 0 12px;
+}
+
+/* Execution history list */
+.agent-client-prompt-history {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	overflow: hidden;
+	margin-bottom: 12px;
+}
+
+.agent-client-prompt-history-row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 4px 12px;
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: 12px;
+}
+
+.agent-client-prompt-history-row:last-child {
+	border-bottom: none;
+}
+
+.agent-client-prompt-history-name {
+	font-weight: 500;
+	grid-column: 1;
+}
+
+.agent-client-prompt-history-date {
+	color: var(--text-muted);
+	grid-column: 2;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.agent-client-prompt-history-error {
+	color: var(--text-error);
+	font-size: 11px;
+	grid-column: 1 / -1;
+}

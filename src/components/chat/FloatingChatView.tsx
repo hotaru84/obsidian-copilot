@@ -38,6 +38,7 @@ interface FloatingViewCallbacks {
 	setInputState: (state: ChatInputState) => void;
 	canSend: () => boolean;
 	sendMessage: () => Promise<boolean>;
+	sendTextPrompt: (text: string) => Promise<boolean>;
 	cancelOperation: () => Promise<void>;
 	focus: () => void;
 	hasFocus: () => boolean;
@@ -175,6 +176,10 @@ export class FloatingViewContainer implements IChatViewContainer {
 
 	async sendMessage(): Promise<boolean> {
 		return (await this.callbacks?.sendMessage()) ?? false;
+	}
+
+	async sendTextPrompt(text: string): Promise<boolean> {
+		return (await this.callbacks?.sendTextPrompt(text)) ?? false;
 	}
 
 	async cancelOperation(): Promise<void> {
@@ -586,6 +591,18 @@ function FloatingChatComponent({
 						messageToSend,
 						imagesToSend.length > 0 ? imagesToSend : undefined,
 					);
+					return true;
+				},
+				// Send arbitrary text directly (for scheduled prompts)
+				sendTextPrompt: async (text: string) => {
+					if (
+						!isSessionReady ||
+						sessionHistory.loading ||
+						isSending
+					) {
+						return false;
+					}
+					await handleSendMessage(text);
 					return true;
 				},
 				cancelOperation: handleStopGeneration,

@@ -379,6 +379,18 @@ function ChatComponent({
 		}
 	}, [isSending, handleStopGeneration]);
 
+	/** Send an arbitrary text prompt directly (for scheduled prompts) */
+	const sendTextPromptForScheduler = useCallback(
+		async (text: string): Promise<boolean> => {
+			if (!isSessionReady || sessionHistory.loading || isSending) {
+				return false;
+			}
+			await handleSendMessage(text);
+			return true;
+		},
+		[isSessionReady, sessionHistory.loading, isSending, handleSendMessage],
+	);
+
 	// Register callbacks with ChatView class for broadcast commands
 	useEffect(() => {
 		view.registerInputCallbacks({
@@ -386,6 +398,7 @@ function ChatComponent({
 			getInputState,
 			setInputState,
 			sendMessage: sendMessageForBroadcast,
+			sendTextPrompt: sendTextPromptForScheduler,
 			canSend: canSendForBroadcast,
 			cancel: cancelForBroadcast,
 		});
@@ -399,6 +412,7 @@ function ChatComponent({
 		getInputState,
 		setInputState,
 		sendMessageForBroadcast,
+		sendTextPromptForScheduler,
 		canSendForBroadcast,
 		cancelForBroadcast,
 	]);
@@ -629,6 +643,7 @@ type GetDisplayNameCallback = () => string;
 type GetInputStateCallback = () => ChatInputState | null;
 type SetInputStateCallback = (state: ChatInputState) => void;
 type SendMessageCallback = () => Promise<boolean>;
+type SendTextPromptCallback = (text: string) => Promise<boolean>;
 type CanSendCallback = () => boolean;
 type CancelCallback = () => Promise<void>;
 
@@ -651,6 +666,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	private getInputStateCallback: GetInputStateCallback | null = null;
 	private setInputStateCallback: SetInputStateCallback | null = null;
 	private sendMessageCallback: SendMessageCallback | null = null;
+	private sendTextPromptCallback: SendTextPromptCallback | null = null;
 	private canSendCallback: CanSendCallback | null = null;
 	private cancelCallback: CancelCallback | null = null;
 
@@ -746,6 +762,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		getInputState: GetInputStateCallback;
 		setInputState: SetInputStateCallback;
 		sendMessage: SendMessageCallback;
+		sendTextPrompt: SendTextPromptCallback;
 		canSend: CanSendCallback;
 		cancel: CancelCallback;
 	}): void {
@@ -753,6 +770,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		this.getInputStateCallback = callbacks.getInputState;
 		this.setInputStateCallback = callbacks.setInputState;
 		this.sendMessageCallback = callbacks.sendMessage;
+		this.sendTextPromptCallback = callbacks.sendTextPrompt;
 		this.canSendCallback = callbacks.canSend;
 		this.cancelCallback = callbacks.cancel;
 	}
@@ -765,6 +783,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		this.getInputStateCallback = null;
 		this.setInputStateCallback = null;
 		this.sendMessageCallback = null;
+		this.sendTextPromptCallback = null;
 		this.canSendCallback = null;
 		this.cancelCallback = null;
 	}
@@ -793,6 +812,14 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	 */
 	async sendMessage(): Promise<boolean> {
 		return (await this.sendMessageCallback?.()) ?? false;
+	}
+
+	/**
+	 * Send an arbitrary text prompt directly to the agent.
+	 * Returns true if the prompt was sent, false if the session is not ready.
+	 */
+	async sendTextPrompt(text: string): Promise<boolean> {
+		return (await this.sendTextPromptCallback?.(text)) ?? false;
 	}
 
 	/**

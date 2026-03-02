@@ -610,7 +610,9 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 	 * Ensures "auto" model is always available as the first option.
 	 */
 	private convertAndAddAutoModel(
-		acpModels: { modelId: string; name: string; description?: string | null }[] | undefined,
+		acpModels:
+			| { modelId: string; name: string; description?: string | null }[]
+			| undefined,
 		currentModelId: string,
 	): SessionModelState | undefined {
 		if (!acpModels) return undefined;
@@ -1687,9 +1689,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		config: AgentConfig,
 	): Error {
 		const errorMessage =
-			error instanceof Error
-				? error.message
-				: String(error);
+			error instanceof Error ? error.message : String(error);
 		const errorStr = errorMessage.toLowerCase();
 
 		// Detect GitHub Copilot authentication failure

@@ -1,9 +1,4 @@
-import {
-	Plugin,
-	WorkspaceLeaf,
-	WorkspaceSplit,
-	Notice,
-} from "obsidian";
+import { Plugin, WorkspaceLeaf, WorkspaceSplit, Notice } from "obsidian";
 import type { Root } from "react-dom/client";
 import { ChatView, VIEW_TYPE_CHAT } from "./components/chat/ChatView";
 import {
@@ -18,10 +13,7 @@ import {
 } from "./adapters/obsidian/settings-store.adapter";
 import { AgentClientSettingTab } from "./components/settings/AgentClientSettingTab";
 import { AcpAdapter } from "./adapters/acp/acp.adapter";
-import {
-	sanitizeArgs,
-	normalizeEnvVars,
-} from "./shared/settings-utils";
+import { sanitizeArgs, normalizeEnvVars } from "./shared/settings-utils";
 import { parseChatFontSize } from "./shared/display-settings";
 import {
 	AgentEnvVar,
@@ -29,6 +21,15 @@ import {
 } from "./domain/models/agent-config";
 import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
+import type {
+	CustomPrompt,
+	PromptExecutionRecord,
+} from "./domain/models/scheduled-prompt";
+import {
+	ScheduledPromptRunner,
+	trimExecutionHistory,
+} from "./shared/scheduled-prompt-runner";
+import { RunPromptModal } from "./components/chat/RunPromptModal";
 
 // Re-export for backward compatibility
 export type { AgentEnvVar };
@@ -95,6 +96,10 @@ export interface AgentClientPluginSettings {
 	floatingButtonImage: string;
 	floatingWindowSize: { width: number; height: number };
 	floatingButtonPosition: { right: number; bottom: number } | null;
+	// Scheduled / custom prompt settings
+	customPrompts: CustomPrompt[];
+	promptExecutionHistory: PromptExecutionRecord[];
+	schedulerPaused: boolean;
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
@@ -138,6 +143,9 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	floatingButtonImage: "",
 	floatingWindowSize: { width: 400, height: 500 },
 	floatingButtonPosition: { right: 40, bottom: 30 },
+	customPrompts: [],
+	promptExecutionHistory: [],
+	schedulerPaused: false,
 };
 
 export default class AgentClientPlugin extends Plugin {
@@ -158,6 +166,10 @@ export default class AgentClientPlugin extends Plugin {
 	> = new Map();
 	/** Counter for generating unique floating chat instance IDs */
 	private floatingChatCounter = 0;
+	/** Scheduled prompt runner */
+	scheduledPromptRunner!: ScheduledPromptRunner;
+	/** Status bar item for scheduler status */
+	private schedulerStatusBarItem: HTMLElement | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -270,6 +282,37 @@ export default class AgentClientPlugin extends Plugin {
 			this.openNewFloatingChat();
 		}
 
+		// Initialize scheduled prompt runner
+		this.scheduledPromptRunner = new ScheduledPromptRunner({
+			getPrompts: () => this.settings.customPrompts,
+			onRecord: (record) => {
+				this.settings.promptExecutionHistory = trimExecutionHistory([
+					...this.settings.promptExecutionHistory,
+					record,
+				]);
+				void this.saveSettings();
+				this.updateSchedulerStatusBar();
+			},
+			getView: () => {
+				// Prefer the focused view; fall back to any available view
+				const focused = this.viewRegistry.getFocused();
+				if (focused) return focused;
+				const all = this.viewRegistry.getAll();
+				return all.length > 0 ? all[0] : null;
+			},
+		});
+
+		if (!this.settings.schedulerPaused) {
+			this.scheduledPromptRunner.start();
+		}
+
+		// Status bar item for scheduler
+		this.schedulerStatusBarItem = this.addStatusBarItem();
+		this.updateSchedulerStatusBar();
+
+		// Register scheduled prompt commands
+		this.registerScheduledPromptCommands();
+
 		// Clean up all ACP sessions when Obsidian quits
 		// Note: We don't wait for disconnect to complete to avoid blocking quit
 		this.registerEvent(
@@ -289,6 +332,9 @@ export default class AgentClientPlugin extends Plugin {
 	}
 
 	onunload() {
+		// Stop scheduler
+		this.scheduledPromptRunner?.stop();
+
 		// Unmount floating button
 		this.floatingButton?.unmount();
 		this.floatingButton = null;
@@ -589,7 +635,8 @@ export default class AgentClientPlugin extends Plugin {
 			{
 				id: this.settings.copilot.id,
 				displayName:
-					this.settings.copilot.displayName || this.settings.copilot.id,
+					this.settings.copilot.displayName ||
+					this.settings.copilot.id,
 			},
 		];
 	}
@@ -791,6 +838,78 @@ export default class AgentClientPlugin extends Plugin {
 
 		await Promise.allSettled(allViews.map((v) => v.cancelOperation()));
 		new Notice("[Agent Client] cancel broadcast to all views");
+	}
+
+	// ──────────────────────────────────────────────────────────────
+	// Scheduled Prompts
+	// ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Register commands for scheduled / custom prompt management.
+	 */
+	private registerScheduledPromptCommands(): void {
+		this.addCommand({
+			id: "run-custom-prompt",
+			name: "Run custom prompt",
+			callback: () => {
+				const prompts = this.settings.customPrompts;
+				if (prompts.length === 0) {
+					new Notice(
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
+						"[Agent Client] No custom prompts configured. Add prompts in Settings → Custom Prompts.",
+					);
+					return;
+				}
+				new RunPromptModal(
+					this.app,
+					prompts,
+					this.scheduledPromptRunner,
+				).open();
+			},
+		});
+
+		this.addCommand({
+			id: "toggle-scheduled-prompts",
+			name: "Toggle scheduled prompts (pause / resume)",
+			callback: () => {
+				if (this.scheduledPromptRunner.isPaused) {
+					this.scheduledPromptRunner.resume();
+					this.settings.schedulerPaused = false;
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
+					new Notice("[Agent Client] Scheduled prompts resumed");
+				} else {
+					this.scheduledPromptRunner.pause();
+					this.settings.schedulerPaused = true;
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
+					new Notice("[Agent Client] Scheduled prompts paused");
+				}
+				this.updateSchedulerStatusBar();
+				void this.saveSettings();
+			},
+		});
+	}
+
+	/**
+	 * Update the status bar text to reflect current scheduler state.
+	 */
+	updateSchedulerStatusBar(): void {
+		if (!this.schedulerStatusBarItem) return;
+		const enabledCount = this.settings.customPrompts.filter(
+			(p) => p.enabled && p.intervalMinutes > 0,
+		).length;
+		if (enabledCount === 0) {
+			this.schedulerStatusBarItem.setText("");
+			this.schedulerStatusBarItem.title = "";
+			return;
+		}
+		const paused = this.scheduledPromptRunner?.isPaused ?? true;
+		const icon = paused ? "⏸" : "⏱";
+		this.schedulerStatusBarItem.setText(
+			`${icon} ${enabledCount} scheduled prompt${enabledCount === 1 ? "" : "s"}`,
+		);
+		this.schedulerStatusBarItem.title = paused
+			? "Scheduled prompts paused"
+			: "Scheduled prompts active";
 	}
 
 	async loadSettings() {
@@ -1018,6 +1137,48 @@ export default class AgentClientPlugin extends Plugin {
 				}
 				return DEFAULT_SETTINGS.floatingButtonPosition;
 			})(),
+			customPrompts: (() => {
+				if (!Array.isArray(rawSettings.customPrompts)) {
+					return DEFAULT_SETTINGS.customPrompts;
+				}
+				return (rawSettings.customPrompts as unknown[]).filter(
+					(p): p is CustomPrompt =>
+						p !== null &&
+						typeof p === "object" &&
+						typeof (p as Record<string, unknown>).id === "string" &&
+						typeof (p as Record<string, unknown>).name ===
+							"string" &&
+						typeof (p as Record<string, unknown>).content ===
+							"string" &&
+						typeof (p as Record<string, unknown>)
+							.intervalMinutes === "number" &&
+						typeof (p as Record<string, unknown>).enabled ===
+							"boolean",
+				);
+			})(),
+			promptExecutionHistory: (() => {
+				if (!Array.isArray(rawSettings.promptExecutionHistory)) {
+					return DEFAULT_SETTINGS.promptExecutionHistory;
+				}
+				return (rawSettings.promptExecutionHistory as unknown[]).filter(
+					(r): r is PromptExecutionRecord =>
+						r !== null &&
+						typeof r === "object" &&
+						typeof (r as Record<string, unknown>).id === "string" &&
+						typeof (r as Record<string, unknown>).promptId ===
+							"string" &&
+						typeof (r as Record<string, unknown>).promptName ===
+							"string" &&
+						typeof (r as Record<string, unknown>).executedAt ===
+							"string" &&
+						typeof (r as Record<string, unknown>).success ===
+							"boolean",
+				);
+			})(),
+			schedulerPaused:
+				typeof rawSettings.schedulerPaused === "boolean"
+					? rawSettings.schedulerPaused
+					: DEFAULT_SETTINGS.schedulerPaused,
 		};
 	}
 
