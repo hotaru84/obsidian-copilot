@@ -123,6 +123,15 @@ export interface IChatViewContainer {
 	sendMessage(): Promise<boolean>;
 
 	/**
+	 * Send an arbitrary text prompt directly to the agent, bypassing input state.
+	 * Used by the scheduled prompt runner to inject prompts without
+	 * disturbing the user's in-progress input.
+	 * @param text - Prompt text to send
+	 * @returns Promise<boolean> - true if the prompt was sent, false if the session is not ready
+	 */
+	sendTextPrompt(text: string): Promise<boolean>;
+
+	/**
 	 * Cancel current operation.
 	 * Stops ongoing message generation.
 	 */

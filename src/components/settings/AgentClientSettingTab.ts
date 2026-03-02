@@ -1,10 +1,4 @@
-import {
-	App,
-	Notice,
-	PluginSettingTab,
-	Setting,
-	Platform,
-} from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, Platform } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import type { AgentEnvVar, ChatViewLocation } from "../../plugin";
 import { normalizeEnvVars } from "../../shared/settings-utils";
@@ -64,17 +58,15 @@ export class AgentClientSettingTab extends PluginSettingTab {
 				"Before using this plugin, you must authenticate with GitHub Copilot CLI. Run: copilot auth login",
 			)
 			.addButton((button) => {
-				button
-					.setButtonText("📋 view auth setup")
-					.onClick(() => {
-						new Notice(
-							"To authenticate GitHub Copilot CLI:\n" +
-								"1. Open a terminal\n" +
-								"2. Run: copilot auth login\n" +
-								"3. Follow the prompts",
-							10000,
-						);
-					});
+				button.setButtonText("📋 view auth setup").onClick(() => {
+					new Notice(
+						"To authenticate GitHub Copilot CLI:\n" +
+							"1. Open a terminal\n" +
+							"2. Run: copilot auth login\n" +
+							"3. Follow the prompts",
+						10000,
+					);
+				});
 			});
 
 		new Setting(containerEl)
@@ -85,9 +77,12 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			.addTextArea((text) => {
 				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				text.setPlaceholder("--acp\n--stdio")
-					.setValue(this.formatArgs(this.plugin.settings.copilot.args))
+					.setValue(
+						this.formatArgs(this.plugin.settings.copilot.args),
+					)
 					.onChange(async (value) => {
-						this.plugin.settings.copilot.args = this.parseArgs(value);
+						this.plugin.settings.copilot.args =
+							this.parseArgs(value);
 						await this.plugin.saveSettings();
 					});
 				text.inputEl.rows = 2;
@@ -137,9 +132,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Chat view location")
-			.setDesc(
-				"Where to open new chat views (sidebar or editor area)",
-			)
+			.setDesc("Where to open new chat views (sidebar or editor area)")
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("right-tab", "Right sidebar (tab)")
@@ -612,6 +605,212 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		// ─────────────────────────────────────────────────────────────────────
+		// Custom Prompts (Scheduled Execution)
+		// ─────────────────────────────────────────────────────────────────────
+
+		new Setting(containerEl).setName("Custom prompts").setHeading();
+
+		new Setting(containerEl)
+			.setName("Pause scheduler")
+			.setDesc(
+				"Pause all scheduled prompt executions without removing the prompts.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.schedulerPaused)
+					.onChange(async (value) => {
+						this.plugin.settings.schedulerPaused = value;
+						if (value) {
+							this.plugin.scheduledPromptRunner.pause();
+						} else {
+							this.plugin.scheduledPromptRunner.resume();
+						}
+						this.plugin.updateSchedulerStatusBar();
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		// ── Existing prompts ──────────────────────────────────────────────────
+		const prompts = this.plugin.settings.customPrompts;
+
+		if (prompts.length === 0) {
+			containerEl.createEl("p", {
+				text: "No custom prompts yet. Add one below.",
+				cls: "agent-client-settings-empty-hint",
+			});
+		} else {
+			for (const prompt of prompts) {
+				const promptSetting = new Setting(containerEl)
+					.setName(prompt.name)
+					.setDesc(
+						prompt.intervalMinutes > 0
+							? `Every ${prompt.intervalMinutes} min · ${prompt.content.slice(0, 60)}${prompt.content.length > 60 ? "…" : ""}`
+							: `Manual only · ${prompt.content.slice(0, 60)}${prompt.content.length > 60 ? "…" : ""}`,
+					)
+					.addToggle((toggle) =>
+						toggle
+							.setValue(prompt.enabled)
+							.onChange(async (value) => {
+								prompt.enabled = value;
+								this.plugin.updateSchedulerStatusBar();
+								await this.plugin.saveSettings();
+							}),
+					)
+					.addButton((btn) =>
+						btn
+							.setIcon("play")
+							.setTooltip("Run now")
+							.onClick(() => {
+								void this.plugin.scheduledPromptRunner.runNow(
+									prompt.id,
+								);
+							}),
+					)
+					.addButton((btn) =>
+						btn
+							.setIcon("trash")
+							.setTooltip("Delete")
+							.onClick(async () => {
+								this.plugin.settings.customPrompts =
+									this.plugin.settings.customPrompts.filter(
+										(p) => p.id !== prompt.id,
+									);
+								this.plugin.updateSchedulerStatusBar();
+								await this.plugin.saveSettings();
+								this.display();
+							}),
+					);
+				promptSetting.settingEl.addClass(
+					"agent-client-custom-prompt-item",
+				);
+			}
+		}
+
+		// ── Add new prompt form ───────────────────────────────────────────────
+		new Setting(containerEl).setName("Add custom prompt").setHeading();
+
+		// Name
+		let newName = "";
+		new Setting(containerEl)
+			.setName("Name")
+			.setDesc("A short label for this prompt.")
+			.addText((text) =>
+				text.setPlaceholder("Daily summary").onChange((value) => {
+					newName = value.trim();
+				}),
+			);
+
+		// Content
+		let newContent = "";
+		new Setting(containerEl)
+			.setName("Prompt text")
+			.setDesc("The prompt text to send to the agent.")
+			.addTextArea((area) => {
+				area.setPlaceholder(
+					"Summarise my recent notes and suggest next steps.",
+				).onChange((value) => {
+					newContent = value;
+				});
+				area.inputEl.rows = 4;
+			});
+
+		// Interval
+		let newInterval = 0;
+		new Setting(containerEl)
+			.setName("Interval (minutes)")
+			.setDesc(
+				"How often to run automatically. Set to 0 for manual-only.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("0")
+					.setValue("0")
+					.onChange((value) => {
+						const n = parseInt(value, 10);
+						newInterval = isNaN(n) || n < 0 ? 0 : n;
+					}),
+			);
+
+		// Enabled toggle + Add button
+		let newEnabled = true;
+		new Setting(containerEl)
+			.setName("Enable on creation")
+			.addToggle((toggle) =>
+				toggle.setValue(true).onChange((value) => {
+					newEnabled = value;
+				}),
+			)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Add prompt")
+					.setCta()
+					.onClick(async () => {
+						if (!newName) {
+							new Notice("Please enter a name for the prompt.");
+							return;
+						}
+						if (!newContent.trim()) {
+							new Notice("Please enter the prompt text.");
+							return;
+						}
+						this.plugin.settings.customPrompts.push({
+							id: crypto.randomUUID(),
+							name: newName,
+							content: newContent.trim(),
+							intervalMinutes: newInterval,
+							enabled: newEnabled,
+						});
+						if (!this.plugin.settings.schedulerPaused) {
+							this.plugin.scheduledPromptRunner.resume();
+						}
+						this.plugin.updateSchedulerStatusBar();
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
+
+		// ── Execution history ─────────────────────────────────────────────────
+		const history = this.plugin.settings.promptExecutionHistory;
+		if (history.length > 0) {
+			new Setting(containerEl).setName("Execution history").setHeading();
+
+			// Show last 10 records, newest first
+			const recent = [...history].reverse().slice(0, 10);
+			const historyEl = containerEl.createDiv({
+				cls: "agent-client-prompt-history",
+			});
+			for (const record of recent) {
+				const row = historyEl.createDiv({
+					cls: "agent-client-prompt-history-row",
+				});
+				const dateStr = new Date(record.executedAt).toLocaleString();
+				const statusIcon = record.success ? "✅" : "❌";
+				row.createSpan({
+					text: `${statusIcon} ${record.promptName}`,
+					cls: "agent-client-prompt-history-name",
+				});
+				row.createSpan({
+					text: dateStr,
+					cls: "agent-client-prompt-history-date",
+				});
+				if (record.error) {
+					row.createSpan({
+						text: record.error,
+						cls: "agent-client-prompt-history-error",
+					});
+				}
+			}
+
+			new Setting(containerEl).addButton((btn) =>
+				btn.setButtonText("Clear history").onClick(async () => {
+					this.plugin.settings.promptExecutionHistory = [];
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+		}
 
 		// ─────────────────────────────────────────────────────────────────────
 		// Developer

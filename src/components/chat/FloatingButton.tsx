@@ -63,15 +63,16 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 	const MENU_MIN_WIDTH = 220;
 
 	// Dragging state
-	const [relativePosRef, setRelativePosRef] = useState<{ right: number; bottom: number } | null>(
-		() => {
-			if (!settings.floatingButtonPosition) return null;
-			return {
-				right: settings.floatingButtonPosition.right,
-				bottom: settings.floatingButtonPosition.bottom,
-			};
-		},
-	);
+	const [relativePosRef, setRelativePosRef] = useState<{
+		right: number;
+		bottom: number;
+	} | null>(() => {
+		if (!settings.floatingButtonPosition) return null;
+		return {
+			right: settings.floatingButtonPosition.right,
+			bottom: settings.floatingButtonPosition.bottom,
+		};
+	});
 	const [isDragging, setIsDragging] = useState(false);
 	const [windowSize, setWindowSize] = useState({
 		width: window.innerWidth,
@@ -174,12 +175,24 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 			const newY = e.clientY - dragOffset.current.y;
 
 			// Clamp to viewport
-			const clampedX = Math.max(0, Math.min(newX, window.innerWidth - FLOATING_BUTTON_SIZE));
-			const clampedY = Math.max(0, Math.min(newY, window.innerHeight - FLOATING_BUTTON_SIZE));
+			const clampedX = Math.max(
+				0,
+				Math.min(newX, window.innerWidth - FLOATING_BUTTON_SIZE),
+			);
+			const clampedY = Math.max(
+				0,
+				Math.min(newY, window.innerHeight - FLOATING_BUTTON_SIZE),
+			);
 
 			// Convert back to relative position (right, bottom)
-			const newRight = Math.max(0, window.innerWidth - clampedX - FLOATING_BUTTON_SIZE);
-			const newBottom = Math.max(0, window.innerHeight - clampedY - FLOATING_BUTTON_SIZE);
+			const newRight = Math.max(
+				0,
+				window.innerWidth - clampedX - FLOATING_BUTTON_SIZE,
+			);
+			const newBottom = Math.max(
+				0,
+				window.innerHeight - clampedY - FLOATING_BUTTON_SIZE,
+			);
 
 			setRelativePosRef({ right: newRight, bottom: newBottom });
 
@@ -214,7 +227,8 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 		const timer = setTimeout(() => {
 			if (
 				!settings.floatingButtonPosition ||
-				relativePosRef.right !== settings.floatingButtonPosition.right ||
+				relativePosRef.right !==
+					settings.floatingButtonPosition.right ||
 				relativePosRef.bottom !== settings.floatingButtonPosition.bottom
 			) {
 				void plugin.saveSettingsAndNotify({
@@ -237,8 +251,14 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 			// Position is automatically recalculated via useMemo
 			// Emit event to notify chat views of new button position
 			if (relativePosRef) {
-				const absX = window.innerWidth - relativePosRef.right - FLOATING_BUTTON_SIZE;
-				const absY = window.innerHeight - relativePosRef.bottom - FLOATING_BUTTON_SIZE;
+				const absX =
+					window.innerWidth -
+					relativePosRef.right -
+					FLOATING_BUTTON_SIZE;
+				const absY =
+					window.innerHeight -
+					relativePosRef.bottom -
+					FLOATING_BUTTON_SIZE;
 				window.dispatchEvent(
 					new CustomEvent("agent-client:floating-button-moved", {
 						detail: {
@@ -338,19 +358,21 @@ function FloatingButtonComponent({ plugin }: FloatingButtonProps) {
 					className="agent-client-floating-instance-menu"
 					style={{
 						bottom: window.innerHeight - absoluteButtonPos.y + 10,
-						...(absoluteButtonPos.x + MENU_MIN_WIDTH > window.innerWidth
+						...(absoluteButtonPos.x + MENU_MIN_WIDTH >
+						window.innerWidth
 							? {
 									right:
 										window.innerWidth -
-										(absoluteButtonPos.x + FLOATING_BUTTON_SIZE),
-										left: "auto",
-										top: "auto",
-								  }
+										(absoluteButtonPos.x +
+											FLOATING_BUTTON_SIZE),
+									left: "auto",
+									top: "auto",
+								}
 							: {
 									left: absoluteButtonPos.x,
 									right: "auto",
 									top: "auto",
-							  }),
+								}),
 					}}
 				>
 					<div className="agent-client-floating-instance-menu-header">

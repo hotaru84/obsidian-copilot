@@ -273,7 +273,9 @@ export function useChatController(
 	// ============================================================
 	const activeAgentLabel = useMemo(() => {
 		// GitHub Copilot is the only available agent
-		return plugin.settings.copilot.displayName || plugin.settings.copilot.id;
+		return (
+			plugin.settings.copilot.displayName || plugin.settings.copilot.id
+		);
 	}, [plugin.settings.copilot]);
 
 	const availableAgents = useMemo(() => {

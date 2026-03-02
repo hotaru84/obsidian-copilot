@@ -785,7 +785,11 @@ export function ChatInput({
 
 	// Handle mode selector click
 	const handleModeSelectorClick = useCallback(() => {
-		if (!modeButtonRef.current || !modes?.availableModes || modes.availableModes.length <= 1) {
+		if (
+			!modeButtonRef.current ||
+			!modes?.availableModes ||
+			modes.availableModes.length <= 1
+		) {
 			return;
 		}
 
@@ -795,8 +799,7 @@ export function ChatInput({
 		for (const mode of modes.availableModes) {
 			const isActive = mode.id === currentModeId;
 			menu.addItem((item) => {
-				item
-					.setTitle(mode.name)
+				item.setTitle(mode.name)
 					.setIcon(isActive ? "check" : "")
 					.onClick(() => {
 						if (onModeChangeRef.current) {
@@ -818,7 +821,11 @@ export function ChatInput({
 
 	// Handle model selector click
 	const handleModelSelectorClick = useCallback(() => {
-		if (!modelButtonRef.current || !models?.availableModels || models.availableModels.length <= 1) {
+		if (
+			!modelButtonRef.current ||
+			!models?.availableModels ||
+			models.availableModels.length <= 1
+		) {
 			return;
 		}
 
@@ -828,8 +835,7 @@ export function ChatInput({
 		for (const model of models.availableModels) {
 			const isActive = model.modelId === currentModelId;
 			menu.addItem((item) => {
-				item
-					.setTitle(model.name)
+				item.setTitle(model.name)
 					.setIcon(isActive ? "check" : "")
 					.onClick(() => {
 						if (onModelChangeRef.current) {
@@ -981,75 +987,75 @@ export function ChatInput({
 					{/* Mode Selector */}
 					{modes && modes.availableModes.length > 1 && (
 						<div
-						ref={modeButtonRef}
-						className="agent-client-mode-selector"
-						onClick={handleModeSelectorClick}
-						role="button"
-						tabIndex={0}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								handleModeSelectorClick();
-							}
-						}}
-						title={
-							modes.availableModes.find(
-								(m) => m.id === modes.currentModeId,
-							)?.description ?? "Select mode"
-						}
-					>
-						<span className="agent-client-mode-selector-text">
-							{modes.availableModes.find(
-								(m) => m.id === modes.currentModeId,
-							)?.name ?? "Select mode"}
-						</span>
-						<span
-							className="agent-client-mode-selector-icon"
-							ref={(el) => {
-								if (el) setIcon(el, "chevron-down");
+							ref={modeButtonRef}
+							className="agent-client-mode-selector"
+							onClick={handleModeSelectorClick}
+							role="button"
+							tabIndex={0}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.preventDefault();
+									handleModeSelectorClick();
+								}
 							}}
-						/>
-					</div>
-				)}
+							title={
+								modes.availableModes.find(
+									(m) => m.id === modes.currentModeId,
+								)?.description ?? "Select mode"
+							}
+						>
+							<span className="agent-client-mode-selector-text">
+								{modes.availableModes.find(
+									(m) => m.id === modes.currentModeId,
+								)?.name ?? "Select mode"}
+							</span>
+							<span
+								className="agent-client-mode-selector-icon"
+								ref={(el) => {
+									if (el) setIcon(el, "chevron-down");
+								}}
+							/>
+						</div>
+					)}
 
 					{/* Model Selector (experimental) */}
 					{models && models.availableModels.length > 1 && (
 						<div
-						ref={modelButtonRef}
-						className="agent-client-model-selector"
-						onClick={handleModelSelectorClick}
-						role="button"
-						tabIndex={0}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
-								e.preventDefault();
-								handleModelSelectorClick();
+							ref={modelButtonRef}
+							className="agent-client-model-selector"
+							onClick={handleModelSelectorClick}
+							role="button"
+							tabIndex={0}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.preventDefault();
+									handleModelSelectorClick();
+								}
+							}}
+							title={
+								models.availableModels.find(
+									(m) => m.modelId === models.currentModelId,
+								)?.description ?? "Select model"
 							}
-						}}
-						title={
-							models.availableModels.find(
-								(m) => m.modelId === models.currentModelId,
-							)?.description ?? "Select model"
-						}
-					>
-						<span className="agent-client-model-selector-text">
-							{models.availableModels.find(
-								(m) => m.modelId === models.currentModelId,
-							)?.name ?? "Select model"}
-						</span>
-				<span
-					className="agent-client-model-selector-icon"
-					ref={(el) => {
-						if (el) setIcon(el, "chevron-down");
-					}}
-				/>
-					</div>
-				)}
+						>
+							<span className="agent-client-model-selector-text">
+								{models.availableModels.find(
+									(m) => m.modelId === models.currentModelId,
+								)?.name ?? "Select model"}
+							</span>
+							<span
+								className="agent-client-model-selector-icon"
+								ref={(el) => {
+									if (el) setIcon(el, "chevron-down");
+								}}
+							/>
+						</div>
+					)}
 
-				{/* Send/Stop Button */}
-				<button
-					ref={sendButtonRef}
-					onClick={() => void handleSendOrStop()}
+					{/* Send/Stop Button */}
+					<button
+						ref={sendButtonRef}
+						onClick={() => void handleSendOrStop()}
 						disabled={isButtonDisabled}
 						className={`agent-client-chat-send-button ${isSending ? "sending" : ""} ${isButtonDisabled ? "agent-client-disabled" : ""}`}
 						title={
