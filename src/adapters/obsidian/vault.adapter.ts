@@ -10,11 +10,13 @@ import type {
 	IVaultAccess,
 	NoteMetadata,
 	EditorPosition,
+	FolderMetadata,
 } from "../../domain/ports/vault-access.port";
 import { NoteMentionService } from "./mention-service";
 import type AgentClientPlugin from "../../plugin";
 import {
 	TFile,
+	TFolder,
 	MarkdownView,
 	type EventRef,
 	type EditorSelection,
@@ -320,6 +322,52 @@ export class ObsidianVaultAdapter implements IVaultAccess {
 		return Promise.resolve(
 			files.map((file) => this.convertToMetadata(file)),
 		);
+	}
+
+	/**
+	 * Search for folders matching a query.
+	 *
+	 * Uses fuzzy search against folder names and paths.
+	 * Returns up to 20 best matches sorted by relevance.
+	 * If query is empty, returns all folders.
+	 *
+	 * @param query - Search query string (can be empty for all folders)
+	 * @returns Promise resolving to array of matching folder metadata
+	 */
+	searchFolders(query: string): Promise<FolderMetadata[]> {
+		// Use existing NoteMentionService for fuzzy search
+		const folders = this.mentionService.searchFolders(query);
+		return Promise.resolve(
+			folders.map((folder) => this.convertToFolderMetadata(folder)),
+		);
+	}
+
+	/**
+	 * List all folders in the vault.
+	 *
+	 * @returns Promise resolving to array of all folder metadata
+	 */
+	listFolders(): Promise<FolderMetadata[]> {
+		// Use existing NoteMentionService to get all folders
+		const folders = this.mentionService.getAllFolders();
+		return Promise.resolve(
+			folders.map((folder) => this.convertToFolderMetadata(folder)),
+		);
+	}
+
+	/**
+	 * Convert Obsidian TFolder to domain FolderMetadata.
+	 *
+	 * Extracts relevant properties from TFolder.
+	 *
+	 * @param folder - Obsidian TFolder object
+	 * @returns FolderMetadata object
+	 */
+	private convertToFolderMetadata(folder: TFolder): FolderMetadata {
+		return {
+			path: folder.path,
+			name: folder.name,
+		};
 	}
 
 	/**

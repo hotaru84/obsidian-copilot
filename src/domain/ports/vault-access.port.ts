@@ -50,6 +50,20 @@ export interface NoteMetadata {
 }
 
 /**
+ * Metadata for a folder in the vault.
+ *
+ * Contains essential information about a folder without
+ * exposing Obsidian's internal TFolder structure.
+ */
+export interface FolderMetadata {
+	/** Full path to the folder within the vault (e.g., "folder/subfolder") */
+	path: string;
+
+	/** Folder name (e.g., "subfolder") */
+	name: string;
+}
+
+/**
  * Interface for accessing vault notes and files.
  *
  * Provides methods for searching, reading, and listing notes
@@ -91,4 +105,23 @@ export interface IVaultAccess {
 	 * @returns Promise resolving to array of all note metadata
 	 */
 	listNotes(): Promise<NoteMetadata[]>;
+
+	/**
+	 * Search for folders matching a query.
+	 *
+	 * Uses fuzzy search against folder names and paths.
+	 * Returns up to 20 best matches sorted by relevance.
+	 * If query is empty, returns all folders.
+	 *
+	 * @param query - Search query string (can be empty for all folders)
+	 * @returns Promise resolving to array of matching folder metadata
+	 */
+	searchFolders(query: string): Promise<FolderMetadata[]>;
+
+	/**
+	 * List all folders in the vault.
+	 *
+	 * @returns Promise resolving to array of all folder metadata
+	 */
+	listFolders(): Promise<FolderMetadata[]>;
 }

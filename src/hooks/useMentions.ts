@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import type {
 	NoteMetadata,
+	FolderMetadata,
 	IVaultAccess,
 } from "../domain/ports/vault-access.port";
 import {
@@ -10,9 +11,11 @@ import {
 } from "../shared/mention-utils";
 import type AgentClientPlugin from "../plugin";
 
+export type MentionSuggestion = NoteMetadata | FolderMetadata;
+
 export interface UseMentionsReturn {
-	/** Note suggestions matching the current mention query */
-	suggestions: NoteMetadata[];
+	/** Note/Folder suggestions matching the current mention query */
+	suggestions: MentionSuggestion[];
 	/** Currently selected index in the dropdown */
 	selectedIndex: number;
 	/** Whether the dropdown is open */
@@ -22,15 +25,15 @@ export interface UseMentionsReturn {
 
 	/**
 	 * Update mention suggestions based on current input.
-	 * Detects @-mentions and searches for matching notes.
+	 * Detects @-mentions and searches for matching notes or folders.
 	 */
 	updateSuggestions: (input: string, cursorPosition: number) => Promise<void>;
 
 	/**
-	 * Select a note from the dropdown.
-	 * @returns Updated input text with mention replaced (e.g., "@[[note name]]")
+	 * Select a note or folder from the dropdown.
+	 * @returns Updated input text with mention replaced (e.g., "@[[note name]]" or "@folder[[folder name]]")
 	 */
-	selectSuggestion: (input: string, suggestion: NoteMetadata) => string;
+	selectSuggestion: (input: string, suggestion: MentionSuggestion) => string;
 
 	/** Navigate the dropdown selection */
 	navigate: (direction: "up" | "down") => void;
@@ -42,17 +45,17 @@ export interface UseMentionsReturn {
 /**
  * Hook for managing mention dropdown state and logic.
  *
- * Handles @-mention detection, note searching, and dropdown interaction.
+ * Handles @-mention detection, note/folder searching, and dropdown interaction.
  * Uses detectMention/replaceMention utilities for parsing.
  *
- * @param vaultAccess - Vault access port for note searching
+ * @param vaultAccess - Vault access port for note/folder searching
  * @param plugin - Plugin instance for settings and configuration
  */
 export function useMentions(
 	vaultAccess: IVaultAccess,
 	plugin: AgentClientPlugin,
 ): UseMentionsReturn {
-	const [suggestions, setSuggestions] = useState<NoteMetadata[]>([]);
+	const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const [context, setContext] = useState<MentionContext | null>(null);
 
@@ -70,7 +73,11 @@ export function useMentions(
 				return;
 			}
 
-			const results = await vaultAccess.searchNotes(ctx.query);
+			// Search based on mention type
+			const results =
+				ctx.type === "folder"
+					? await vaultAccess.searchFolders(ctx.query)
+					: await vaultAccess.searchNotes(ctx.query);
 			setSuggestions(results);
 			setSelectedIndex(0);
 			setContext(ctx);
@@ -79,12 +86,17 @@ export function useMentions(
 	);
 
 	const selectSuggestion = useCallback(
-		(input: string, suggestion: NoteMetadata): string => {
+		(input: string, suggestion: MentionSuggestion): string => {
 			if (!context) {
 				return input;
 			}
 
-			const { newText } = replaceMention(input, context, suggestion.name);
+			const itemName =
+				"name" in suggestion && "extension" in suggestion
+					? suggestion.name // NoteMetadata has basename as name
+					: suggestion.name; // FolderMetadata also has name
+
+			const { newText } = replaceMention(input, context, itemName);
 
 			setSuggestions([]);
 			setSelectedIndex(0);

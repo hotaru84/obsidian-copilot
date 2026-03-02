@@ -11,7 +11,10 @@ import type {
 	SessionModelState,
 } from "../../domain/models/chat-session";
 import type { ImagePromptContent } from "../../domain/models/prompt-content";
-import type { UseMentionsReturn } from "../../hooks/useMentions";
+import type {
+	UseMentionsReturn,
+	MentionSuggestion,
+} from "../../hooks/useMentions";
 import type { UseSlashCommandsReturn } from "../../hooks/useSlashCommands";
 import type { UseAutoMentionReturn } from "../../hooks/useAutoMention";
 import type { ChatMessage } from "../../domain/models/chat-message";
@@ -408,7 +411,7 @@ export function ChatInput({
 	 * Handle mention selection from dropdown.
 	 */
 	const selectMention = useCallback(
-		(suggestion: NoteMetadata) => {
+		(suggestion: MentionSuggestion) => {
 			const newText = mentions.selectSuggestion(inputValue, suggestion);
 			setTextAndFocus(newText);
 		},

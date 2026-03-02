@@ -1,10 +1,11 @@
-import { TFile, prepareFuzzySearch } from "obsidian";
+import { TFile, TFolder, prepareFuzzySearch } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import { getLogger, Logger } from "../../shared/logger";
 
 // Note mention service for @-mention functionality
 export class NoteMentionService {
 	private files: TFile[] = [];
+	private folders: TFolder[] = [];
 	private lastBuild = 0;
 	private plugin: AgentClientPlugin;
 	private logger: Logger;
@@ -47,9 +48,10 @@ export class NoteMentionService {
 
 	private rebuildIndex() {
 		this.files = this.plugin.app.vault.getMarkdownFiles();
+		this.folders = this.plugin.app.vault.getAllFolders();
 		this.lastBuild = Date.now();
 		this.logger.log(
-			`[NoteMentionService] Rebuilt index with ${this.files.length} files`,
+			`[NoteMentionService] Rebuilt index with ${this.files.length} files and ${this.folders.length} folders`,
 		);
 	}
 
@@ -118,8 +120,55 @@ export class NoteMentionService {
 			.map((item) => item.file);
 	}
 
+	searchFolders(query: string): TFolder[] {
+		this.logger.log(
+			"[DEBUG] NoteMentionService.searchFolders called with:",
+			query,
+		);
+		this.logger.log("[DEBUG] Total folders indexed:", this.folders.length);
+
+		if (!query.trim()) {
+			this.logger.log("[DEBUG] Empty query, returning all folders");
+			// If no query, return all folders
+			return this.folders.slice(0, 20);
+		}
+
+		this.logger.log("[DEBUG] Preparing fuzzy search for:", query.trim());
+		const fuzzySearch = prepareFuzzySearch(query.trim());
+
+		// Score each folder based on name and path
+		const scored: Array<{ folder: TFolder; score: number }> =
+			this.folders.map((folder) => {
+				const name = folder.name;
+				const path = folder.path;
+
+				// Search in name and path
+				const searchFields = [name, path];
+				let bestScore = -Infinity;
+
+				for (const field of searchFields) {
+					const match = fuzzySearch(field);
+					if (match && match.score > bestScore) {
+						bestScore = match.score;
+					}
+				}
+
+				return { folder, score: bestScore };
+			});
+
+		return scored
+			.filter((item) => item.score > -Infinity)
+			.sort((a, b) => b.score - a.score)
+			.slice(0, 20)
+			.map((item) => item.folder);
+	}
+
 	getAllFiles(): TFile[] {
 		return this.files;
+	}
+
+	getAllFolders(): TFolder[] {
+		return this.folders;
 	}
 
 	getFileByPath(path: string): TFile | null {

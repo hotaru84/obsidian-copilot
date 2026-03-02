@@ -3,7 +3,10 @@ const { useRef, useEffect } = React;
 import { getLogger } from "../../shared/logger";
 import type AgentClientPlugin from "../../plugin";
 import type { IChatViewHost } from "./types";
-import type { NoteMetadata } from "../../domain/ports/vault-access.port";
+import type {
+	NoteMetadata,
+	FolderMetadata,
+} from "../../domain/ports/vault-access.port";
 import type { SlashCommand } from "../../domain/models/chat-session";
 
 /**
@@ -14,21 +17,21 @@ type DropdownType = "mention" | "slash-command";
 /**
  * Props for the SuggestionDropdown component.
  *
- * This component can display either note mentions or slash commands
+ * This component can display either note mentions, folder mentions, or slash commands
  * based on the `type` prop.
  */
 interface SuggestionDropdownProps {
 	/** Type of dropdown to display */
 	type: DropdownType;
 
-	/** Items to display (NoteMetadata for mentions, SlashCommand for commands) */
-	items: NoteMetadata[] | SlashCommand[];
+	/** Items to display (NoteMetadata/FolderMetadata for mentions, SlashCommand for commands) */
+	items: (NoteMetadata | FolderMetadata)[] | SlashCommand[];
 
 	/** Currently selected item index */
 	selectedIndex: number;
 
 	/** Callback when an item is selected */
-	onSelect: (item: NoteMetadata | SlashCommand) => void;
+	onSelect: (item: NoteMetadata | FolderMetadata | SlashCommand) => void;
 
 	/** Callback to close the dropdown */
 	onClose: () => void;
@@ -96,26 +99,37 @@ export function SuggestionDropdown({
 	/**
 	 * Render a single dropdown item based on type.
 	 */
-	const renderItem = (item: NoteMetadata | SlashCommand, index: number) => {
+	const renderItem = (
+		item: NoteMetadata | FolderMetadata | SlashCommand,
+		index: number,
+	) => {
 		const isSelected = index === selectedIndex;
 		const hasBorder = index < items.length - 1;
 
 		if (type === "mention") {
-			const note = item as NoteMetadata;
+			// Check if this is a folder or note
+			const isFolder =
+				"name" in item &&
+				"path" in item &&
+				!("extension" in item) &&
+				!("created" in item);
+			const mentionItem = item as NoteMetadata | FolderMetadata;
+
 			return (
 				<div
-					key={note.path}
+					key={mentionItem.path}
 					className={`agent-client-mention-dropdown-item ${isSelected ? "agent-client-selected" : ""} ${hasBorder ? "agent-client-has-border" : ""}`}
-					onClick={() => onSelect(note)}
+					onClick={() => onSelect(mentionItem)}
 					onMouseEnter={() => {
 						// Could update selected index on hover
 					}}
 				>
 					<div className="agent-client-mention-dropdown-item-name">
-						{note.name}
+						{isFolder ? "📁 " : "📄 "}
+						{mentionItem.name}
 					</div>
 					<div className="agent-client-mention-dropdown-item-path">
-						{note.path}
+						{mentionItem.path}
 					</div>
 				</div>
 			);

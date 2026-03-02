@@ -30,7 +30,11 @@ import type {
 	ImagePromptContent,
 	ResourcePromptContent,
 } from "../domain/models/prompt-content";
-import { extractMentionedNotes, type IMentionService } from "./mention-utils";
+import {
+	extractMentionedNotes,
+	extractMentionedFolders,
+	type IMentionService,
+} from "./mention-utils";
 import { convertWindowsPathToWsl } from "./wsl-utils";
 import { buildFileUri } from "./path-utils";
 
@@ -158,8 +162,12 @@ export async function preparePrompt(
 	vaultAccess: IVaultAccess,
 	mentionService: IMentionService,
 ): Promise<PreparePromptResult> {
-	// Step 1: Extract all mentioned notes from the message
+	// Step 1: Extract all mentioned notes and folders from the message
 	const mentionedNotes = extractMentionedNotes(input.message, mentionService);
+	const mentionedFolders = extractMentionedFolders(
+		input.message,
+		mentionService,
+	);
 
 	// Step 2: Build context based on agent capabilities
 	if (input.supportsEmbeddedContext) {
@@ -167,9 +175,15 @@ export async function preparePrompt(
 			input,
 			vaultAccess,
 			mentionedNotes,
+			mentionedFolders,
 		);
 	} else {
-		return preparePromptWithTextContext(input, vaultAccess, mentionedNotes);
+		return preparePromptWithTextContext(
+			input,
+			vaultAccess,
+			mentionedNotes,
+			mentionedFolders,
+		);
 	}
 }
 
@@ -182,6 +196,10 @@ async function preparePromptWithEmbeddedContext(
 	mentionedNotes: Array<{
 		noteTitle: string;
 		file: { path: string; stat: { mtime: number } } | undefined;
+	}>,
+	mentionedFolders: Array<{
+		folderName: string;
+		folder: { path: string } | undefined;
 	}>,
 ): Promise<PreparePromptResult> {
 	const resourceBlocks: ResourcePromptContent[] = [];
@@ -226,6 +244,40 @@ async function preparePromptWithEmbeddedContext(
 			});
 		} catch (error) {
 			console.error(`Failed to read note ${file.path}:`, error);
+		}
+	}
+
+	// Build Resource blocks for each mentioned folder
+	// Pass only folder path - let agent explore contents as needed
+	for (const { folder } of mentionedFolders) {
+		if (!folder) {
+			continue;
+		}
+
+		try {
+			let absolutePath = input.vaultBasePath
+				? `${input.vaultBasePath}/${folder.path}`
+				: folder.path;
+
+			if (input.convertToWsl) {
+				absolutePath = convertWindowsPathToWsl(absolutePath);
+			}
+
+			// Pass folder as resource with directory URI
+			resourceBlocks.push({
+				type: "resource",
+				resource: {
+					uri: buildFileUri(absolutePath),
+					mimeType: "text/directory",
+					text: `[Folder: ${folder.path}]\nThis is a directory reference. The agent can request specific files from this folder as needed.`,
+				},
+				annotations: {
+					audience: ["assistant"],
+					priority: 0.9, // Folder mentions slightly lower priority than files
+				},
+			});
+		} catch (error) {
+			console.error(`Failed to process folder ${folder.path}:`, error);
 		}
 	}
 
@@ -306,6 +358,10 @@ async function preparePromptWithTextContext(
 		noteTitle: string;
 		file: { path: string; stat: { mtime: number } } | undefined;
 	}>,
+	mentionedFolders: Array<{
+		folderName: string;
+		folder: { path: string } | undefined;
+	}>,
 ): Promise<PreparePromptResult> {
 	const contextBlocks: string[] = [];
 
@@ -339,6 +395,29 @@ async function preparePromptWithTextContext(
 			contextBlocks.push(contextBlock);
 		} catch (error) {
 			console.error(`Failed to read note ${file.path}:`, error);
+		}
+	}
+
+	// Build XML context blocks for each mentioned folder
+	// Pass only folder path - let agent explore contents as needed
+	for (const { folder } of mentionedFolders) {
+		if (!folder) {
+			continue;
+		}
+
+		try {
+			let absolutePath = input.vaultBasePath
+				? `${input.vaultBasePath}/${folder.path}`
+				: folder.path;
+
+			if (input.convertToWsl) {
+				absolutePath = convertWindowsPathToWsl(absolutePath);
+			}
+
+			const contextBlock = `<obsidian_mentioned_folder path="${absolutePath}" />`;
+			contextBlocks.push(contextBlock);
+		} catch (error) {
+			console.error(`Failed to process folder ${folder.path}:`, error);
 		}
 	}
 
