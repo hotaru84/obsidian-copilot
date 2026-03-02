@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, WorkspaceSplit, Notice, Menu } from "obsidian";
+import { Plugin, WorkspaceLeaf, WorkspaceSplit, Notice, Menu, setIcon } from "obsidian";
 import type { Root } from "react-dom/client";
 import { ChatView, VIEW_TYPE_CHAT } from "./components/chat/ChatView";
 import {
@@ -11,7 +11,7 @@ import {
 	createSettingsStore,
 	type SettingsStore,
 } from "./adapters/obsidian/settings-store.adapter";
-import { AgentClientSettingTab } from "./components/settings/AgentClientSettingTab";
+import { AgentClientSettingTab, CustomPromptsModal } from "./components/settings/AgentClientSettingTab";
 import { AcpAdapter } from "./adapters/acp/acp.adapter";
 import { sanitizeArgs, normalizeEnvVars } from "./shared/settings-utils";
 import { parseChatFontSize } from "./shared/display-settings";
@@ -58,6 +58,9 @@ function truncateText(value: string, maxLength: number): string {
 	if (value.length <= maxLength) return value;
 	return `${value.slice(0, maxLength - 1)}…`;
 }
+
+/** Maximum seconds to wait for a new chat view to register after opening one. */
+const MAX_VIEW_REGISTRATION_WAIT_SECONDS = 10;
 
 // Re-export for backward compatibility
 export type { AgentEnvVar };
@@ -325,12 +328,23 @@ export default class AgentClientPlugin extends Plugin {
 			onStateChange: () => {
 				this.updateSchedulerStatusBar();
 			},
-			getView: () => {
+			getOrOpenView: async () => {
 				// Prefer the focused view; fall back to any available view
 				const focused = this.viewRegistry.getFocused();
 				if (focused) return focused;
 				const all = this.viewRegistry.getAll();
-				return all.length > 0 ? all[0] : null;
+				if (all.length > 0) return all[0];
+
+				// No view available – open one and wait up to MAX_VIEW_REGISTRATION_WAIT_SECONDS for it to register
+				await this.activateView();
+				for (let i = 0; i < MAX_VIEW_REGISTRATION_WAIT_SECONDS; i++) {
+					await new Promise<void>((resolve) =>
+						window.setTimeout(resolve, 1000),
+					);
+					const newAll = this.viewRegistry.getAll();
+					if (newAll.length > 0) return newAll[0];
+				}
+				return null;
 			},
 		});
 
@@ -1030,7 +1044,7 @@ export default class AgentClientPlugin extends Plugin {
 			item.setTitle("Open custom prompts settings")
 				.setIcon("settings")
 				.onClick(() => {
-					this.openPluginSettingsTab();
+					new CustomPromptsModal(this.app, this).open();
 				});
 		});
 
@@ -1097,48 +1111,55 @@ export default class AgentClientPlugin extends Plugin {
 	 */
 	updateSchedulerStatusBar(): void {
 		if (!this.schedulerStatusBarItem) return;
+		const el = this.schedulerStatusBarItem;
+		el.empty();
+		el.addClass("agent-client-scheduler-status");
+
 		const enabledCount = this.settings.customPrompts.filter(
 			(p) => p.enabled && isTimeWindowPrompt(p),
 		).length;
 		if (enabledCount === 0) {
-			this.schedulerStatusBarItem.setText("");
-			this.schedulerStatusBarItem.title = "";
+			el.title = "";
 			return;
 		}
 
 		const now = new Date();
 		const running =
 			this.scheduledPromptRunner?.getCurrentExecution() ?? null;
+
+		const iconEl = el.createSpan({ cls: "agent-client-scheduler-icon" });
+		const textEl = el.createSpan({ cls: "agent-client-scheduler-label" });
+
 		if (running) {
 			const elapsedMs =
 				now.getTime() - new Date(running.startedAt).getTime();
-			this.schedulerStatusBarItem.setText(
-				`▶ ${truncateText(running.promptName, 18)}`,
-			);
-			this.schedulerStatusBarItem.title = `Running (${formatDuration(elapsedMs)}). Click for details.`;
+			setIcon(iconEl, "loader-circle");
+			iconEl.addClass("is-running");
+			textEl.textContent = truncateText(running.promptName, 18);
+			el.title = `Running (${formatDuration(elapsedMs)}). Click for details.`;
 			return;
 		}
 
 		const paused = this.scheduledPromptRunner?.isPaused ?? true;
-		const icon = paused ? "⏸" : "⏱";
-		this.schedulerStatusBarItem.setText(
-			`${icon} ${enabledCount} scheduled prompt${enabledCount === 1 ? "" : "s"}`,
-		);
 		if (paused) {
-			this.schedulerStatusBarItem.title =
-				"Scheduled prompts paused. Click for details.";
+			setIcon(iconEl, "circle-pause");
+			iconEl.addClass("is-paused");
+			textEl.textContent = `${enabledCount}`;
+			el.title = "Scheduled prompts paused. Click for details.";
 			return;
 		}
 
+		setIcon(iconEl, "timer");
+		iconEl.addClass("is-active");
+		textEl.textContent = `${enabledCount}`;
 		const next = this.scheduledPromptRunner?.getNextScheduledExecution(now);
 		if (next) {
 			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
-			this.schedulerStatusBarItem.title = `Next: ${next.promptName} in ${formatDuration(remainingMs)}. Click for details.`;
+			el.title = `Next: ${next.promptName} in ${formatDuration(remainingMs)}. Click for details.`;
 			return;
 		}
 
-		this.schedulerStatusBarItem.title =
-			"Scheduled prompts active. Click for details.";
+		el.title = "Scheduled prompts active. Click for details.";
 	}
 
 	async loadSettings() {
