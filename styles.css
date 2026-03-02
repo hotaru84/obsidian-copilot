@@ -2117,6 +2117,40 @@ If your plugin does not need CSS, delete this file.
 	margin: 4px 0 12px;
 }
 
+/* Time windows container */
+.agent-client-time-windows {
+	margin-bottom: 16px;
+}
+
+.agent-client-time-input {
+	width: 120px;
+}
+
+/* Days of week checkboxes */
+.agent-client-days-checkboxes {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-top: 8px;
+	padding-left: 0;
+}
+
+.agent-client-day-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.agent-client-day-checkbox input[type="checkbox"] {
+	margin: 0;
+	cursor: pointer;
+}
+
+.agent-client-day-checkbox label {
+	cursor: pointer;
+	font-size: 13px;
+}
+
 /* Execution history list */
 .agent-client-prompt-history {
 	border: 1px solid var(--background-modifier-border);

@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting, Platform } from "obsidian";
+import { App, Modal, Notice, PluginSettingTab, Setting, Platform } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import type { AgentEnvVar, ChatViewLocation } from "../../plugin";
 import { normalizeEnvVars } from "../../shared/settings-utils";
@@ -7,6 +7,41 @@ import {
 	CHAT_FONT_SIZE_MIN,
 	parseChatFontSize,
 } from "../../shared/display-settings";
+import type {
+	CustomPrompt,
+	TimeWindow,
+} from "../../domain/models/scheduled-prompt";
+import {
+	isLegacyPrompt,
+	isTimeWindowPrompt,
+} from "../../domain/models/scheduled-prompt";
+
+/**
+ * Helper functions for formatting custom prompt schedules
+ */
+
+/** Days of week labels (index matches Date.getDay()) */
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/**
+ * Format time windows for display.
+ */
+function formatTimeWindows(windows: TimeWindow[]): string {
+	if (!windows || windows.length === 0) return "";
+	return windows.map((w) => `${w.startTime}-${w.endTime}`).join(", ");
+}
+
+/**
+ * Format days of week for display.
+ */
+function formatDaysOfWeek(days: number[] | undefined): string {
+	if (!days || days.length === 0) return "Every day";
+	if (days.length === 7) return "Every day";
+	return days
+		.sort()
+		.map((d) => DAY_LABELS[d])
+		.join(", ");
+}
 
 export class AgentClientSettingTab extends PluginSettingTab {
 	plugin: AgentClientPlugin;
@@ -642,13 +677,27 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			});
 		} else {
 			for (const prompt of prompts) {
+				let desc: string;
+				if (isLegacyPrompt(prompt)) {
+					// Legacy format using intervalMinutes
+					desc =
+						prompt.intervalMinutes! > 0
+							? `⚠️ Legacy: Every ${prompt.intervalMinutes} min (migration needed)`
+							: "Manual only";
+				} else if (isTimeWindowPrompt(prompt)) {
+					// New format using time windows
+					const timeStr = formatTimeWindows(prompt.timeWindows!);
+					const daysStr = formatDaysOfWeek(prompt.daysOfWeek);
+					desc = `${timeStr} (${daysStr})`;
+				} else {
+					// No schedule
+					desc = "Manual only";
+				}
+				desc += ` · ${prompt.content.slice(0, 60)}${prompt.content.length > 60 ? "…" : ""}`;
+
 				const promptSetting = new Setting(containerEl)
 					.setName(prompt.name)
-					.setDesc(
-						prompt.intervalMinutes > 0
-							? `Every ${prompt.intervalMinutes} min · ${prompt.content.slice(0, 60)}${prompt.content.length > 60 ? "…" : ""}`
-							: `Manual only · ${prompt.content.slice(0, 60)}${prompt.content.length > 60 ? "…" : ""}`,
-					)
+					.setDesc(desc)
 					.addToggle((toggle) =>
 						toggle
 							.setValue(prompt.enabled)
@@ -666,6 +715,14 @@ export class AgentClientSettingTab extends PluginSettingTab {
 								void this.plugin.scheduledPromptRunner.runNow(
 									prompt.id,
 								);
+							}),
+					)
+					.addButton((btn) =>
+						btn
+							.setIcon("pencil")
+							.setTooltip("Edit")
+							.onClick(() => {
+								this.openCustomPromptEditModal(prompt);
 							}),
 					)
 					.addButton((btn) =>
@@ -716,22 +773,110 @@ export class AgentClientSettingTab extends PluginSettingTab {
 				area.inputEl.rows = 4;
 			});
 
-		// Interval
-		let newInterval = 0;
-		new Setting(containerEl)
-			.setName("Interval (minutes)")
-			.setDesc(
-				"How often to run automatically. Set to 0 for manual-only.",
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("0")
-					.setValue("0")
-					.onChange((value) => {
-						const n = parseInt(value, 10);
-						newInterval = isNaN(n) || n < 0 ? 0 : n;
+		// Time windows
+		const newTimeWindows: TimeWindow[] = [];
+		const timeWindowsContainer = containerEl.createDiv({
+			cls: "agent-client-time-windows",
+		});
+
+		const renderTimeWindows = () => {
+			timeWindowsContainer.empty();
+			new Setting(timeWindowsContainer)
+				.setName("Time windows")
+				.setDesc(
+					"Specify when this prompt can be executed. Leave empty for manual-only.",
+				);
+
+			if (newTimeWindows.length === 0) {
+				timeWindowsContainer.createEl("p", {
+					text: "No time windows yet. Add one below.",
+					cls: "agent-client-settings-empty-hint",
+				});
+			} else {
+				for (let i = 0; i < newTimeWindows.length; i++) {
+					const window = newTimeWindows[i];
+					new Setting(timeWindowsContainer)
+						.setName(`Window ${i + 1}`)
+						.addText((text) => {
+							text.setValue(window.startTime)
+								.setPlaceholder("08:00")
+								.onChange((value) => {
+									window.startTime = value;
+								});
+							text.inputEl.type = "time";
+							text.inputEl.addClass("agent-client-time-input");
+						})
+						.addText((text) => {
+							text.setValue(window.endTime)
+								.setPlaceholder("10:00")
+								.onChange((value) => {
+									window.endTime = value;
+								});
+							text.inputEl.type = "time";
+							text.inputEl.addClass("agent-client-time-input");
+						})
+						.addButton((btn) =>
+							btn
+								.setIcon("trash")
+								.setTooltip("Remove")
+								.onClick(() => {
+									newTimeWindows.splice(i, 1);
+									renderTimeWindows();
+								}),
+						);
+				}
+			}
+
+			new Setting(timeWindowsContainer).addButton((btn) =>
+				btn
+					.setButtonText("Add time window")
+					.onClick(() => {
+						newTimeWindows.push({
+							startTime: "08:00",
+							endTime: "10:00",
+						});
+						renderTimeWindows();
 					}),
 			);
+		};
+		renderTimeWindows();
+
+		// Days of week
+		const newDaysOfWeek: number[] = [];
+		const daysSetting = new Setting(containerEl)
+			.setName("Days of week")
+			.setDesc(
+				"Select days when the prompt should run. Leave empty for every day.",
+			)
+			.setClass("agent-client-days-of-week");
+
+		const daysContainer = daysSetting.settingEl.createDiv({
+			cls: "agent-client-days-checkboxes",
+		});
+		for (let day = 0; day < 7; day++) {
+			const dayLabel = DAY_LABELS[day];
+			const checkboxWrapper = daysContainer.createDiv({
+				cls: "agent-client-day-checkbox",
+			});
+			const checkbox = checkboxWrapper.createEl("input", {
+				type: "checkbox",
+			});
+			checkbox.id = `day-${day}`;
+			checkbox.addEventListener("change", () => {
+				if (checkbox.checked) {
+					if (!newDaysOfWeek.includes(day)) {
+						newDaysOfWeek.push(day);
+					}
+				} else {
+					const idx = newDaysOfWeek.indexOf(day);
+					if (idx >= 0) newDaysOfWeek.splice(idx, 1);
+				}
+			});
+			checkboxWrapper.createEl("label", {
+				text: dayLabel,
+				attr: { for: `day-${day}` },
+			});
+		}
 
 		// Enabled toggle + Add button
 		let newEnabled = true;
@@ -755,12 +900,42 @@ export class AgentClientSettingTab extends PluginSettingTab {
 							new Notice("Please enter the prompt text.");
 							return;
 						}
+
+						// Validate time windows
+						for (const window of newTimeWindows) {
+							const startMatch = /^(\d{1,2}):(\d{2})$/.exec(
+								window.startTime,
+							);
+							const endMatch = /^(\d{1,2}):(\d{2})$/.exec(
+								window.endTime,
+							);
+							if (!startMatch || !endMatch) {
+								new Notice(
+									"Invalid time format. Use HH:MM (e.g., 08:00).",
+								);
+								return;
+							}
+							const startMinutes =
+								parseInt(startMatch[1], 10) * 60 +
+								parseInt(startMatch[2], 10);
+							const endMinutes =
+								parseInt(endMatch[1], 10) * 60 +
+								parseInt(endMatch[2], 10);
+							if (startMinutes >= endMinutes) {
+								new Notice(
+									"Start time must be before end time.",
+								);
+								return;
+							}
+						}
+
 						this.plugin.settings.customPrompts.push({
 							id: crypto.randomUUID(),
 							name: newName,
 							content: newContent.trim(),
-							intervalMinutes: newInterval,
 							enabled: newEnabled,
+							timeWindows: newTimeWindows.length > 0 ? [...newTimeWindows] : undefined,
+							daysOfWeek: newDaysOfWeek.length > 0 && newDaysOfWeek.length < 7 ? [...newDaysOfWeek] : undefined,
 						});
 						if (!this.plugin.settings.schedulerPaused) {
 							this.plugin.scheduledPromptRunner.resume();
@@ -831,6 +1006,218 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+	}
+
+	private openCustomPromptEditModal(prompt: CustomPrompt): void {
+		const modal = new Modal(this.app);
+		modal.titleEl.setText("Edit custom prompt");
+
+		let editedName = prompt.name;
+		let editedContent = prompt.content;
+		let editedEnabled = prompt.enabled;
+		const editedTimeWindows: TimeWindow[] = (prompt.timeWindows ?? []).map(
+			(window) => ({ ...window }),
+		);
+		const editedDaysOfWeek: number[] = [...(prompt.daysOfWeek ?? [])];
+
+		new Setting(modal.contentEl)
+			.setName("Name")
+			.setDesc("A short label for this prompt.")
+			.addText((text) =>
+				text.setValue(editedName).onChange((value) => {
+					editedName = value.trim();
+				}),
+			);
+
+		new Setting(modal.contentEl)
+			.setName("Prompt text")
+			.setDesc("The prompt text to send to the agent.")
+			.addTextArea((area) => {
+				area.setValue(editedContent).onChange((value) => {
+					editedContent = value;
+				});
+				area.inputEl.rows = 6;
+			});
+
+		const timeWindowsContainer = modal.contentEl.createDiv({
+			cls: "agent-client-time-windows",
+		});
+
+		const renderTimeWindows = () => {
+			timeWindowsContainer.empty();
+			new Setting(timeWindowsContainer)
+				.setName("Time windows")
+				.setDesc(
+					"Specify when this prompt can be executed. Leave empty for manual-only.",
+				);
+
+			if (editedTimeWindows.length === 0) {
+				timeWindowsContainer.createEl("p", {
+					text: "No time windows yet. Add one below.",
+					cls: "agent-client-settings-empty-hint",
+				});
+			} else {
+				for (let i = 0; i < editedTimeWindows.length; i++) {
+					const window = editedTimeWindows[i];
+					new Setting(timeWindowsContainer)
+						.setName(`Window ${i + 1}`)
+						.addText((text) => {
+							text.setValue(window.startTime)
+								.setPlaceholder("08:00")
+								.onChange((value) => {
+									window.startTime = value;
+								});
+							text.inputEl.type = "time";
+							text.inputEl.addClass("agent-client-time-input");
+						})
+						.addText((text) => {
+							text.setValue(window.endTime)
+								.setPlaceholder("10:00")
+								.onChange((value) => {
+									window.endTime = value;
+								});
+							text.inputEl.type = "time";
+							text.inputEl.addClass("agent-client-time-input");
+						})
+						.addButton((btn) =>
+							btn
+								.setIcon("trash")
+								.setTooltip("Remove")
+								.onClick(() => {
+									editedTimeWindows.splice(i, 1);
+									renderTimeWindows();
+								}),
+						);
+				}
+			}
+
+			new Setting(timeWindowsContainer).addButton((btn) =>
+				btn.setButtonText("Add time window").onClick(() => {
+					editedTimeWindows.push({
+						startTime: "08:00",
+						endTime: "10:00",
+					});
+					renderTimeWindows();
+				}),
+			);
+		};
+		renderTimeWindows();
+
+		const editDaysSetting = new Setting(modal.contentEl)
+			.setName("Days of week")
+			.setDesc(
+				"Select days when the prompt should run. Leave empty for every day.",
+			)
+			.setClass("agent-client-days-of-week");
+
+		const daysContainer = editDaysSetting.settingEl.createDiv({
+			cls: "agent-client-days-checkboxes",
+		});
+		for (let day = 0; day < 7; day++) {
+			const dayLabel = DAY_LABELS[day];
+			const checkboxWrapper = daysContainer.createDiv({
+				cls: "agent-client-day-checkbox",
+			});
+			const checkbox = checkboxWrapper.createEl("input", {
+				type: "checkbox",
+			});
+			checkbox.checked = editedDaysOfWeek.includes(day);
+			checkbox.id = `edit-day-${prompt.id}-${day}`;
+			checkbox.addEventListener("change", () => {
+				if (checkbox.checked) {
+					if (!editedDaysOfWeek.includes(day)) {
+						editedDaysOfWeek.push(day);
+					}
+				} else {
+					const idx = editedDaysOfWeek.indexOf(day);
+					if (idx >= 0) editedDaysOfWeek.splice(idx, 1);
+				}
+			});
+			checkboxWrapper.createEl("label", {
+				text: dayLabel,
+				attr: { for: `edit-day-${prompt.id}-${day}` },
+			});
+		}
+
+		new Setting(modal.contentEl).setName("Enable on creation").addToggle(
+			(toggle) =>
+				toggle.setValue(editedEnabled).onChange((value) => {
+					editedEnabled = value;
+				}),
+		);
+
+		new Setting(modal.contentEl)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Save")
+					.setCta()
+					.onClick(async () => {
+						if (!editedName) {
+							new Notice("Please enter a name for the prompt.");
+							return;
+						}
+						if (!editedContent.trim()) {
+							new Notice("Please enter the prompt text.");
+							return;
+						}
+
+						for (const window of editedTimeWindows) {
+							const startMatch = /^(\d{1,2}):(\d{2})$/.exec(
+								window.startTime,
+							);
+							const endMatch = /^(\d{1,2}):(\d{2})$/.exec(
+								window.endTime,
+							);
+							if (!startMatch || !endMatch) {
+								new Notice(
+									"Invalid time format. Use HH:MM (e.g., 08:00).",
+								);
+								return;
+							}
+							const startMinutes =
+								parseInt(startMatch[1], 10) * 60 +
+								parseInt(startMatch[2], 10);
+							const endMinutes =
+								parseInt(endMatch[1], 10) * 60 +
+								parseInt(endMatch[2], 10);
+							if (startMinutes >= endMinutes) {
+								new Notice(
+									"Start time must be before end time.",
+								);
+								return;
+							}
+						}
+
+						prompt.name = editedName;
+						prompt.content = editedContent.trim();
+						prompt.enabled = editedEnabled;
+						prompt.timeWindows =
+							editedTimeWindows.length > 0
+								? [...editedTimeWindows]
+								: undefined;
+						prompt.daysOfWeek =
+							editedDaysOfWeek.length > 0 &&
+							editedDaysOfWeek.length < 7
+								? [...editedDaysOfWeek]
+								: undefined;
+						prompt.intervalMinutes = undefined;
+
+						if (!this.plugin.settings.schedulerPaused) {
+							this.plugin.scheduledPromptRunner.resume();
+						}
+						this.plugin.updateSchedulerStatusBar();
+						await this.plugin.saveSettings();
+						modal.close();
+						this.display();
+					}),
+			)
+			.addButton((btn) =>
+				btn.setButtonText("Cancel").onClick(() => {
+					modal.close();
+				}),
+			);
+
+		modal.open();
 	}
 
 	private formatArgs(args: string[]): string {

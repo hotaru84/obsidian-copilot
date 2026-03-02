@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, WorkspaceSplit, Notice } from "obsidian";
+import { Plugin, WorkspaceLeaf, WorkspaceSplit, Notice, Menu } from "obsidian";
 import type { Root } from "react-dom/client";
 import { ChatView, VIEW_TYPE_CHAT } from "./components/chat/ChatView";
 import {
@@ -25,11 +25,39 @@ import type {
 	CustomPrompt,
 	PromptExecutionRecord,
 } from "./domain/models/scheduled-prompt";
+import { isTimeWindowPrompt } from "./domain/models/scheduled-prompt";
 import {
 	ScheduledPromptRunner,
 	trimExecutionHistory,
 } from "./shared/scheduled-prompt-runner";
 import { RunPromptModal } from "./components/chat/RunPromptModal";
+
+function getLocalDateString(date: Date): string {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
+function formatDuration(ms: number): string {
+	const clamped = Math.max(0, Math.floor(ms / 1000));
+	const hours = Math.floor(clamped / 3600);
+	const minutes = Math.floor((clamped % 3600) / 60);
+	const seconds = clamped % 60;
+
+	if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+	if (minutes > 0) return `${minutes}m ${seconds}s`;
+	return `${seconds}s`;
+}
+
+function formatClock(dateIso: string): string {
+	return new Date(dateIso).toLocaleTimeString();
+}
+
+function truncateText(value: string, maxLength: number): string {
+	if (value.length <= maxLength) return value;
+	return `${value.slice(0, maxLength - 1)}…`;
+}
 
 // Re-export for backward compatibility
 export type { AgentEnvVar };
@@ -285,12 +313,16 @@ export default class AgentClientPlugin extends Plugin {
 		// Initialize scheduled prompt runner
 		this.scheduledPromptRunner = new ScheduledPromptRunner({
 			getPrompts: () => this.settings.customPrompts,
+			getHistory: () => this.settings.promptExecutionHistory,
 			onRecord: (record) => {
 				this.settings.promptExecutionHistory = trimExecutionHistory([
 					...this.settings.promptExecutionHistory,
 					record,
 				]);
 				void this.saveSettings();
+				this.updateSchedulerStatusBar();
+			},
+			onStateChange: () => {
 				this.updateSchedulerStatusBar();
 			},
 			getView: () => {
@@ -302,12 +334,22 @@ export default class AgentClientPlugin extends Plugin {
 			},
 		});
 
-		if (!this.settings.schedulerPaused) {
-			this.scheduledPromptRunner.start();
+		this.scheduledPromptRunner.start();
+		if (this.settings.schedulerPaused) {
+			this.scheduledPromptRunner.pause();
 		}
 
 		// Status bar item for scheduler
 		this.schedulerStatusBarItem = this.addStatusBarItem();
+		this.schedulerStatusBarItem.addClass("mod-clickable");
+		this.registerDomEvent(
+			this.schedulerStatusBarItem,
+			"click",
+			(event: MouseEvent) => this.showSchedulerStatusMenu(event),
+		);
+		this.registerInterval(
+			window.setInterval(() => this.updateSchedulerStatusBar(), 30_000),
+		);
 		this.updateSchedulerStatusBar();
 
 		// Register scheduled prompt commands
@@ -889,27 +931,214 @@ export default class AgentClientPlugin extends Plugin {
 		});
 	}
 
+	private getTodayPromptHistory(): PromptExecutionRecord[] {
+		const today = getLocalDateString(new Date());
+		return this.settings.promptExecutionHistory.filter((record) => {
+			const day = getLocalDateString(new Date(record.executedAt));
+			return day === today;
+		});
+	}
+
+	private openPluginSettingsTab(): void {
+		const appWithSetting = this.app as {
+			setting?: {
+				open: () => void;
+				openTabById: (tabId: string) => void;
+			};
+		};
+
+		appWithSetting.setting?.open();
+		appWithSetting.setting?.openTabById(this.manifest.id);
+	}
+
+	private showSchedulerStatusMenu(event: MouseEvent): void {
+		if (!this.schedulerStatusBarItem) return;
+
+		const menu = new Menu();
+		const now = new Date();
+		const running = this.scheduledPromptRunner.getCurrentExecution();
+		const next = this.scheduledPromptRunner.getNextScheduledExecution(now);
+		const todayHistory = this.getTodayPromptHistory();
+		const latestRecord = this.settings.promptExecutionHistory.at(-1);
+
+		menu.addItem((item) => {
+			item.setTitle("Scheduler status").setIsLabel(true);
+		});
+
+		if (running) {
+			const elapsedMs =
+				now.getTime() - new Date(running.startedAt).getTime();
+			menu.addItem((item) => {
+				item.setTitle(
+					`Running: ${running.promptName} (${formatDuration(elapsedMs)})`,
+				).setIsLabel(true);
+			});
+		} else if (this.scheduledPromptRunner.isPaused) {
+			menu.addItem((item) => {
+				item.setTitle("Paused").setIsLabel(true);
+			});
+		} else if (next) {
+			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
+			menu.addItem((item) => {
+				item.setTitle(
+					`Next: ${next.promptName} in ${formatDuration(remainingMs)}`,
+				).setIsLabel(true);
+			});
+		} else {
+			menu.addItem((item) => {
+				item.setTitle("No upcoming scheduled prompt").setIsLabel(true);
+			});
+		}
+
+		if (latestRecord) {
+			const finishedAt =
+				latestRecord.completedAt ?? latestRecord.executedAt;
+			const latestStatus = latestRecord.success ? "completed" : "failed";
+			menu.addItem((item) => {
+				item.setTitle(
+					`Last ${latestStatus}: ${latestRecord.promptName} at ${formatClock(finishedAt)}`,
+				).setIsLabel(true);
+			});
+		}
+
+		menu.addSeparator();
+
+		menu.addItem((item) => {
+			if (this.scheduledPromptRunner.isPaused) {
+				item.setTitle("Resume scheduler")
+					.setIcon("play")
+					.onClick(() => {
+						this.scheduledPromptRunner.resume();
+						this.settings.schedulerPaused = false;
+						this.updateSchedulerStatusBar();
+						void this.saveSettings();
+					});
+				return;
+			}
+
+			item.setTitle("Pause scheduler")
+				.setIcon("pause")
+				.onClick(() => {
+					this.scheduledPromptRunner.pause();
+					this.settings.schedulerPaused = true;
+					this.updateSchedulerStatusBar();
+					void this.saveSettings();
+				});
+		});
+
+		menu.addItem((item) => {
+			item.setTitle("Open custom prompts settings")
+				.setIcon("settings")
+				.onClick(() => {
+					this.openPluginSettingsTab();
+				});
+		});
+
+		menu.addSeparator();
+		menu.addItem((item) => {
+			item.setTitle(
+				"Today's history (click item to run again)",
+			).setIsLabel(true);
+		});
+
+		if (todayHistory.length === 0) {
+			menu.addItem((item) => {
+				item.setTitle("No runs today").setIsLabel(true);
+			});
+		} else {
+			const recentToday = [...todayHistory].slice(-8).reverse();
+			for (const record of recentToday) {
+				const statusIcon = record.success ? "✅" : "❌";
+				const timestamp = formatClock(
+					record.completedAt ?? record.executedAt,
+				);
+				menu.addItem((item) => {
+					item.setTitle(
+						`${statusIcon} ${timestamp} ${truncateText(record.promptName, 34)}`,
+					)
+						.setIcon("play")
+						.onClick(() => {
+							void this.scheduledPromptRunner.runNow(
+								record.promptId,
+							);
+						});
+				});
+			}
+
+			menu.addSeparator();
+			menu.addItem((item) => {
+				item.setTitle("Clear today's history")
+					.setIcon("trash")
+					.onClick(() => {
+						const today = getLocalDateString(new Date());
+						this.settings.promptExecutionHistory =
+							this.settings.promptExecutionHistory.filter(
+								(record) => {
+									const day = getLocalDateString(
+										new Date(record.executedAt),
+									);
+									return day !== today;
+								},
+							);
+						this.updateSchedulerStatusBar();
+						void this.saveSettings();
+						new Notice(
+							"[Agent Client] Cleared today's prompt history",
+						);
+					});
+			});
+		}
+
+		menu.showAtMouseEvent(event);
+	}
+
 	/**
 	 * Update the status bar text to reflect current scheduler state.
 	 */
 	updateSchedulerStatusBar(): void {
 		if (!this.schedulerStatusBarItem) return;
 		const enabledCount = this.settings.customPrompts.filter(
-			(p) => p.enabled && p.intervalMinutes > 0,
+			(p) => p.enabled && isTimeWindowPrompt(p),
 		).length;
 		if (enabledCount === 0) {
 			this.schedulerStatusBarItem.setText("");
 			this.schedulerStatusBarItem.title = "";
 			return;
 		}
+
+		const now = new Date();
+		const running =
+			this.scheduledPromptRunner?.getCurrentExecution() ?? null;
+		if (running) {
+			const elapsedMs =
+				now.getTime() - new Date(running.startedAt).getTime();
+			this.schedulerStatusBarItem.setText(
+				`▶ ${truncateText(running.promptName, 18)}`,
+			);
+			this.schedulerStatusBarItem.title = `Running (${formatDuration(elapsedMs)}). Click for details.`;
+			return;
+		}
+
 		const paused = this.scheduledPromptRunner?.isPaused ?? true;
 		const icon = paused ? "⏸" : "⏱";
 		this.schedulerStatusBarItem.setText(
 			`${icon} ${enabledCount} scheduled prompt${enabledCount === 1 ? "" : "s"}`,
 		);
-		this.schedulerStatusBarItem.title = paused
-			? "Scheduled prompts paused"
-			: "Scheduled prompts active";
+		if (paused) {
+			this.schedulerStatusBarItem.title =
+				"Scheduled prompts paused. Click for details.";
+			return;
+		}
+
+		const next = this.scheduledPromptRunner?.getNextScheduledExecution(now);
+		if (next) {
+			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
+			this.schedulerStatusBarItem.title = `Next: ${next.promptName} in ${formatDuration(remainingMs)}. Click for details.`;
+			return;
+		}
+
+		this.schedulerStatusBarItem.title =
+			"Scheduled prompts active. Click for details.";
 	}
 
 	async loadSettings() {

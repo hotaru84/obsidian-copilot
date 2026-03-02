@@ -1,15 +1,21 @@
 /**
  * Scheduled Prompt Runner
  *
- * Manages periodic execution of custom prompts.
- * Each enabled prompt with a non-zero interval is checked every minute
- * and executed when its interval has elapsed since the last run.
+ * Manages time-window-based execution of custom prompts.
+ * Each enabled prompt with non-empty time windows is checked every minute
+ * and executed once per day when the current time falls within a time window
+ * and the prompt's day-of-week matches (if specified).
  */
 
 import { Notice } from "obsidian";
 import type {
 	CustomPrompt,
 	PromptExecutionRecord,
+	TimeWindow,
+} from "../domain/models/scheduled-prompt";
+import {
+	isLegacyPrompt,
+	isTimeWindowPrompt,
 } from "../domain/models/scheduled-prompt";
 import type { IChatViewContainer } from "../domain/ports/chat-view-container.port";
 
@@ -19,10 +25,127 @@ const MAX_HISTORY = 50;
 export interface SchedulerCallbacks {
 	/** Return the current list of custom prompts */
 	getPrompts: () => CustomPrompt[];
+	/** Return the current execution history */
+	getHistory: () => PromptExecutionRecord[];
 	/** Called after each execution attempt to persist the record */
 	onRecord: (record: PromptExecutionRecord) => void;
+	/** Called when execution state changes (start/finish) */
+	onStateChange?: () => void;
 	/** Return the best available chat view for sending, or null if none */
 	getView: () => IChatViewContainer | null;
+}
+
+export interface CurrentExecutionInfo {
+	promptId: string;
+	promptName: string;
+	startedAt: string;
+	trigger: "scheduled" | "manual";
+}
+
+export interface NextScheduledExecutionInfo {
+	promptId: string;
+	promptName: string;
+	runAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────
+// Time Utilities
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Parse a time string in HH:MM format.
+ * @returns Object with hours and minutes, or null if invalid
+ */
+function parseTime(timeStr: string): { hours: number; minutes: number } | null {
+	const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr);
+	if (!match) return null;
+	const hours = parseInt(match[1], 10);
+	const minutes = parseInt(match[2], 10);
+	if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+	return { hours, minutes };
+}
+
+/**
+ * Get the local date string in YYYY-MM-DD format.
+ */
+function getLocalDateString(date: Date): string {
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+}
+
+function isExecutedOnDate(
+	promptId: string,
+	date: Date,
+	history: PromptExecutionRecord[],
+): boolean {
+	const target = getLocalDateString(date);
+	return history.some((record) => {
+		if (record.promptId !== promptId || !record.success) return false;
+		const recordDate = getLocalDateString(new Date(record.executedAt));
+		return recordDate === target;
+	});
+}
+
+/**
+ * Check if the current time falls within the specified time window.
+ */
+function isInTimeWindow(now: Date, window: TimeWindow): boolean {
+	const start = parseTime(window.startTime);
+	const end = parseTime(window.endTime);
+	if (!start || !end) return false;
+
+	const nowMinutes = now.getHours() * 60 + now.getMinutes();
+	const startMinutes = start.hours * 60 + start.minutes;
+	const endMinutes = end.hours * 60 + end.minutes;
+
+	return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
+}
+
+/**
+ * Check if a prompt has been executed today.
+ */
+function isExecutedToday(
+	promptId: string,
+	history: PromptExecutionRecord[],
+): boolean {
+	const today = getLocalDateString(new Date());
+	return history.some((record) => {
+		if (record.promptId !== promptId || !record.success) return false;
+		const recordDate = getLocalDateString(new Date(record.executedAt));
+		return recordDate === today;
+	});
+}
+
+/**
+ * Check if a prompt should be executed now.
+ */
+function shouldRunPrompt(
+	prompt: CustomPrompt,
+	now: Date,
+	history: PromptExecutionRecord[],
+): boolean {
+	// Must be enabled
+	if (!prompt.enabled) return false;
+
+	// Legacy prompts are not supported in time-window mode
+	if (isLegacyPrompt(prompt)) return false;
+
+	// Must have time windows
+	if (!isTimeWindowPrompt(prompt)) return false;
+
+	// Check if already executed today
+	if (isExecutedToday(prompt.id, history)) return false;
+
+	// Check day of week (if specified)
+	if (prompt.daysOfWeek && prompt.daysOfWeek.length > 0) {
+		const dayOfWeek = now.getDay(); // 0=Sunday, 6=Saturday
+		if (!prompt.daysOfWeek.includes(dayOfWeek)) return false;
+	}
+
+	// Check if current time is in any time window
+	return prompt.timeWindows!.some((window) => isInTimeWindow(now, window));
 }
 
 /**
@@ -38,8 +161,8 @@ export interface SchedulerCallbacks {
  */
 export class ScheduledPromptRunner {
 	private intervalId: number | null = null;
-	private lastRunTimes = new Map<string, number>();
 	private _paused = false;
+	private currentExecution: CurrentExecutionInfo | null = null;
 	private readonly callbacks: SchedulerCallbacks;
 
 	constructor(callbacks: SchedulerCallbacks) {
@@ -84,6 +207,97 @@ export class ScheduledPromptRunner {
 		return this._paused;
 	}
 
+	/** Currently running prompt execution, if any. */
+	getCurrentExecution(): CurrentExecutionInfo | null {
+		return this.currentExecution;
+	}
+
+	/** Estimate the next execution time among all enabled scheduled prompts. */
+	getNextScheduledExecution(
+		now: Date = new Date(),
+	): NextScheduledExecutionInfo | null {
+		const prompts = this.callbacks.getPrompts();
+		const history = this.callbacks.getHistory();
+
+		let best: NextScheduledExecutionInfo | null = null;
+
+		for (const prompt of prompts) {
+			if (!prompt.enabled) continue;
+			if (isLegacyPrompt(prompt)) continue;
+			if (!isTimeWindowPrompt(prompt)) continue;
+
+			const windows = prompt.timeWindows ?? [];
+			for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
+				const candidateDay = new Date(now);
+				candidateDay.setDate(now.getDate() + dayOffset);
+
+				if (prompt.daysOfWeek && prompt.daysOfWeek.length > 0) {
+					if (!prompt.daysOfWeek.includes(candidateDay.getDay())) {
+						continue;
+					}
+				}
+
+				if (isExecutedOnDate(prompt.id, candidateDay, history)) {
+					continue;
+				}
+
+				for (const window of windows) {
+					const start = parseTime(window.startTime);
+					const end = parseTime(window.endTime);
+					if (!start || !end) continue;
+
+					const candidate = new Date(candidateDay);
+					candidate.setHours(start.hours, start.minutes, 0, 0);
+
+					if (dayOffset === 0) {
+						const nowMinutes =
+							now.getHours() * 60 + now.getMinutes();
+						const startMinutes = start.hours * 60 + start.minutes;
+						const endMinutes = end.hours * 60 + end.minutes;
+
+						if (
+							nowMinutes >= startMinutes &&
+							nowMinutes <= endMinutes
+						) {
+							candidate.setTime(now.getTime());
+						}
+					}
+
+					if (candidate.getTime() < now.getTime()) {
+						continue;
+					}
+
+					const next = {
+						promptId: prompt.id,
+						promptName: prompt.name,
+						runAt: candidate.toISOString(),
+					};
+
+					if (!best) {
+						best = next;
+						continue;
+					}
+
+					if (
+						new Date(next.runAt).getTime() <
+						new Date(best.runAt).getTime()
+					) {
+						best = next;
+					}
+				}
+
+				if (best && dayOffset === 0) {
+					const bestTime = new Date(best.runAt).getTime();
+					if (bestTime === now.getTime()) {
+						return best;
+					}
+				}
+			}
+		}
+
+		return best;
+	}
+
 	// ──────────────────────────────────────────────────────────────
 	// Manual Execution
 	// ──────────────────────────────────────────────────────────────
@@ -97,7 +311,7 @@ export class ScheduledPromptRunner {
 			new Notice(`[Agent Client] Prompt not found: ${promptId}`);
 			return;
 		}
-		await this.executePrompt(prompt);
+		await this.executePrompt(prompt, "manual");
 	}
 
 	// ──────────────────────────────────────────────────────────────
@@ -107,43 +321,53 @@ export class ScheduledPromptRunner {
 	private async tick(): Promise<void> {
 		if (this._paused) return;
 
-		const now = Date.now();
-		const prompts = this.callbacks
-			.getPrompts()
-			.filter((p) => p.enabled && p.intervalMinutes > 0);
+		const now = new Date();
+		const prompts = this.callbacks.getPrompts();
+		const history = this.callbacks.getHistory();
 
-		for (const prompt of prompts) {
-			const lastRun = this.lastRunTimes.get(prompt.id) ?? 0;
-			const intervalMs = prompt.intervalMinutes * 60_000;
-			if (now - lastRun >= intervalMs) {
-				await this.executePrompt(prompt);
-				this.lastRunTimes.set(prompt.id, Date.now());
-			}
+		// Filter prompts that should run now
+		const toRun = prompts.filter((p) => shouldRunPrompt(p, now, history));
+
+		// Execute them sequentially
+		for (const prompt of toRun) {
+			await this.executePrompt(prompt, "scheduled");
 		}
 	}
 
-	private async executePrompt(prompt: CustomPrompt): Promise<void> {
+	private async executePrompt(
+		prompt: CustomPrompt,
+		trigger: "scheduled" | "manual",
+	): Promise<void> {
+		const startedAtIso = new Date().toISOString();
+		this.currentExecution = {
+			promptId: prompt.id,
+			promptName: prompt.name,
+			startedAt: startedAtIso,
+			trigger,
+		};
+		this.callbacks.onStateChange?.();
+
 		const record: PromptExecutionRecord = {
 			id: crypto.randomUUID(),
 			promptId: prompt.id,
 			promptName: prompt.name,
-			executedAt: new Date().toISOString(),
+			executedAt: startedAtIso,
+			trigger,
 			success: false,
 		};
 
-		const view = this.callbacks.getView();
-
-		if (!view) {
-			record.error = "No active chat view";
-			new Notice(
-				`[Agent Client] Scheduled prompt "${prompt.name}": No active chat view`,
-				5000,
-			);
-			this.callbacks.onRecord(record);
-			return;
-		}
-
 		try {
+			const view = this.callbacks.getView();
+
+			if (!view) {
+				record.error = "No active chat view";
+				new Notice(
+					`[Agent Client] Scheduled prompt "${prompt.name}": No active chat view`,
+					5000,
+				);
+				return;
+			}
+
 			const sent = await view.sendTextPrompt(prompt.content);
 			if (sent) {
 				record.success = true;
@@ -165,9 +389,12 @@ export class ScheduledPromptRunner {
 				`[Agent Client] Scheduled prompt "${prompt.name}" failed: ${record.error}`,
 				5000,
 			);
+		} finally {
+			record.completedAt = new Date().toISOString();
+			this.callbacks.onRecord(record);
+			this.currentExecution = null;
+			this.callbacks.onStateChange?.();
 		}
-
-		this.callbacks.onRecord(record);
 	}
 }
 
