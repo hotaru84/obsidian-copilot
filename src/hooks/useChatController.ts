@@ -8,6 +8,7 @@ import { ConfirmDeleteModal } from "../components/chat/ConfirmDeleteModal";
 
 // Service imports
 import { NoteMentionService } from "../adapters/obsidian/mention-service";
+import { GitHubCommandService } from "../adapters/obsidian/github-command-service";
 import { getLogger, Logger } from "../shared/logger";
 import { ChatExporter } from "../shared/chat-exporter";
 
@@ -146,6 +147,33 @@ export function useChatController(
 		};
 	}, [noteMentionService]);
 
+	const githubCommandService = useMemo(
+		() => new GitHubCommandService(plugin),
+		[plugin],
+	);
+
+	// Cleanup GitHubCommandService when component unmounts
+	useEffect(() => {
+		return () => {
+			githubCommandService.destroy();
+		};
+	}, [githubCommandService]);
+
+	// Local commands state
+	const [localCommands, setLocalCommands] = useState(
+		githubCommandService.getCommands(),
+	);
+
+	// Update local commands when service detects changes
+	useEffect(() => {
+		// Poll for updates every 2 seconds (GitHub files don't change frequently)
+		const interval = setInterval(() => {
+			setLocalCommands(githubCommandService.getCommands());
+		}, 2000);
+
+		return () => clearInterval(interval);
+	}, [githubCommandService]);
+
 	const acpAdapter = useMemo(
 		() => plugin.getOrCreateAdapter(viewId),
 		[plugin, viewId],
@@ -197,6 +225,7 @@ export function useChatController(
 	const autoMention = useAutoMention(vaultAccessAdapter);
 	const slashCommands = useSlashCommands(
 		session.availableCommands || [],
+		localCommands,
 		autoMention.toggle,
 	);
 

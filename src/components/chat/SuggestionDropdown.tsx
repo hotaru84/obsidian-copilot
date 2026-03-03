@@ -136,6 +136,9 @@ export function SuggestionDropdown({
 		} else {
 			// type === "slash-command"
 			const command = item as SlashCommand;
+			const isLocal = command.source === "local";
+			const icon = isLocal ? "📁 " : "⚡ ";
+
 			return (
 				<div
 					key={command.name}
@@ -146,7 +149,7 @@ export function SuggestionDropdown({
 					}}
 				>
 					<div className="agent-client-mention-dropdown-item-name">
-						/{command.name}
+						{icon}/{command.name}
 					</div>
 					<div className="agent-client-mention-dropdown-item-path">
 						{command.description}

@@ -59,8 +59,9 @@ export interface AuthenticationMethod {
  * Represents a slash command available in the current session.
  *
  * Slash commands provide quick access to specific agent capabilities
- * and workflows (e.g., /web, /test, /plan). They are advertised by
- * the agent via the ACP protocol's `available_commands_update` notification.
+ * and workflows (e.g., /web, /test, /plan). They can come from two sources:
+ * - "agent": Advertised by the agent via ACP protocol's `available_commands_update` notification
+ * - "local": Discovered from `.github/agents/*.md` and `.github/prompts/*.md` files in the vault
  *
  * Commands can be invoked by users by typing `/` followed by the command
  * name and optional input in the chat input field.
@@ -79,6 +80,13 @@ export interface SlashCommand {
 	 * Example: "query to search for" for the /web command
 	 */
 	hint?: string | null;
+
+	/**
+	 * Source of the command.
+	 * - "agent": Provided by the agent via ACP protocol
+	 * - "local": Discovered from local .github folder files
+	 */
+	source?: "agent" | "local";
 }
 
 // ============================================================================

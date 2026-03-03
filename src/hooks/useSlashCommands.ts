@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { SlashCommand } from "../domain/models/chat-session";
 
 export interface UseSlashCommandsReturn {
@@ -32,17 +32,43 @@ export interface UseSlashCommandsReturn {
  * Hook for managing slash command dropdown state and logic.
  *
  * @param availableCommands - Available slash commands from the agent session
+ * @param localCommands - Local slash commands from .github folder
  * @param onAutoMentionToggle - Callback to enable/disable auto-mention
  *        (slash commands require auto-mention to be disabled so "/" stays at the start)
  */
 export function useSlashCommands(
 	availableCommands: SlashCommand[],
+	localCommands: SlashCommand[],
 	onAutoMentionToggle?: (disabled: boolean) => void,
 ): UseSlashCommandsReturn {
 	const [suggestions, setSuggestions] = useState<SlashCommand[]>([]);
 	const [selectedIndex, setSelectedIndex] = useState(0);
 
 	const isOpen = suggestions.length > 0;
+
+	// Merge agent and local commands, with local commands taking precedence
+	const allCommands = useMemo(() => {
+		const commandMap = new Map<string, SlashCommand>();
+
+		// Add agent commands first
+		for (const cmd of availableCommands) {
+			commandMap.set(cmd.name, { ...cmd, source: "agent" as const });
+		}
+
+		// Add local commands (overwrites agent commands with same name)
+		for (const cmd of localCommands) {
+			commandMap.set(cmd.name, cmd);
+		}
+
+		// Convert to array and sort: local commands first, then alphabetically
+		return Array.from(commandMap.values()).sort((a, b) => {
+			// Local commands first
+			if (a.source === "local" && b.source !== "local") return -1;
+			if (a.source !== "local" && b.source === "local") return 1;
+			// Then alphabetically
+			return a.name.localeCompare(b.name);
+		});
+	}, [availableCommands, localCommands]);
 
 	const updateSuggestions = useCallback(
 		(input: string, cursorPosition: number) => {
@@ -76,8 +102,8 @@ export function useSlashCommands(
 
 			const query = afterSlash.toLowerCase();
 
-			// Filter available commands
-			const filtered = availableCommands.filter((cmd) =>
+			// Filter all commands (both agent and local)
+			const filtered = allCommands.filter((cmd) =>
 				cmd.name.toLowerCase().includes(query),
 			);
 
@@ -87,7 +113,7 @@ export function useSlashCommands(
 			// (ACP requires slash commands to be at the very beginning)
 			onAutoMentionToggle?.(true);
 		},
-		[availableCommands, onAutoMentionToggle, suggestions.length],
+		[allCommands, onAutoMentionToggle, suggestions.length],
 	);
 
 	const selectSuggestion = useCallback(
