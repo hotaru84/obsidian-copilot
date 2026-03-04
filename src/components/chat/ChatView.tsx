@@ -85,7 +85,6 @@ function ChatComponent({
 		sessionHistory,
 		activeAgentLabel,
 		availableAgents,
-		customCommandOptions,
 		errorInfo,
 		handleSendMessage,
 		handleStopGeneration,
@@ -608,7 +607,6 @@ function ChatComponent({
 				restoredMessage={restoredMessage}
 				mentions={mentions}
 				slashCommands={slashCommands}
-				customCommandOptions={customCommandOptions}
 				autoMention={autoMention}
 				plugin={plugin}
 				view={view}

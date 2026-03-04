@@ -664,17 +664,6 @@ If your plugin does not need CSS, delete this file.
 	position: relative;
 }
 
-.agent-client-custom-command-row {
-	display: flex;
-	justify-content: flex-start;
-	margin-bottom: 8px;
-}
-
-.agent-client-custom-command-select {
-	max-width: 280px;
-	font-size: 12px;
-}
-
 /* Input box - outer container with border and background */
 .agent-client-chat-input-box {
 	display: flex;

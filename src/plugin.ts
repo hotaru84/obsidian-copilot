@@ -1,4 +1,11 @@
-import { Plugin, WorkspaceLeaf, WorkspaceSplit, Notice, Menu, setIcon } from "obsidian";
+import {
+	Plugin,
+	WorkspaceLeaf,
+	WorkspaceSplit,
+	Notice,
+	Menu,
+	setIcon,
+} from "obsidian";
 import type { Root } from "react-dom/client";
 import { ChatView, VIEW_TYPE_CHAT } from "./components/chat/ChatView";
 import {
@@ -11,7 +18,10 @@ import {
 	createSettingsStore,
 	type SettingsStore,
 } from "./adapters/obsidian/settings-store.adapter";
-import { AgentClientSettingTab, CustomPromptsModal } from "./components/settings/AgentClientSettingTab";
+import {
+	AgentClientSettingTab,
+	CustomPromptsModal,
+} from "./components/settings/AgentClientSettingTab";
 import { AcpAdapter } from "./adapters/acp/acp.adapter";
 import { sanitizeArgs, normalizeEnvVars } from "./shared/settings-utils";
 import { parseChatFontSize } from "./shared/display-settings";

@@ -4,4 +4,6 @@ export interface CustomCommandOption {
 	value: string;
 	type: "agent" | "prompt";
 	description: string;
+	hint?: string | null;
+	agentName?: string;
 }

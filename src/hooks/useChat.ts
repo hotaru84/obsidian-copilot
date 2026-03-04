@@ -388,6 +388,10 @@ export function useChat(
 	 * If a tool call with the given ID exists, it will be updated (merged).
 	 * Otherwise, a new assistant message will be created.
 	 * All logic is inside setMessages callback to avoid race conditions.
+	 *
+	 * When a permission request is added or updated, the message containing
+	 * that tool call is moved to the end of the message array to ensure it
+	 * appears as the latest message in the chat.
 	 */
 	const upsertToolCall = useCallback(
 		(toolCallId: string, content: MessageContent): void => {
@@ -396,7 +400,8 @@ export function useChat(
 			setMessages((prev) => {
 				// Try to find existing tool call
 				let found = false;
-				const updated = prev.map((message) => ({
+				let messageIndexToMove = -1;
+				const updated = prev.map((message, index) => ({
 					...message,
 					content: message.content.map((c) => {
 						if (
@@ -404,13 +409,28 @@ export function useChat(
 							c.toolCallId === toolCallId
 						) {
 							found = true;
-							return mergeToolCallContent(c, content);
+							const merged = mergeToolCallContent(c, content);
+							// If this update adds an active permission request,
+							// mark this message to be moved to the end
+							if (merged.permissionRequest?.isActive) {
+								messageIndexToMove = index;
+							}
+							return merged;
 						}
 						return c;
 					}),
 				}));
 
 				if (found) {
+					// If we need to move the message with active permission to the end
+					if (messageIndexToMove >= 0) {
+						const messageToMove = updated[messageIndexToMove];
+						return [
+							...updated.slice(0, messageIndexToMove),
+							...updated.slice(messageIndexToMove + 1),
+							messageToMove,
+						];
+					}
 					return updated;
 				}
 

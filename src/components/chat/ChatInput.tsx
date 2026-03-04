@@ -11,7 +11,6 @@ import type {
 	SessionModelState,
 } from "../../domain/models/chat-session";
 import type { ImagePromptContent } from "../../domain/models/prompt-content";
-import type { CustomCommandOption } from "../../domain/models/custom-command-option";
 import type {
 	UseMentionsReturn,
 	MentionSuggestion,
@@ -72,8 +71,6 @@ export interface ChatInputProps {
 	mentions: UseMentionsReturn;
 	/** Slash commands hook state and methods */
 	slashCommands: UseSlashCommandsReturn;
-	/** Custom commands discovered from .github folder */
-	customCommandOptions: CustomCommandOption[];
 	/** Auto-mention hook state and methods */
 	autoMention: UseAutoMentionReturn;
 	/** Plugin instance */
@@ -140,7 +137,6 @@ export function ChatInput({
 	restoredMessage,
 	mentions,
 	slashCommands,
-	customCommandOptions,
 	autoMention,
 	plugin,
 	view,
@@ -179,7 +175,6 @@ export function ChatInput({
 	const [hintText, setHintText] = useState<string | null>(null);
 	const [commandText, setCommandText] = useState<string>("");
 	const [isDraggingOver, setIsDraggingOver] = useState(false);
-	const [selectedCustomCommandId, setSelectedCustomCommandId] = useState("");
 
 	// Input history navigation (ArrowUp/ArrowDown)
 	const { handleHistoryKeyDown, resetHistory } = useInputHistory(
@@ -456,37 +451,6 @@ export function ChatInput({
 			}, 0);
 		},
 		[slashCommands, inputValue, onInputChange],
-	);
-
-	/**
-	 * Handle custom command selection from compact dropdown.
-	 */
-	const handleCustomCommandChange = useCallback(
-		(e: React.ChangeEvent<HTMLSelectElement>) => {
-			const selectedId = e.target.value;
-			setSelectedCustomCommandId(selectedId);
-
-			if (!selectedId) {
-				return;
-			}
-
-			const selected = customCommandOptions.find(
-				(option) => option.id === selectedId,
-			);
-
-			if (!selected) {
-				return;
-			}
-
-			setHintText(null);
-			setCommandText("");
-			setTextAndFocus(selected.value);
-
-			window.setTimeout(() => {
-				setSelectedCustomCommandId("");
-			}, 0);
-		},
-		[customCommandOptions, setTextAndFocus],
 	);
 
 	/**
@@ -903,23 +867,6 @@ export function ChatInput({
 					showEmojis={showEmojis}
 					view={view}
 				/>
-			)}
-
-			{customCommandOptions.length > 0 && (
-				<div className="agent-client-custom-command-row">
-					<select
-						className="dropdown agent-client-custom-command-select"
-						value={selectedCustomCommandId}
-						onChange={handleCustomCommandChange}
-					>
-						<option value="">Custom prompt / agent</option>
-						{customCommandOptions.map((option) => (
-							<option key={option.id} value={option.id}>
-								{option.label}
-							</option>
-						))}
-					</select>
-				</div>
 			)}
 
 			{/* Mention Dropdown */}
