@@ -15,13 +15,20 @@ import type { ImagePromptContent } from "../../domain/models/prompt-content";
 // Component imports
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
-import { InlineHeader } from "./InlineHeader";
 
 // Hooks imports
 import { useChatController } from "../../hooks/useChatController";
 
 import { clampPosition } from "../../shared/floating-utils";
 import { FLOATING_BUTTON_SIZE } from "./FloatingButton";
+
+// Type definitions for Obsidian internal APIs
+interface AppWithSettings {
+	setting: {
+		open: () => void;
+		openTabById: (id: string) => void;
+	};
+}
 
 // ============================================================
 // Type Definitions
@@ -362,6 +369,12 @@ function FloatingChatComponent({
 	const handleCloseWindow = useCallback(() => {
 		setIsExpanded(false);
 	}, []);
+
+	const handleOpenSettings = useCallback(() => {
+		const appWithSettings = plugin.app as unknown as AppWithSettings;
+		appWithSettings.setting.open();
+		appWithSettings.setting.openTabById(plugin.manifest.id);
+	}, [plugin]);
 
 	// Listen for expand requests
 	useEffect(() => {
@@ -827,22 +840,6 @@ function FloatingChatComponent({
 				className="agent-client-floating-resize-handle agent-client-floating-resize-handle-top"
 				onMouseDown={handleTopResizeStart}
 			/>
-			<div className="agent-client-floating-header">
-				<InlineHeader
-					variant="floating"
-					agentLabel={activeAgentLabel}
-					availableAgents={availableAgents}
-					currentAgentId={session.agentId}
-					hasMessages={messages.length > 0}
-					onAgentChange={(agentId) => void handleSwitchAgent(agentId)}
-					onNewSession={() => void handleNewChat()}
-					onOpenHistory={() => void handleOpenHistory()}
-					onExportChat={() => void handleExportChat()}
-					onRestartAgent={() => void handleRestartAgent()}
-					onOpenNewWindow={handleOpenNewFloatingChat}
-					onClose={handleCloseWindow}
-				/>
-			</div>
 
 			<div className="agent-client-floating-content">
 				<div className="agent-client-floating-messages-container">
@@ -888,6 +885,18 @@ function FloatingChatComponent({
 					errorInfo={errorInfo}
 					onClearError={handleClearError}
 					messages={messages}
+					// Tool menu props
+					availableAgents={availableAgents}
+					currentAgentId={session.agentId}
+					hasHistoryCapability={sessionHistory.canShowSessionHistory}
+					onNewChat={() => void handleNewChat()}
+					onNewChatInNewTab={handleOpenNewFloatingChat}
+					onOpenHistory={() => void handleOpenHistory()}
+					onExportChat={() => void handleExportChat()}
+					onSwitchAgent={(agentId) => void handleSwitchAgent(agentId)}
+					onRestartAgent={() => void handleRestartAgent()}
+					onOpenSettings={handleOpenSettings}
+					onCloseWindow={handleCloseWindow}
 				/>
 			</div>
 		</div>

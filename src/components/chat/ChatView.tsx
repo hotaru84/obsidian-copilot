@@ -11,7 +11,6 @@ import type AgentClientPlugin from "../../plugin";
 import type { ChatInputState } from "../../domain/models/chat-input-state";
 
 // Component imports
-import { ChatHeader } from "./ChatHeader";
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
 // Utility imports
@@ -169,98 +168,6 @@ function ChatComponent({
 		appWithSettings.setting.open();
 		appWithSettings.setting.openTabById(plugin.manifest.id);
 	}, [plugin]);
-
-	// ============================================================
-	// New Chat Menu (Obsidian native Menu API)
-	// ============================================================
-	const handleShowNewChatMenu = useCallback(
-		(e: React.MouseEvent<HTMLButtonElement>) => {
-			const menu = new Menu();
-
-			menu.addItem((item) => {
-				item.setTitle("New chat in current tab")
-					.setIcon("file-plus")
-					.onClick(() => {
-						void handleNewChatWithPersist();
-					});
-			});
-
-			menu.addItem((item) => {
-				item.setTitle("New chat in new tab")
-					.setIcon("layout-panel-left")
-					.onClick(() => {
-						const currentAgentId = session.agentId || "copilot";
-						void plugin.openNewChatViewWithAgent(currentAgentId);
-					});
-			});
-
-			menu.showAtMouseEvent(e.nativeEvent);
-		},
-		[handleNewChatWithPersist, plugin, session.agentId],
-	);
-
-	// ============================================================
-	// Header Menu (Obsidian native Menu API)
-	// ============================================================
-	const handleShowMenu = useCallback(
-		(e: React.MouseEvent<HTMLButtonElement>) => {
-			const menu = new Menu();
-
-			// -- Switch agent section --
-			menu.addItem((item) => {
-				item.setTitle("Switch agent").setIsLabel(true);
-			});
-
-			for (const agent of availableAgents) {
-				menu.addItem((item) => {
-					item.setTitle(agent.displayName)
-						.setChecked(agent.id === (session.agentId || ""))
-						.onClick(() => {
-							void handleNewChatWithPersist(agent.id);
-						});
-				});
-			}
-
-			menu.addSeparator();
-
-			// -- Actions section --
-			menu.addItem((item) => {
-				item.setTitle("Open new view")
-					.setIcon("plus")
-					.onClick(() => {
-						void plugin.openNewChatViewWithAgent("copilot");
-					});
-			});
-
-			menu.addItem((item) => {
-				item.setTitle("Restart agent")
-					.setIcon("refresh-cw")
-					.onClick(() => {
-						void handleRestartAgent();
-					});
-			});
-
-			menu.addSeparator();
-
-			menu.addItem((item) => {
-				item.setTitle("Plugin settings")
-					.setIcon("settings")
-					.onClick(() => {
-						handleOpenSettings();
-					});
-			});
-
-			menu.showAtMouseEvent(e.nativeEvent);
-		},
-		[
-			availableAgents,
-			session.agentId,
-			handleNewChatWithPersist,
-			plugin,
-			handleRestartAgent,
-			handleOpenSettings,
-		],
-	);
 
 	// ============================================================
 	// Agent ID Restoration Effect (ChatView-specific)
@@ -576,15 +483,6 @@ function ChatComponent({
 			className="agent-client-chat-view-container"
 			style={chatFontSizeStyle}
 		>
-			<ChatHeader
-				agentLabel={activeAgentLabel}
-				hasHistoryCapability={sessionHistory.canShowSessionHistory}
-				onShowNewChatMenu={handleShowNewChatMenu}
-				onExportChat={() => void handleExportChat()}
-				onShowMenu={handleShowMenu}
-				onOpenHistory={handleOpenHistory}
-			/>
-
 			<ChatMessages
 				messages={messages}
 				isSending={isSending}
@@ -628,6 +526,23 @@ function ChatComponent({
 				errorInfo={errorInfo}
 				onClearError={handleClearError}
 				messages={messages}
+				// Tool menu props
+				availableAgents={availableAgents}
+				currentAgentId={session.agentId}
+				hasHistoryCapability={sessionHistory.canShowSessionHistory}
+				onNewChat={() => void handleNewChatWithPersist()}
+				onNewChatInNewTab={() =>
+					void plugin.openNewChatViewWithAgent(
+						session.agentId || "copilot",
+					)
+				}
+				onOpenHistory={handleOpenHistory}
+				onExportChat={() => void handleExportChat()}
+				onSwitchAgent={(agentId) =>
+					void handleNewChatWithPersist(agentId)
+				}
+				onRestartAgent={() => void handleRestartAgent()}
+				onOpenSettings={handleOpenSettings}
 			/>
 		</div>
 	);

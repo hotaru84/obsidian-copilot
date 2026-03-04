@@ -435,42 +435,6 @@ If your plugin does not need CSS, delete this file.
 	padding: 0;
 }
 
-/* Header */
-.agent-client-chat-view-header {
-	padding: 16px;
-	border-bottom: 1px solid var(--background-modifier-border);
-	flex-shrink: 0;
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-}
-
-.agent-client-chat-view-header-main {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	flex: 1;
-}
-
-.agent-client-chat-view-header-title {
-	margin: 0 !important;
-}
-
-.agent-client-chat-view-header-update {
-	margin: 0 10px 0 10px !important;
-	padding: 2px 8px;
-	font-size: 11px;
-	color: var(--text-muted);
-	background-color: var(--background-modifier-hover);
-	border-radius: 4px;
-	font-weight: 500;
-}
-
-.agent-client-chat-view-header-actions {
-	display: flex;
-	gap: 8px;
-}
-
 /* ===== Inline Header (Floating/CodeBlock) ===== */
 .agent-client-inline-header {
 	display: flex;
@@ -950,6 +914,45 @@ If your plugin does not need CSS, delete this file.
 .agent-client-model-selector-icon svg {
 	width: 12px;
 	height: 12px;
+}
+
+/* Tool Menu Button */
+.agent-client-tool-menu-button {
+	width: 20px;
+	height: 20px;
+	padding: 0 !important;
+	margin: 0 !important;
+	border: none !important;
+	border-radius: 4px !important;
+	background-color: transparent !important;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	outline: none !important;
+	appearance: none;
+	box-shadow: none !important;
+	transition: background-color 0.1s ease;
+}
+
+.agent-client-tool-menu-button:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.agent-client-tool-menu-button::before {
+	content: "";
+	display: block;
+	width: 16px;
+	height: 16px;
+	background-color: var(--text-muted);
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>');
+	-webkit-mask-size: contain;
+	mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: center;
+	mask-position: center;
 }
 
 /* Send button */
@@ -1888,16 +1891,6 @@ If your plugin does not need CSS, delete this file.
 	right: 0;
 	height: 8px;
 	cursor: ns-resize;
-}
-
-.agent-client-floating-header {
-	user-select: none;
-	border-radius: 11px 11px 0 0;
-	overflow: hidden;
-}
-
-.agent-client-floating-header .agent-client-inline-header {
-	border-radius: 11px 11px 0 0;
 }
 
 .agent-client-floating-content {

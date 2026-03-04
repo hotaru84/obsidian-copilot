@@ -113,6 +113,29 @@ export interface ChatInputProps {
 	onClearError: () => void;
 	/** Messages array for input history navigation */
 	messages: ChatMessage[];
+	// Tool menu props
+	/** Available agents for switching */
+	availableAgents?: Array<{ id: string; displayName: string }>;
+	/** Current agent ID */
+	currentAgentId?: string;
+	/** Whether the agent has history capability */
+	hasHistoryCapability?: boolean;
+	/** Callback for new chat action */
+	onNewChat?: () => void;
+	/** Callback for new chat in new tab action */
+	onNewChatInNewTab?: () => void;
+	/** Callback for opening session history */
+	onOpenHistory?: () => void;
+	/** Callback for exporting chat */
+	onExportChat?: () => void;
+	/** Callback for switching agent */
+	onSwitchAgent?: (agentId: string) => void;
+	/** Callback for restarting agent */
+	onRestartAgent?: () => void;
+	/** Callback for opening plugin settings */
+	onOpenSettings?: () => void;
+	/** Callback for closing window (floating view only) */
+	onCloseWindow?: () => void;
 }
 
 /**
@@ -148,6 +171,17 @@ export function ChatInput({
 	models,
 	onModelChange,
 	supportsImages = false,
+	availableAgents,
+	currentAgentId,
+	hasHistoryCapability,
+	onNewChat,
+	onNewChatInNewTab,
+	onOpenHistory,
+	onExportChat,
+	onSwitchAgent,
+	onRestartAgent,
+	onOpenSettings,
+	onCloseWindow,
 	agentId,
 	// Controlled component props
 	inputValue,
@@ -822,6 +856,143 @@ export function ChatInput({
 	const onModelChangeRef = useRef(onModelChange);
 	onModelChangeRef.current = onModelChange;
 
+	// Tool menu button ref
+	const toolMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+	// Stable references for tool menu callbacks
+	const onNewChatRef = useRef(onNewChat);
+	onNewChatRef.current = onNewChat;
+	const onNewChatInNewTabRef = useRef(onNewChatInNewTab);
+	onNewChatInNewTabRef.current = onNewChatInNewTab;
+	const onOpenHistoryRef = useRef(onOpenHistory);
+	onOpenHistoryRef.current = onOpenHistory;
+	const onExportChatRef = useRef(onExportChat);
+	onExportChatRef.current = onExportChat;
+	const onSwitchAgentRef = useRef(onSwitchAgent);
+	onSwitchAgentRef.current = onSwitchAgent;
+	const onRestartAgentRef = useRef(onRestartAgent);
+	onRestartAgentRef.current = onRestartAgent;
+	const onOpenSettingsRef = useRef(onOpenSettings);
+	onOpenSettingsRef.current = onOpenSettings;
+	const onCloseWindowRef = useRef(onCloseWindow);
+	onCloseWindowRef.current = onCloseWindow;
+
+	// Handle tool menu click
+	const handleToolMenuClick = useCallback(
+		(e: React.MouseEvent<HTMLButtonElement>) => {
+			const menu = new Menu();
+
+			// New chat actions
+			menu.addItem((item) => {
+				item.setTitle("New chat in current tab")
+					.setIcon("file-plus")
+					.onClick(() => {
+						if (onNewChatRef.current) {
+							onNewChatRef.current();
+						}
+					});
+			});
+
+			menu.addItem((item) => {
+				item.setTitle("New chat in new tab")
+					.setIcon("layout-panel-left")
+					.onClick(() => {
+						if (onNewChatInNewTabRef.current) {
+							onNewChatInNewTabRef.current();
+						}
+					});
+			});
+
+			// History (if capability exists)
+			if (hasHistoryCapability) {
+				menu.addItem((item) => {
+					item.setTitle("Session history")
+						.setIcon("history")
+						.onClick(() => {
+							if (onOpenHistoryRef.current) {
+								onOpenHistoryRef.current();
+							}
+						});
+				});
+			}
+
+			// Export chat
+			menu.addItem((item) => {
+				item.setTitle("Export chat")
+					.setIcon("save")
+					.onClick(() => {
+						if (onExportChatRef.current) {
+							onExportChatRef.current();
+						}
+					});
+			});
+
+			menu.addSeparator();
+
+			// Switch agent section
+			if (availableAgents && availableAgents.length > 1) {
+				menu.addItem((item) => {
+					item.setTitle("Switch agent").setIsLabel(true);
+				});
+
+				for (const agent of availableAgents) {
+					menu.addItem((item) => {
+						item.setTitle(agent.displayName)
+							.setChecked(agent.id === currentAgentId)
+							.onClick(() => {
+								if (onSwitchAgentRef.current) {
+									onSwitchAgentRef.current(agent.id);
+								}
+							});
+					});
+				}
+
+				menu.addSeparator();
+			}
+
+			// Restart agent
+			menu.addItem((item) => {
+				item.setTitle("Restart agent")
+					.setIcon("refresh-cw")
+					.onClick(() => {
+						if (onRestartAgentRef.current) {
+							onRestartAgentRef.current();
+						}
+					});
+			});
+
+			menu.addSeparator();
+
+			// Plugin settings
+			menu.addItem((item) => {
+				item.setTitle("Plugin settings")
+					.setIcon("settings")
+					.onClick(() => {
+						if (onOpenSettingsRef.current) {
+							onOpenSettingsRef.current();
+						}
+					});
+			});
+
+			// Close window (floating view only)
+			if (onCloseWindowRef.current) {
+				menu.addSeparator();
+				menu.addItem((item) => {
+					item.setTitle("Close window")
+						.setIcon("x")
+						.onClick(() => {
+							if (onCloseWindowRef.current) {
+								onCloseWindowRef.current();
+							}
+						});
+				});
+			}
+
+			menu.showAtMouseEvent(e.nativeEvent);
+		},
+		[availableAgents, currentAgentId, hasHistoryCapability],
+	);
+
 	// Handle model selector click
 	const handleModelSelectorClick = useCallback(() => {
 		if (
@@ -1054,6 +1225,14 @@ export function ChatInput({
 							/>
 						</div>
 					)}
+
+					{/* Tool Menu Button */}
+					<button
+						ref={toolMenuButtonRef}
+						className="agent-client-tool-menu-button"
+						onClick={handleToolMenuClick}
+						title="Tools and actions"
+					></button>
 
 					{/* Send/Stop Button */}
 					<button
