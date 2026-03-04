@@ -664,6 +664,17 @@ If your plugin does not need CSS, delete this file.
 	position: relative;
 }
 
+.agent-client-custom-command-row {
+	display: flex;
+	justify-content: flex-start;
+	margin-bottom: 8px;
+}
+
+.agent-client-custom-command-select {
+	max-width: 280px;
+	font-size: 12px;
+}
+
 /* Input box - outer container with border and background */
 .agent-client-chat-input-box {
 	display: flex;
@@ -2192,35 +2203,35 @@ If your plugin does not need CSS, delete this file.
 
 /* Scheduler status bar item */
 .agent-client-scheduler-status {
-display: flex;
-align-items: center;
-gap: 3px;
-font-size: var(--font-smaller);
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	font-size: var(--font-smaller);
 }
 
 .agent-client-scheduler-status .agent-client-scheduler-icon {
-display: flex;
-align-items: center;
-line-height: 1;
+	display: flex;
+	align-items: center;
+	line-height: 1;
 }
 
 .agent-client-scheduler-status .agent-client-scheduler-icon svg {
-width: 12px;
-height: 12px;
+	width: 12px;
+	height: 12px;
 }
 
 .agent-client-scheduler-status .agent-client-scheduler-icon.is-running {
-color: var(--color-green);
+	color: var(--color-green);
 }
 
 .agent-client-scheduler-status .agent-client-scheduler-icon.is-paused {
-color: var(--color-orange);
+	color: var(--color-orange);
 }
 
 .agent-client-scheduler-status .agent-client-scheduler-icon.is-active {
-color: var(--color-blue);
+	color: var(--color-blue);
 }
 
 .agent-client-scheduler-status .agent-client-scheduler-label {
-font-size: var(--font-smaller);
+	font-size: var(--font-smaller);
 }

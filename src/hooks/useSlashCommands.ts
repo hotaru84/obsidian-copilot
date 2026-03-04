@@ -38,7 +38,6 @@ export interface UseSlashCommandsReturn {
  */
 export function useSlashCommands(
 	availableCommands: SlashCommand[],
-	localCommands: SlashCommand[],
 	onAutoMentionToggle?: (disabled: boolean) => void,
 ): UseSlashCommandsReturn {
 	const [suggestions, setSuggestions] = useState<SlashCommand[]>([]);
@@ -46,29 +45,12 @@ export function useSlashCommands(
 
 	const isOpen = suggestions.length > 0;
 
-	// Merge agent and local commands, with local commands taking precedence
+	// ACP agent-provided commands only
 	const allCommands = useMemo(() => {
-		const commandMap = new Map<string, SlashCommand>();
-
-		// Add agent commands first
-		for (const cmd of availableCommands) {
-			commandMap.set(cmd.name, { ...cmd, source: "agent" as const });
-		}
-
-		// Add local commands (overwrites agent commands with same name)
-		for (const cmd of localCommands) {
-			commandMap.set(cmd.name, cmd);
-		}
-
-		// Convert to array and sort: local commands first, then alphabetically
-		return Array.from(commandMap.values()).sort((a, b) => {
-			// Local commands first
-			if (a.source === "local" && b.source !== "local") return -1;
-			if (a.source !== "local" && b.source === "local") return 1;
-			// Then alphabetically
-			return a.name.localeCompare(b.name);
-		});
-	}, [availableCommands, localCommands]);
+		return availableCommands
+			.map((cmd) => ({ ...cmd, source: "agent" as const }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}, [availableCommands]);
 
 	const updateSuggestions = useCallback(
 		(input: string, cursorPosition: number) => {
@@ -102,7 +84,7 @@ export function useSlashCommands(
 
 			const query = afterSlash.toLowerCase();
 
-			// Filter all commands (both agent and local)
+			// Filter ACP commands
 			const filtered = allCommands.filter((cmd) =>
 				cmd.name.toLowerCase().includes(query),
 			);

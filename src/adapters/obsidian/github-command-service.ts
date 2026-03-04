@@ -3,8 +3,17 @@ import { join, basename } from "path";
 import { readdir, readFile } from "fs/promises";
 import { existsSync } from "fs";
 import type AgentClientPlugin from "../../plugin";
-import type { SlashCommand } from "../../domain/models/chat-session";
 import { getLogger, Logger } from "../../shared/logger";
+
+export type GitHubCommandType = "agent" | "prompt";
+
+export interface GitHubCustomCommand {
+	name: string;
+	description: string;
+	hint?: string | null;
+	type: GitHubCommandType;
+	agentName?: string;
+}
 
 /**
  * Service for discovering and managing slash commands from .github folder.
@@ -27,7 +36,7 @@ import { getLogger, Logger } from "../../shared/logger";
  * - `.github/agents/simple.md` → `/simple`
  */
 export class GitHubCommandService {
-	private commands: SlashCommand[] = [];
+	private commands: GitHubCustomCommand[] = [];
 	private plugin: AgentClientPlugin;
 	private logger: Logger;
 	private eventRefs: ReturnType<typeof this.plugin.app.vault.on>[] = [];
@@ -107,7 +116,7 @@ export class GitHubCommandService {
 	/**
 	 * Get all available local slash commands.
 	 */
-	getCommands(): SlashCommand[] {
+	getCommands(): GitHubCustomCommand[] {
 		return this.commands;
 	}
 
@@ -167,11 +176,13 @@ export class GitHubCommandService {
 				githubFiles
 					.map((file) => this.fileToCommand(file))
 					.filter(
-						(cmd): cmd is Promise<SlashCommand | null> =>
+						(cmd): cmd is Promise<GitHubCustomCommand | null> =>
 							cmd !== null,
 					),
 			).then((results) =>
-				results.filter((cmd): cmd is SlashCommand => cmd !== null),
+				results.filter(
+					(cmd): cmd is GitHubCustomCommand => cmd !== null,
+				),
 			);
 
 			this.logger.log(
@@ -240,15 +251,20 @@ export class GitHubCommandService {
 	}
 
 	/**
-	 * Convert a markdown file to a SlashCommand by reading its frontmatter.
+	 * Convert a markdown file to a local custom command by reading its frontmatter.
 	 */
 	private async fileToCommand(file: {
 		path: string;
 		content: string;
-	}): Promise<SlashCommand | null> {
+	}): Promise<GitHubCustomCommand | null> {
 		try {
 			// Extract command name from file name (without extension and suffixes)
 			const fileName = basename(file.path);
+			const commandType: GitHubCommandType = fileName.endsWith(
+				".agent.md",
+			)
+				? "agent"
+				: "prompt";
 			const commandName = fileName
 				.replace(/\.(?:agent|prompt)\.md$/, "") // Remove .agent.md or .prompt.md
 				.replace(/\.md$/, ""); // Remove .md if not already removed
@@ -260,6 +276,7 @@ export class GitHubCommandService {
 
 			let description = `Command from ${commandName}`;
 			let hint: string | null = null;
+			let agentName: string | undefined;
 
 			if (frontmatterMatch && frontmatterMatch[1]) {
 				const frontmatter = frontmatterMatch[1];
@@ -279,13 +296,27 @@ export class GitHubCommandService {
 				if (hintMatch) {
 					hint = hintMatch[1];
 				}
+
+				if (commandType === "agent") {
+					const nameMatch = frontmatter.match(
+						/^name:\s*["']?(.+?)["']?\s*$/m,
+					);
+					if (nameMatch && nameMatch[1]) {
+						agentName = nameMatch[1];
+					}
+				}
+			}
+
+			if (commandType === "agent" && !agentName) {
+				agentName = commandName;
 			}
 
 			return {
 				name: commandName,
 				description,
 				hint,
-				source: "local",
+				type: commandType,
+				agentName,
 			};
 		} catch (error) {
 			this.logger.error(

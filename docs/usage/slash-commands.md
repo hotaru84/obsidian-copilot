@@ -2,6 +2,13 @@
 
 Use slash commands to trigger actions provided by your current agent.
 
+## ACP Commands vs Custom .github Commands
+
+- ACP mode slash commands remain available as before via `/` input and dropdown suggestions.
+- Custom files in `.github/agents/*.agent.md` and `.github/prompts/*.prompt.md` are selected from the dropdown near the chat input (not from slash suggestions).
+- Selecting an `.agent.md` item inserts `/task <agent-name>`.
+- Selecting a `.prompt.md` item inserts `/<prompt-name>`.
+
 ## Agent Support
 
 Slash commands are agent-specific. Not all agents support slash commands.

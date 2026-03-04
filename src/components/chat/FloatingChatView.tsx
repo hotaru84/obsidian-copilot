@@ -233,6 +233,7 @@ function FloatingChatComponent({
 		sessionHistory,
 		activeAgentLabel,
 		availableAgents,
+		customCommandOptions,
 		errorInfo,
 		handleSendMessage,
 		handleStopGeneration,
@@ -869,6 +870,7 @@ function FloatingChatComponent({
 					restoredMessage={restoredMessage}
 					mentions={mentions}
 					slashCommands={slashCommands}
+					customCommandOptions={customCommandOptions}
 					autoMention={autoMention}
 					plugin={plugin}
 					view={viewHost}

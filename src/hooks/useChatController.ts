@@ -8,7 +8,10 @@ import { ConfirmDeleteModal } from "../components/chat/ConfirmDeleteModal";
 
 // Service imports
 import { NoteMentionService } from "../adapters/obsidian/mention-service";
-import { GitHubCommandService } from "../adapters/obsidian/github-command-service";
+import {
+	GitHubCommandService,
+	type GitHubCustomCommand,
+} from "../adapters/obsidian/github-command-service";
 import { getLogger, Logger } from "../shared/logger";
 import { ChatExporter } from "../shared/chat-exporter";
 
@@ -33,6 +36,7 @@ import type {
 	SessionModelState,
 } from "../domain/models/chat-session";
 import type { ImagePromptContent } from "../domain/models/prompt-content";
+import type { CustomCommandOption } from "../domain/models/custom-command-option";
 
 // Agent info for display (from plugin.getAvailableAgents())
 interface AgentInfo {
@@ -79,6 +83,7 @@ export interface UseChatControllerReturn {
 	// Computed values
 	activeAgentLabel: string;
 	availableAgents: AgentInfo[];
+	customCommandOptions: CustomCommandOption[];
 	errorInfo:
 		| ReturnType<typeof useChat>["errorInfo"]
 		| ReturnType<typeof useAgentSession>["errorInfo"];
@@ -160,7 +165,7 @@ export function useChatController(
 	}, [githubCommandService]);
 
 	// Local commands state
-	const [localCommands, setLocalCommands] = useState(
+	const [localCommands, setLocalCommands] = useState<GitHubCustomCommand[]>(
 		githubCommandService.getCommands(),
 	);
 
@@ -225,9 +230,33 @@ export function useChatController(
 	const autoMention = useAutoMention(vaultAccessAdapter);
 	const slashCommands = useSlashCommands(
 		session.availableCommands || [],
-		localCommands,
 		autoMention.toggle,
 	);
+
+	const customCommandOptions = useMemo<CustomCommandOption[]>(() => {
+		return localCommands
+			.map((command) => {
+				if (command.type === "agent") {
+					const agentName = command.agentName?.trim() || command.name;
+					return {
+						id: `agent:${command.name}`,
+						label: `${agentName} (agent)`,
+						value: `/task ${agentName}`,
+						type: "agent" as const,
+						description: command.description,
+					};
+				}
+
+				return {
+					id: `prompt:${command.name}`,
+					label: `${command.name} (prompt)`,
+					value: `/${command.name}`,
+					type: "prompt" as const,
+					description: command.description,
+				};
+			})
+			.sort((a, b) => a.label.localeCompare(b.label));
+	}, [localCommands]);
 
 	const autoExport = useAutoExport(plugin);
 
@@ -825,6 +854,7 @@ export function useChatController(
 		// Computed values
 		activeAgentLabel,
 		availableAgents,
+		customCommandOptions,
 		errorInfo,
 
 		// Core callbacks
