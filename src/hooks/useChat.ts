@@ -151,8 +151,34 @@ export interface SettingsContext {
 // ============================================================================
 
 /**
+ * Check if a permission request is completed (approved or cancelled).
+ * Completed requests should not be overwritten by new permission requests.
+ */
+function isPermissionRequestCompleted(
+	permissionRequest?:
+		| {
+				requestId: string;
+				selectedOptionId?: string;
+				isCancelled?: boolean;
+		  }
+		| undefined,
+): boolean {
+	if (!permissionRequest) return false;
+	return (
+		permissionRequest.selectedOptionId !== undefined ||
+		permissionRequest.isCancelled === true
+	);
+}
+
+/**
  * Merge new tool call content into existing tool call.
  * Preserves existing values when new values are undefined.
+ *
+ * Special handling for permission requests:
+ * - Completed requests (with selectedOptionId or isCancelled) are protected
+ * - A new permission request with a different requestId will not overwrite a completed one
+ * - Updates with the same requestId are allowed (for state transitions)
+ * - This prevents stacked permission requests from interfering with each other
  */
 function mergeToolCallContent(
 	existing: ToolCallMessageContent,
@@ -174,6 +200,29 @@ function mergeToolCallContent(
 		mergedContent = [...mergedContent, ...newContent];
 	}
 
+	// Smart merge for permission requests to prevent completed requests from being overwritten
+	let finalPermissionRequest = existing.permissionRequest;
+	if (update.permissionRequest !== undefined) {
+		const existingPerm = existing.permissionRequest;
+		const updatePerm = update.permissionRequest;
+
+		// Protect completed permission requests from being overwritten by different requests
+		if (existingPerm && isPermissionRequestCompleted(existingPerm)) {
+			// Only allow updates from the same requestId (state transitions of the same request)
+			if (existingPerm.requestId === updatePerm.requestId) {
+				// Same request - allow update (e.g., changing isActive flag)
+				finalPermissionRequest = updatePerm;
+			} else {
+				// Different requestId - preserve completed state, ignore new request
+				// This prevents a new permission request from overwriting a completed one
+				finalPermissionRequest = existingPerm;
+			}
+		} else {
+			// Existing request is not completed - update normally
+			finalPermissionRequest = updatePerm;
+		}
+	}
+
 	return {
 		...existing,
 		toolCallId: update.toolCallId,
@@ -190,10 +239,7 @@ function mergeToolCallContent(
 			Object.keys(update.rawInput).length > 0
 				? update.rawInput
 				: existing.rawInput,
-		permissionRequest:
-			update.permissionRequest !== undefined
-				? update.permissionRequest
-				: existing.permissionRequest,
+		permissionRequest: finalPermissionRequest,
 	};
 }
 
@@ -359,7 +405,13 @@ export function useChat(
 
 	/**
 	 * Update a specific message by tool call ID.
-	 * Only updates if the tool call exists in state.
+	 *
+	 * Note: This searches ALL messages and updates every tool call with matching toolCallId.
+	 * When the same toolCallId is reused across multiple permission requests, mergeToolCallContent
+	 * will protect completed requests (with selectedOptionId or isCancelled) from being overwritten
+	 * by different requestIds.
+	 *
+	 * This allows multiple permission requests to stack safely without interfering with each other.
 	 */
 	const updateMessage = useCallback(
 		(toolCallId: string, content: MessageContent): void => {
@@ -392,6 +444,12 @@ export function useChat(
 	 * When a permission request is added or updated, the message containing
 	 * that tool call is moved to the end of the message array to ensure it
 	 * appears as the latest message in the chat.
+	 *
+	 * Protection for stacked permission requests:
+	 * - mergeToolCallContent protects completed permission requests from being overwritten
+	 * - Multiple permission requests with the same toolCallId can coexist independently
+	 * - Each permission request is identified by its unique requestId
+	 * - Only active (isActive=true) permission requests trigger message reordering
 	 */
 	const upsertToolCall = useCallback(
 		(toolCallId: string, content: MessageContent): void => {

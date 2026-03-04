@@ -1147,6 +1147,10 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 	/**
 	 * Handle permission response from user.
+	 *
+	 * Updates the UI for the specific permission request identified by requestId.
+	 * mergeToolCallContent in useChat will protect this completed state from being
+	 * overwritten by subsequent permission requests with different requestIds.
 	 */
 	handlePermissionResponse(requestId: string, optionId: string): void {
 		const request = this.pendingPermissionRequests.get(requestId);
@@ -1157,11 +1161,12 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		const { resolve, toolCallId, options } = request;
 
 		// Reflect the selection in the UI immediately
+		// The requestId in the update ensures that only THIS specific permission request is updated
 		this.updateMessage(toolCallId, {
 			type: "tool_call",
 			toolCallId,
 			permissionRequest: {
-				requestId,
+				requestId, // This requestId identifies which permission request is being completed
 				options,
 				selectedOptionId: optionId,
 				isActive: false,
@@ -1192,6 +1197,14 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		this.terminalManager.killAllTerminals();
 	}
 
+	/**
+	 * Activate the next permission request in the queue.
+	 *
+	 * When multiple permission requests are stacked, this ensures that only one
+	 * is active (isActive=true) at a time. The requestId in the update identifies
+	 * which specific permission request is being activated, allowing multiple
+	 * requests to coexist without interfering with each other.
+	 */
 	private activateNextPermission(): void {
 		if (this.pendingPermissionQueue.length === 0) {
 			return;
@@ -1203,11 +1216,13 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			return;
 		}
 
+		// Update UI to show this permission request as active
+		// The requestId ensures that this update only affects the intended permission request
 		this.updateMessage(next.toolCallId, {
 			type: "tool_call",
 			toolCallId: next.toolCallId,
 			permissionRequest: {
-				requestId: next.requestId,
+				requestId: next.requestId, // This identifies which permission request is now active
 				options: pending.options,
 				isActive: true,
 			},
