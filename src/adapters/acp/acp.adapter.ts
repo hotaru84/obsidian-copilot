@@ -1232,9 +1232,13 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 	 * Activate the next permission request in the queue.
 	 *
 	 * When multiple permission requests are stacked, this ensures that only one
-	 * is active (isActive=true) at a time. The requestId in the update identifies
-	 * which specific permission request is being activated, allowing multiple
-	 * requests to coexist without interfering with each other.
+	 * is active (isActive=true) at a time.
+	 *
+	 * To avoid overwriting a completed permission request that shared the same
+	 * toolCallId, the next request is surfaced as a *new* tool-call message by
+	 * using the requestId as the toolCallId. The pendingPermissionRequests entry
+	 * is updated so that handlePermissionResponse and cancelPendingPermissionRequests
+	 * continue to target this new message correctly.
 	 */
 	private activateNextPermission(): void {
 		if (this.pendingPermissionQueue.length === 0) {
@@ -1247,17 +1251,32 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			return;
 		}
 
-		// Update UI to show this permission request as active
-		// The requestId ensures that this update only affects the intended permission request
-		this.updateMessage(next.toolCallId, {
+		// Use requestId as the synthetic toolCallId for the new message.
+		// This guarantees we never touch a message that already holds a completed
+		// permission request (which may share the original toolCallId).
+		const newToolCallId = next.requestId;
+
+		// Update the stored entry so handlePermissionResponse /
+		// cancelPendingPermissionRequests target the correct message.
+		this.pendingPermissionRequests.set(next.requestId, {
+			...pending,
+			toolCallId: newToolCallId,
+		});
+
+		// Emit a new tool_call via sessionUpdateCallback so that upsertToolCall
+		// creates a fresh message at the bottom of the chat instead of mutating
+		// the existing one (which may already contain a completed permissionRequest).
+		this.sessionUpdateCallback?.({
 			type: "tool_call",
-			toolCallId: next.toolCallId,
+			sessionId: "",
+			toolCallId: newToolCallId,
+			status: "pending",
 			permissionRequest: {
-				requestId: next.requestId, // This identifies which permission request is now active
+				requestId: next.requestId,
 				options: pending.options,
 				isActive: true,
 			},
-		} as MessageContent);
+		});
 	}
 
 	/**
