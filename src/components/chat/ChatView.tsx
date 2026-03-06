@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Platform, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, Platform, Notice, setIcon } from "obsidian";
 import type {
 	IChatViewContainer,
 	ChatViewType,
@@ -24,6 +24,7 @@ import { useChatController } from "../../hooks/useChatController";
 
 // Domain model imports
 import type { ImagePromptContent } from "../../domain/models/prompt-content";
+import type { MessageContent } from "../../domain/models/chat-message";
 
 // Type definitions for Obsidian internal APIs
 interface AppWithSettings {
@@ -137,6 +138,38 @@ function ChatComponent({
 			container.removeEventListener("click", handleFocus);
 		};
 	}, [plugin, viewId, view.containerEl]);
+
+	// ============================================================
+	// Tab Title & Running Animation (ChatView-specific)
+	// ============================================================
+	// Derive tab title from the first user message; reset to default when empty.
+	useEffect(() => {
+		const firstUserMsg = messages.find((m) => m.role === "user");
+		if (firstUserMsg) {
+			const textContent = firstUserMsg.content.find(
+				(c): c is Extract<MessageContent, { type: "text" }> =>
+					c.type === "text",
+			);
+			if (textContent) {
+				// Strip [[mention]] annotations and use the first line
+				const text = textContent.text
+					.replace(/\[\[.*?\]\]/g, "")
+					.trim();
+				view.setTabTitle(text || "Copilot chat");
+			}
+		} else {
+			view.setTabTitle("Copilot chat");
+		}
+	}, [messages, view]);
+
+	// Show spinner on the tab icon while the agent is generating.
+	useEffect(() => {
+		view.setTabRunning(isSending);
+		return () => {
+			// Restore icon when component unmounts
+			view.setTabRunning(false);
+		};
+	}, [isSending, view]);
 
 	// ============================================================
 	// Refs
@@ -585,6 +618,8 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	private canSendCallback: CanSendCallback | null = null;
 	private cancelCallback: CancelCallback | null = null;
 
+	private displayText: string = "Copilot chat";
+
 	constructor(leaf: WorkspaceLeaf, plugin: AgentClientPlugin) {
 		super(leaf);
 		this.plugin = plugin;
@@ -598,11 +633,51 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	}
 
 	getDisplayText() {
-		return "Copilot chat";
+		return this.displayText;
 	}
 
 	getIcon() {
 		return "bot-message-square";
+	}
+
+	/**
+	 * Update the tab title shown in the workspace tab header.
+	 * Truncates to 50 characters and triggers a layout-change to
+	 * make Obsidian re-read the display text.
+	 */
+	setTabTitle(title: string): void {
+		const trimmed = title.split("\n")[0].trim();
+		const truncated =
+			trimmed.length > 50 ? trimmed.substring(0, 50) + "…" : trimmed;
+		const newText = truncated || "Copilot chat";
+		if (this.displayText === newText) return;
+		this.displayText = newText;
+		this.app.workspace.trigger("layout-change");
+	}
+
+	/**
+	 * Show or hide a running-animation on the tab icon.
+	 * When running, the icon switches to "loader-circle" with a CSS spin;
+	 * when stopped, it reverts to the default icon.
+	 *
+	 * Note: `tabHeaderIconEl` is an Obsidian internal DOM property exposed on
+	 * WorkspaceLeaf but not typed in the public API. We check for its presence
+	 * at runtime before using it.
+	 */
+	setTabRunning(running: boolean): void {
+		const leaf = this.leaf as unknown as Record<string, unknown>;
+		const iconEl =
+			"tabHeaderIconEl" in leaf && leaf.tabHeaderIconEl instanceof HTMLElement
+				? leaf.tabHeaderIconEl
+				: null;
+		if (!iconEl) return;
+		if (running) {
+			setIcon(iconEl, "loader-circle");
+			iconEl.addClass("agent-client-tab-running");
+		} else {
+			iconEl.removeClass("agent-client-tab-running");
+			setIcon(iconEl, this.getIcon());
+		}
 	}
 
 	/**

@@ -2221,3 +2221,18 @@ If your plugin does not need CSS, delete this file.
 .agent-client-scheduler-status .agent-client-scheduler-label {
 	font-size: var(--font-smaller);
 }
+
+/* ===== Tab Icon Running Animation ===== */
+@keyframes ac-tab-spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.agent-client-tab-running svg {
+	animation: ac-tab-spin 1s linear infinite;
+	color: var(--color-accent);
+}
