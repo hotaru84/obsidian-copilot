@@ -32,7 +32,6 @@ export interface UseSlashCommandsReturn {
  * Hook for managing slash command dropdown state and logic.
  *
  * @param availableCommands - Available slash commands from the agent session
- * @param localCommands - Local slash commands from .github folder
  * @param onAutoMentionToggle - Callback to enable/disable auto-mention
  *        (slash commands require auto-mention to be disabled so "/" stays at the start)
  */
