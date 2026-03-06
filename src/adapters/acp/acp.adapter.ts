@@ -1160,28 +1160,13 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 	/**
 	 * Reset the current message ID.
-	 * Also clears stale permission queues so a crashed/interrupted prompt
-	 * cannot cause the next permission request to appear inactive (isActive: false).
 	 */
 	resetCurrentMessage(): void {
 		this.currentMessageId = null;
-		// Clear stale queues without emitting UI updates — the message list is
-		// reset separately when a new prompt begins.
-		if (this.pendingPermissionRequests.size > 0) {
-			this.logger.warn(
-				`[AcpAdapter] Clearing ${this.pendingPermissionRequests.size} stale permission request(s) on message reset`,
-			);
-			this.pendingPermissionRequests.clear();
-			this.pendingPermissionQueue = [];
-		}
 	}
 
 	/**
 	 * Handle permission response from user.
-	 *
-	 * Updates the UI for the specific permission request identified by requestId.
-	 * mergeToolCallContent in useChat will protect this completed state from being
-	 * overwritten by subsequent permission requests with different requestIds.
 	 */
 	handlePermissionResponse(requestId: string, optionId: string): void {
 		const request = this.pendingPermissionRequests.get(requestId);
@@ -1192,12 +1177,11 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		const { resolve, toolCallId, options } = request;
 
 		// Reflect the selection in the UI immediately
-		// The requestId in the update ensures that only THIS specific permission request is updated
 		this.updateMessage(toolCallId, {
 			type: "tool_call",
 			toolCallId,
 			permissionRequest: {
-				requestId, // This requestId identifies which permission request is being completed
+				requestId,
 				options,
 				selectedOptionId: optionId,
 				isActive: false,
@@ -1233,12 +1217,6 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 	 *
 	 * When multiple permission requests are stacked, this ensures that only one
 	 * is active (isActive=true) at a time.
-	 *
-	 * To avoid overwriting a completed permission request that shared the same
-	 * toolCallId, the next request is surfaced as a *new* tool-call message by
-	 * using the requestId as the toolCallId. The pendingPermissionRequests entry
-	 * is updated so that handlePermissionResponse and cancelPendingPermissionRequests
-	 * continue to target this new message correctly.
 	 */
 	private activateNextPermission(): void {
 		if (this.pendingPermissionQueue.length === 0) {
@@ -1251,32 +1229,15 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			return;
 		}
 
-		// Use requestId as the synthetic toolCallId for the new message.
-		// This guarantees we never touch a message that already holds a completed
-		// permission request (which may share the original toolCallId).
-		const newToolCallId = next.requestId;
-
-		// Update the stored entry so handlePermissionResponse /
-		// cancelPendingPermissionRequests target the correct message.
-		this.pendingPermissionRequests.set(next.requestId, {
-			...pending,
-			toolCallId: newToolCallId,
-		});
-
-		// Emit a new tool_call via sessionUpdateCallback so that upsertToolCall
-		// creates a fresh message at the bottom of the chat instead of mutating
-		// the existing one (which may already contain a completed permissionRequest).
-		this.sessionUpdateCallback?.({
+		this.updateMessage(next.toolCallId, {
 			type: "tool_call",
-			sessionId: "",
-			toolCallId: newToolCallId,
-			status: "pending",
+			toolCallId: next.toolCallId,
 			permissionRequest: {
 				requestId: next.requestId,
 				options: pending.options,
 				isActive: true,
 			},
-		});
+		} as MessageContent);
 	}
 
 	/**
