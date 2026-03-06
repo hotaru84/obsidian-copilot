@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import type {
 	ChatMessage,
 	MessageContent,
+	ToolCallStatus,
 } from "../domain/models/chat-message";
 import type { SessionUpdate } from "../domain/models/session-update";
 import type { IAgentClient } from "../domain/ports/agent-client.port";
@@ -196,35 +197,68 @@ function mergeToolCallContent(
 		mergedContent = [...mergedContent, ...newContent];
 	}
 
-	// Smart merge for permission requests to prevent completed requests from being overwritten
+	// Smart merge for permission requests.
+	//
+	// Decision pivot: update.isActive
+	//
+	//   isActive: true  → ALWAYS apply.
+	//     Two callers set isActive:true:
+	//       (a) requestPermission() when the queue was empty — show first request immediately.
+	//       (b) activateNextPermission() — legitimately promotes the next queued request.
+	//     In both cases the incoming update must win, even if the existing request is completed.
+	//
+	//   isActive: false / undefined → protect existing state when warranted.
+	//     If the existing request is active (buttons visible) or completed (response shown)
+	//     AND the update carries a different requestId (i.e. a queued-but-not-yet-active
+	//     permission from a 2nd/3rd requestPermission call), keep the existing request.
+	//     The adapter's pendingPermissionQueue already holds the new request and will
+	//     surface it via activateNextPermission() once the current one resolves.
 	let finalPermissionRequest = existing.permissionRequest;
 	if (update.permissionRequest !== undefined) {
 		const existingPerm = existing.permissionRequest;
 		const updatePerm = update.permissionRequest;
 
-		// Protect completed permission requests from being overwritten by different requests
-		if (existingPerm && isPermissionRequestCompleted(existingPerm)) {
-			// Only allow updates from the same requestId (state transitions of the same request)
-			if (existingPerm.requestId === updatePerm.requestId) {
-				// Same request - allow update (e.g., changing isActive flag)
-				finalPermissionRequest = updatePerm;
-			} else {
-				// Different requestId - preserve completed state, ignore new request
-				// This prevents a new permission request from overwriting a completed one
-				finalPermissionRequest = existingPerm;
-			}
+		if (updatePerm.isActive) {
+			// isActive:true — always apply (first request or activateNextPermission)
+			finalPermissionRequest = updatePerm;
+		} else if (
+			existingPerm &&
+			existingPerm.requestId !== updatePerm.requestId &&
+			(isPermissionRequestCompleted(existingPerm) ||
+				existingPerm.isActive)
+		) {
+			// isActive:false with a different requestId arriving while existing is
+			// active or completed — this is a queued secondary request; keep existing.
+			finalPermissionRequest = existingPerm;
 		} else {
-			// Existing request is not completed - update normally
+			// Same requestId state-transition OR existing has no active/completed state.
 			finalPermissionRequest = updatePerm;
 		}
 	}
+
+	// Status must only move forward: pending → in_progress → completed/failed.
+	// Never allow a regression (e.g., in_progress → pending caused by a null-status
+	// tool_call_update that the adapter defaulted to "pending").
+	const STATUS_ORDER: Record<ToolCallStatus, number> = {
+		pending: 0,
+		in_progress: 1,
+		completed: 2,
+		failed: 2,
+	};
+	const candidateStatus =
+		update.status !== undefined ? update.status : existing.status;
+	const mergedStatus =
+		(STATUS_ORDER[candidateStatus] ?? 0) >=
+		(STATUS_ORDER[existing.status] ?? 0)
+			? candidateStatus
+			: existing.status;
 
 	return {
 		...existing,
 		toolCallId: update.toolCallId,
 		title: update.title !== undefined ? update.title : existing.title,
 		kind: update.kind !== undefined ? update.kind : existing.kind,
-		status: update.status !== undefined ? update.status : existing.status,
+		status: mergedStatus,
 		content: mergedContent,
 		locations:
 			update.locations !== undefined
@@ -536,12 +570,28 @@ export function useChat(
 					break;
 
 				case "tool_call":
-				case "tool_call_update":
 					upsertToolCall(update.toolCallId, {
 						type: "tool_call",
 						toolCallId: update.toolCallId,
 						title: update.title,
 						status: update.status || "pending",
+						kind: update.kind,
+						content: update.content,
+						locations: update.locations,
+						rawInput: update.rawInput,
+						permissionRequest: update.permissionRequest,
+					});
+					break;
+
+				case "tool_call_update":
+					// status may be undefined (no change intended); fall back to "pending"
+					// only as a last resort — mergeToolCallContent's forward-only guard
+					// ensures existing statuses never regress.
+					upsertToolCall(update.toolCallId, {
+						type: "tool_call",
+						toolCallId: update.toolCallId,
+						title: update.title,
+						status: update.status ?? "pending",
 						kind: update.kind,
 						content: update.content,
 						locations: update.locations,

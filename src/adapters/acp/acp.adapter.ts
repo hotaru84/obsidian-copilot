@@ -1074,14 +1074,34 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 				// Note: image, resource etc. ContentBlock types are not yet supported
 				break;
 
-			case "tool_call":
-			case "tool_call_update": {
+			case "tool_call": {
+				// New tool call: status is required in ACP ToolCall, default to "pending".
 				this.sessionUpdateCallback?.({
-					type: update.sessionUpdate,
+					type: "tool_call",
 					sessionId,
 					toolCallId: update.toolCallId,
 					title: update.title ?? undefined,
 					status: update.status || "pending",
+					kind: update.kind ?? undefined,
+					content: AcpTypeConverter.toToolCallContent(update.content),
+					locations: update.locations ?? undefined,
+					rawInput: update.rawInput as
+						| { [k: string]: unknown }
+						| undefined,
+				});
+				break;
+			}
+
+			case "tool_call_update": {
+				// Update to existing tool call: status is nullable in ACP ToolCallUpdate.
+				// null means "no change" — map to undefined so mergeToolCallContent
+				// preserves the existing status instead of regressing to "pending".
+				this.sessionUpdateCallback?.({
+					type: "tool_call_update",
+					sessionId,
+					toolCallId: update.toolCallId,
+					title: update.title ?? undefined,
+					status: update.status ?? undefined,
 					kind: update.kind ?? undefined,
 					content: AcpTypeConverter.toToolCallContent(update.content),
 					locations: update.locations ?? undefined,
@@ -1140,9 +1160,20 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 
 	/**
 	 * Reset the current message ID.
+	 * Also clears stale permission queues so a crashed/interrupted prompt
+	 * cannot cause the next permission request to appear inactive (isActive: false).
 	 */
 	resetCurrentMessage(): void {
 		this.currentMessageId = null;
+		// Clear stale queues without emitting UI updates — the message list is
+		// reset separately when a new prompt begins.
+		if (this.pendingPermissionRequests.size > 0) {
+			this.logger.warn(
+				`[AcpAdapter] Clearing ${this.pendingPermissionRequests.size} stale permission request(s) on message reset`,
+			);
+			this.pendingPermissionRequests.clear();
+			this.pendingPermissionQueue = [];
+		}
 	}
 
 	/**
@@ -1309,7 +1340,11 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 			sessionId,
 			toolCallId: toolCallId,
 			title: toolCallInfo?.title ?? undefined,
-			status: toolCallInfo?.status || "pending",
+			// toolCallInfo.status is ToolCallStatus | null | undefined in ACP ToolCallUpdate.
+			// Use ?? to map null → undefined → "pending" (not the || which maps null → "pending"
+			// directly but loses meaning). mergeToolCallContent's forward-only guard
+			// prevents an inadvertent "pending" from overwriting "in_progress".
+			status: toolCallInfo?.status ?? "pending",
 			kind: (toolCallInfo?.kind as acp.ToolKind | undefined) ?? undefined,
 			content: AcpTypeConverter.toToolCallContent(
 				toolCallInfo?.content as acp.ToolCallContent[] | undefined,

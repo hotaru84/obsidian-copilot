@@ -81,6 +81,44 @@ GitHub Copilot uses the Agent Client Protocol natively, so setup is simple:
 
 **[Full Documentation](https://github.com/hotaru84/obsidian-copilot/wiki)**
 
+## Changelog
+
+### Bug Fixes
+
+#### Web fetch tool calls stuck in "pending" state
+
+**Symptom**: When an agent performs a web fetch, the tool call sometimes stays in
+`pending` state indefinitely. The permission approval buttons never appear, and
+cancelling the operation prints `Cancelling 1 pending permission requests` in
+the console despite no UI prompt being shown.
+
+**Root cause** (three interacting issues):
+
+1. **Stale permission queue across prompts** — `pendingPermissionQueue` was only
+   cleared by an explicit cancel, not on prompt start. If a previous prompt ended
+   without resolving its permission request (e.g., agent crash / error recovery),
+   the leftover entry caused the *next* `requestPermission` call to see
+   `queue.length > 0` and emit `isActive: false`, hiding the approval buttons.
+
+2. **Status regression in `tool_call_update`** — The ACP `ToolCallUpdate.status`
+   field is nullable (`null` = "no change"). The adapter was treating `null` the
+   same as `undefined` via `status || "pending"`, converting it to `"pending"`
+   and overwriting an already-`in_progress` status.
+
+3. **No forward-only status guard in merge logic** — `mergeToolCallContent` would
+   unconditionally apply whatever status arrived, allowing regressions like
+   `in_progress → pending`.
+
+**Fix**:
+- `resetCurrentMessage()` now clears stale permission queues before each new
+  prompt, so a leftover queue entry can never suppress the next permission UI.
+- `sessionUpdate()` handler splits `tool_call` and `tool_call_update` cases:
+  updates use `status ?? undefined` so ACP `null` maps to "no change" rather
+  than `"pending"`.
+- `mergeToolCallContent` enforces a forward-only status order
+  (`pending → in_progress → completed/failed`), preventing any regression
+  regardless of what the adapter emits.
+
 ## Development
 
 ```bash
