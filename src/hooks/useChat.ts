@@ -152,30 +152,8 @@ export interface SettingsContext {
 // ============================================================================
 
 /**
- * Check if a permission request is completed (approved or cancelled).
- * Completed requests should not be overwritten by new permission requests.
- */
-function isPermissionRequestCompleted(permissionRequest?: {
-	requestId: string;
-	selectedOptionId?: string;
-	isCancelled?: boolean;
-}): boolean {
-	if (!permissionRequest) return false;
-	return (
-		permissionRequest.selectedOptionId !== undefined ||
-		permissionRequest.isCancelled === true
-	);
-}
-
-/**
  * Merge new tool call content into existing tool call.
  * Preserves existing values when new values are undefined.
- *
- * Special handling for permission requests:
- * - Completed requests (with selectedOptionId or isCancelled) are protected
- * - A new permission request with a different requestId will not overwrite a completed one
- * - Updates with the same requestId are allowed (for state transitions)
- * - This prevents stacked permission requests from interfering with each other
  */
 function mergeToolCallContent(
 	existing: ToolCallMessageContent,
@@ -195,49 +173,6 @@ function mergeToolCallContent(
 		}
 
 		mergedContent = [...mergedContent, ...newContent];
-	}
-
-	// Smart merge for permission requests.
-	//
-	// Decision pivot: update.isActive
-	//
-	//   isActive: true  → ALWAYS apply.
-	//     Two callers set isActive:true:
-	//       (a) requestPermission() when the queue was empty — show first request immediately.
-	//       (b) activateNextPermission() — promotes the next queued request. This now uses
-	//           requestId as a synthetic toolCallId, so it always creates a NEW message and
-	//           will never reach this merge path for a completed permission.
-	//     A fresh requestPermission() from the agent (same toolCallId, new requestId) MUST
-	//     overwrite the completed state so the new permission becomes visible to the user.
-	//
-	//   isActive: false / undefined → protect existing state when warranted.
-	//     If the existing request is active (buttons visible) or completed (response shown)
-	//     AND the update carries a different requestId (i.e. a queued-but-not-yet-active
-	//     permission from a 2nd/3rd requestPermission call), keep the existing request.
-	//     The adapter's pendingPermissionQueue already holds the new request and will
-	//     surface it via activateNextPermission() once the current one resolves.
-	let finalPermissionRequest = existing.permissionRequest;
-	if (update.permissionRequest !== undefined) {
-		const existingPerm = existing.permissionRequest;
-		const updatePerm = update.permissionRequest;
-
-		if (updatePerm.isActive) {
-			// isActive:true — always apply (first request, activateNextPermission, or
-			// a fresh second requestPermission call on the same toolCallId)
-			finalPermissionRequest = updatePerm;
-		} else if (
-			existingPerm &&
-			existingPerm.requestId !== updatePerm.requestId &&
-			(isPermissionRequestCompleted(existingPerm) ||
-				existingPerm.isActive)
-		) {
-			// isActive:false with a different requestId arriving while existing is
-			// active or completed — this is a queued secondary request; keep existing.
-			finalPermissionRequest = existingPerm;
-		} else {
-			// Same requestId state-transition OR existing has no active/completed state.
-			finalPermissionRequest = updatePerm;
-		}
 	}
 
 	// Status must only move forward: pending → in_progress → completed/failed.
@@ -273,7 +208,10 @@ function mergeToolCallContent(
 			Object.keys(update.rawInput).length > 0
 				? update.rawInput
 				: existing.rawInput,
-		permissionRequest: finalPermissionRequest,
+		permissionRequest:
+			update.permissionRequest !== undefined
+				? update.permissionRequest
+				: existing.permissionRequest,
 	};
 }
 
@@ -474,87 +412,29 @@ export function useChat(
 	 * If a tool call with the given ID exists, it will be updated (merged).
 	 * Otherwise, a new assistant message will be created.
 	 * All logic is inside setMessages callback to avoid race conditions.
-	 *
-	 * When a permission request is added or updated, the message containing
-	 * that tool call is moved to the end of the message array to ensure it
-	 * appears as the latest message in the chat.
-	 *
-	 * Protection for stacked permission requests:
-	 * - mergeToolCallContent protects completed permission requests from being overwritten
-	 * - Multiple permission requests with the same toolCallId can coexist independently
-	 * - Each permission request is identified by its unique requestId
-	 * - Only active (isActive=true) permission requests trigger message reordering
-	 *
-	 * Fresh permission after completed permission (same toolCallId, new requestId):
-	 * - When the agent reuses the same toolCallId across sequential tool calls,
-	 *   a fresh permission request (isActive=true, new requestId) must NOT be merged
-	 *   into a message that already has a completed permission. Instead, a new message
-	 *   is created so both the completed state and the new request remain visible.
 	 */
 	const upsertToolCall = useCallback(
 		(toolCallId: string, content: MessageContent): void => {
 			if (content.type !== "tool_call") return;
 
-			// Detect whether the incoming update is a fresh permission request
-			// (isActive=true with a requestId different from any already-completed permission).
-			// In that case we must NOT merge into an existing message that holds a completed
-			// permission; instead we fall through to "not found" and create a new message.
-			const incomingPerm = content.permissionRequest;
-			const isFreshActivePermission =
-				incomingPerm?.isActive === true &&
-				incomingPerm?.requestId !== undefined;
-
 			setMessages((prev) => {
 				// Try to find existing tool call
 				let found = false;
-				let messageIndexToMove = -1;
-				const updated = prev.map((message, index) => ({
+				const updated = prev.map((message) => ({
 					...message,
 					content: message.content.map((c) => {
 						if (
 							c.type === "tool_call" &&
 							c.toolCallId === toolCallId
 						) {
-							// If this update carries a fresh active permission (new requestId)
-							// and the existing tool call already has a completed permission
-							// with a different requestId, skip this match so a new message
-							// is created instead. This prevents the completed permission from
-							// being overwritten and keeps both entries visible in the chat.
-							if (
-								isFreshActivePermission &&
-								c.permissionRequest &&
-								isPermissionRequestCompleted(
-									c.permissionRequest,
-								) &&
-								c.permissionRequest.requestId !==
-									incomingPerm!.requestId
-							) {
-								return c; // leave this message unchanged
-							}
-
 							found = true;
-							const merged = mergeToolCallContent(c, content);
-							// If this update adds an active permission request,
-							// mark this message to be moved to the end
-							if (merged.permissionRequest?.isActive) {
-								messageIndexToMove = index;
-							}
-							return merged;
+							return mergeToolCallContent(c, content);
 						}
 						return c;
 					}),
 				}));
 
 				if (found) {
-					// If we need to move the message with active permission to the end
-					if (messageIndexToMove >= 0) {
-						const messageToMove = updated[messageIndexToMove];
-						return [
-							...updated.slice(0, messageIndexToMove),
-							...updated.slice(messageIndexToMove + 1),
-							messageToMove,
-						];
-					}
 					return updated;
 				}
 
