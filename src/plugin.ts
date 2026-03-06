@@ -5,6 +5,7 @@ import {
 	Notice,
 	Menu,
 	setIcon,
+	TFile,
 } from "obsidian";
 import type { Root } from "react-dom/client";
 import { ChatView, VIEW_TYPE_CHAT } from "./components/chat/ChatView";
@@ -32,14 +33,17 @@ import {
 import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
 import type {
-	CustomPrompt,
+	PromptFileMeta,
 	PromptExecutionRecord,
 } from "./domain/models/scheduled-prompt";
-import { isTimeWindowPrompt } from "./domain/models/scheduled-prompt";
 import {
 	ScheduledPromptRunner,
 	trimExecutionHistory,
 } from "./shared/scheduled-prompt-runner";
+import {
+	parsePromptFrontmatter,
+	stripFrontmatter,
+} from "./shared/frontmatter-utils";
 import { RunPromptModal } from "./components/chat/RunPromptModal";
 
 function getLocalDateString(date: Date): string {
@@ -138,7 +142,8 @@ export interface AgentClientPluginSettings {
 	floatingWindowSize: { width: number; height: number };
 	floatingButtonPosition: { right: number; bottom: number } | null;
 	// Scheduled / custom prompt settings
-	customPrompts: CustomPrompt[];
+	/** Vault-relative path to the folder containing prompt .md files */
+	promptsFolder: string;
 	promptExecutionHistory: PromptExecutionRecord[];
 	schedulerPaused: boolean;
 }
@@ -184,7 +189,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	floatingButtonImage: "",
 	floatingWindowSize: { width: 400, height: 500 },
 	floatingButtonPosition: { right: 40, bottom: 30 },
-	customPrompts: [],
+	promptsFolder: "Prompts",
 	promptExecutionHistory: [],
 	schedulerPaused: false,
 };
@@ -325,7 +330,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		// Initialize scheduled prompt runner
 		this.scheduledPromptRunner = new ScheduledPromptRunner({
-			getPrompts: () => this.settings.customPrompts,
+			getPromptsFromFolder: () => this.loadPromptsFromFolder(),
 			getHistory: () => this.settings.promptExecutionHistory,
 			onRecord: (record) => {
 				this.settings.promptExecutionHistory = trimExecutionHistory([
@@ -417,6 +422,41 @@ export default class AgentClientPlugin extends Plugin {
 
 		// Clear legacy storage
 		this.floatingChatInstances.clear();
+	}
+
+	// ──────────────────────────────────────────────────────────────
+	// Prompt folder helpers
+	// ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Load all prompt files from the configured prompts folder.
+	 * Reads each .md file, parses its frontmatter, and strips the YAML block
+	 * to produce the agent-facing body text.
+	 */
+	async loadPromptsFromFolder(): Promise<
+		Array<{ meta: PromptFileMeta; body: string }>
+	> {
+		const folderPath = this.settings.promptsFolder || "Prompts";
+		const folder = this.app.vault.getFolderByPath(folderPath);
+		if (!folder) return [];
+
+		const results: Array<{ meta: PromptFileMeta; body: string }> = [];
+		for (const child of folder.children) {
+			if (!(child instanceof TFile) || child.extension !== "md") continue;
+			try {
+				const content = await this.app.vault.read(child);
+				const fmCache = this.app.metadataCache.getFileCache(child);
+				const meta = parsePromptFrontmatter(
+					fmCache?.frontmatter ?? null,
+					child.path,
+				);
+				const body = stripFrontmatter(content);
+				results.push({ meta, body });
+			} catch {
+				// skip unreadable files silently
+			}
+		}
+		return results;
 	}
 
 	/**
@@ -918,19 +958,24 @@ export default class AgentClientPlugin extends Plugin {
 			id: "run-custom-prompt",
 			name: "Run custom prompt",
 			callback: () => {
-				const prompts = this.settings.customPrompts;
-				if (prompts.length === 0) {
-					new Notice(
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						"[Agent Client] No custom prompts configured. Add prompts in Settings → Custom Prompts.",
-					);
-					return;
-				}
-				new RunPromptModal(
-					this.app,
-					prompts,
-					this.scheduledPromptRunner,
-				).open();
+				void (async () => {
+					// Prefer the cached list; fall back to a fresh folder read
+					let entries = this.scheduledPromptRunner.getCachedPrompts();
+					if (entries.length === 0) {
+						entries = await this.loadPromptsFromFolder();
+					}
+					if (entries.length === 0) {
+						new Notice(
+							`[Agent Client] No prompt files found in folder: ${this.settings.promptsFolder}`,
+						);
+						return;
+					}
+					new RunPromptModal(
+						this.app,
+						entries.map((e) => e.meta),
+						this.scheduledPromptRunner,
+					).open();
+				})();
 			},
 		});
 
@@ -994,7 +1039,7 @@ export default class AgentClientPlugin extends Plugin {
 				now.getTime() - new Date(running.startedAt).getTime();
 			menu.addItem((item) => {
 				item.setTitle(
-					`Running: ${running.promptName} (${formatDuration(elapsedMs)})`,
+					`Running: ${running.title} (${formatDuration(elapsedMs)})`,
 				).setIsLabel(true);
 			});
 		} else if (this.scheduledPromptRunner.isPaused) {
@@ -1005,7 +1050,7 @@ export default class AgentClientPlugin extends Plugin {
 			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
 			menu.addItem((item) => {
 				item.setTitle(
-					`Next: ${next.promptName} in ${formatDuration(remainingMs)}`,
+					`Next: ${next.title} in ${formatDuration(remainingMs)}`,
 				).setIsLabel(true);
 			});
 		} else {
@@ -1020,7 +1065,7 @@ export default class AgentClientPlugin extends Plugin {
 			const latestStatus = latestRecord.success ? "completed" : "failed";
 			menu.addItem((item) => {
 				item.setTitle(
-					`Last ${latestStatus}: ${latestRecord.promptName} at ${formatClock(finishedAt)}`,
+					`Last ${latestStatus}: ${latestRecord.title} at ${formatClock(finishedAt)}`,
 				).setIsLabel(true);
 			});
 		}
@@ -1078,12 +1123,12 @@ export default class AgentClientPlugin extends Plugin {
 				);
 				menu.addItem((item) => {
 					item.setTitle(
-						`${statusIcon} ${timestamp} ${truncateText(record.promptName, 34)}`,
+						`${statusIcon} ${timestamp} ${truncateText(record.title, 34)}`,
 					)
 						.setIcon("play")
 						.onClick(() => {
 							void this.scheduledPromptRunner.runNow(
-								record.promptId,
+								record.filePath,
 							);
 						});
 				});
@@ -1107,6 +1152,7 @@ export default class AgentClientPlugin extends Plugin {
 						this.updateSchedulerStatusBar();
 						void this.saveSettings();
 						new Notice(
+							// eslint-disable-next-line obsidianmd/ui/sentence-case
 							"[Agent Client] Cleared today's prompt history",
 						);
 					});
@@ -1125,9 +1171,11 @@ export default class AgentClientPlugin extends Plugin {
 		el.empty();
 		el.addClass("agent-client-scheduler-status");
 
-		const enabledCount = this.settings.customPrompts.filter(
-			(p) => p.enabled && isTimeWindowPrompt(p),
-		).length;
+		const enabledCount =
+			this.scheduledPromptRunner
+				?.getCachedPrompts()
+				.filter((e) => e.meta.enabled && e.meta.timeWindows.length > 0)
+				.length ?? 0;
 		if (enabledCount === 0) {
 			el.title = "";
 			return;
@@ -1145,7 +1193,7 @@ export default class AgentClientPlugin extends Plugin {
 				now.getTime() - new Date(running.startedAt).getTime();
 			setIcon(iconEl, "loader-circle");
 			iconEl.addClass("is-running");
-			textEl.textContent = truncateText(running.promptName, 18);
+			textEl.textContent = truncateText(running.title, 18);
 			el.title = `Running (${formatDuration(elapsedMs)}). Click for details.`;
 			return;
 		}
@@ -1165,7 +1213,7 @@ export default class AgentClientPlugin extends Plugin {
 		const next = this.scheduledPromptRunner?.getNextScheduledExecution(now);
 		if (next) {
 			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
-			el.title = `Next: ${next.promptName} in ${formatDuration(remainingMs)}. Click for details.`;
+			el.title = `Next: ${next.title} in ${formatDuration(remainingMs)}. Click for details.`;
 			return;
 		}
 
@@ -1397,25 +1445,11 @@ export default class AgentClientPlugin extends Plugin {
 				}
 				return DEFAULT_SETTINGS.floatingButtonPosition;
 			})(),
-			customPrompts: (() => {
-				if (!Array.isArray(rawSettings.customPrompts)) {
-					return DEFAULT_SETTINGS.customPrompts;
-				}
-				return (rawSettings.customPrompts as unknown[]).filter(
-					(p): p is CustomPrompt =>
-						p !== null &&
-						typeof p === "object" &&
-						typeof (p as Record<string, unknown>).id === "string" &&
-						typeof (p as Record<string, unknown>).name ===
-							"string" &&
-						typeof (p as Record<string, unknown>).content ===
-							"string" &&
-						typeof (p as Record<string, unknown>)
-							.intervalMinutes === "number" &&
-						typeof (p as Record<string, unknown>).enabled ===
-							"boolean",
-				);
-			})(),
+			promptsFolder:
+				typeof rawSettings.promptsFolder === "string" &&
+				rawSettings.promptsFolder.trim().length > 0
+					? rawSettings.promptsFolder.trim()
+					: DEFAULT_SETTINGS.promptsFolder,
 			promptExecutionHistory: (() => {
 				if (!Array.isArray(rawSettings.promptExecutionHistory)) {
 					return DEFAULT_SETTINGS.promptExecutionHistory;
@@ -1425,9 +1459,9 @@ export default class AgentClientPlugin extends Plugin {
 						r !== null &&
 						typeof r === "object" &&
 						typeof (r as Record<string, unknown>).id === "string" &&
-						typeof (r as Record<string, unknown>).promptId ===
+						typeof (r as Record<string, unknown>).filePath ===
 							"string" &&
-						typeof (r as Record<string, unknown>).promptName ===
+						typeof (r as Record<string, unknown>).title ===
 							"string" &&
 						typeof (r as Record<string, unknown>).executedAt ===
 							"string" &&

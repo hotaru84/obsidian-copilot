@@ -154,15 +154,11 @@ export interface SettingsContext {
  * Check if a permission request is completed (approved or cancelled).
  * Completed requests should not be overwritten by new permission requests.
  */
-function isPermissionRequestCompleted(
-	permissionRequest?:
-		| {
-				requestId: string;
-				selectedOptionId?: string;
-				isCancelled?: boolean;
-		  }
-		| undefined,
-): boolean {
+function isPermissionRequestCompleted(permissionRequest?: {
+	requestId: string;
+	selectedOptionId?: string;
+	isCancelled?: boolean;
+}): boolean {
 	if (!permissionRequest) return false;
 	return (
 		permissionRequest.selectedOptionId !== undefined ||

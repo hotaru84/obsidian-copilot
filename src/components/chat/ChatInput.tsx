@@ -4,7 +4,6 @@ import { setIcon, Notice, Menu } from "obsidian";
 
 import type AgentClientPlugin from "../../plugin";
 import type { IChatViewHost } from "./types";
-import type { NoteMetadata } from "../../domain/ports/vault-access.port";
 import type {
 	SlashCommand,
 	SessionModeState,

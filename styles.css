@@ -2098,6 +2098,10 @@ If your plugin does not need CSS, delete this file.
    Custom Prompts / Scheduler Settings
    ───────────────────────────────────────────────────── */
 
+.agent-client-custom-prompt-item {
+	cursor: pointer;
+}
+
 .agent-client-custom-prompt-item .setting-item-description {
 	font-size: 12px;
 	color: var(--text-muted);

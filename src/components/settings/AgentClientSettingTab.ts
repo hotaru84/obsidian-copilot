@@ -5,6 +5,7 @@ import {
 	PluginSettingTab,
 	Setting,
 	Platform,
+	TFile,
 } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import type { AgentEnvVar, ChatViewLocation } from "../../plugin";
@@ -15,13 +16,10 @@ import {
 	parseChatFontSize,
 } from "../../shared/display-settings";
 import type {
-	CustomPrompt,
+	PromptFileMeta,
 	TimeWindow,
 } from "../../domain/models/scheduled-prompt";
-import {
-	isLegacyPrompt,
-	isTimeWindowPrompt,
-} from "../../domain/models/scheduled-prompt";
+import { SAMPLE_PROMPT_TEMPLATE } from "../../shared/frontmatter-utils";
 
 /**
  * Helper functions for formatting custom prompt schedules
@@ -29,26 +27,6 @@ import {
 
 /** Days of week labels (index matches Date.getDay()) */
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-/**
- * Format time windows for display.
- */
-function formatTimeWindows(windows: TimeWindow[]): string {
-	if (!windows || windows.length === 0) return "";
-	return windows.map((w) => `${w.startTime}-${w.endTime}`).join(", ");
-}
-
-/**
- * Format days of week for display.
- */
-function formatDaysOfWeek(days: number[] | undefined): string {
-	if (!days || days.length === 0) return "Every day";
-	if (days.length === 7) return "Every day";
-	return days
-		.sort()
-		.map((d) => DAY_LABELS[d])
-		.join(", ");
-}
 
 /**
  * Convert a HH:MM regex match to total minutes.
@@ -664,6 +642,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Configure custom prompts")
 			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				"Manage scheduled prompts, time windows, and execution history.",
 			)
 			.addButton((btn) =>
@@ -738,15 +717,20 @@ export class AgentClientSettingTab extends PluginSettingTab {
 }
 
 /**
- * Standalone modal for managing custom prompts.
+ * Standalone modal for managing custom prompts loaded from a vault folder.
  *
- * Provides the full custom-prompts UI (pause toggle, prompt list, add form,
- * and execution history) as an independent screen that can be opened:
- *  - from the main Settings tab ("Custom prompts → Open")
- *  - from the scheduler status bar menu ("Open custom prompts settings")
+ * Each .md file in the configured prompts folder is treated as a prompt.
+ * Scheduling metadata (time windows, days, enabled flag) lives in the file's
+ * YAML front-matter; the body text is sent to the agent.
+ *
+ * Can be opened from:
+ *  - main Settings tab ("Custom prompts → Open")
+ *  - scheduler status bar menu ("Open custom prompts settings")
  */
 export class CustomPromptsModal extends Modal {
 	private plugin: AgentClientPlugin;
+	/** filePath of the currently expanded prompt row (null = all collapsed) */
+	private expandedFilePath: string | null = null;
 
 	constructor(app: App, plugin: AgentClientPlugin) {
 		super(app);
@@ -755,16 +739,45 @@ export class CustomPromptsModal extends Modal {
 
 	onOpen(): void {
 		this.titleEl.setText("Custom prompts");
-		this.renderContent();
+		void this.renderContent();
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
 	}
 
-	renderContent(): void {
+	async renderContent(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
+
+		// ── Folder settings ───────────────────────────────────────────────────
+		new Setting(contentEl).setName("Prompts folder").setHeading();
+
+		new Setting(contentEl)
+			.setName("Folder path")
+			.setDesc(
+				"Vault-relative path to the folder that contains prompt .md files.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Prompts")
+					.setValue(this.plugin.settings.promptsFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.promptsFolder =
+							value.trim() || "Prompts";
+						await this.plugin.saveSettings();
+					}),
+			)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Create sample prompt")
+					.setTooltip(
+						"Generate a sample .md prompt file in the folder",
+					)
+					.onClick(() => {
+						void this.createSamplePrompt();
+					}),
+			);
 
 		// ── Pause toggle ──────────────────────────────────────────────────────
 		new Setting(contentEl)
@@ -787,265 +800,21 @@ export class CustomPromptsModal extends Modal {
 					}),
 			);
 
-		// ── Existing prompts ──────────────────────────────────────────────────
-		const prompts = this.plugin.settings.customPrompts;
+		// ── Prompt file list ──────────────────────────────────────────────────
+		new Setting(contentEl).setName("Prompt files").setHeading();
+
+		const prompts = await this.plugin.loadPromptsFromFolder();
 
 		if (prompts.length === 0) {
 			contentEl.createEl("p", {
-				text: "No custom prompts yet. Add one below.",
+				text: `No .md files found in "${this.plugin.settings.promptsFolder}". Use "Create sample prompt" to get started.`,
 				cls: "agent-client-settings-empty-hint",
 			});
 		} else {
-			for (const prompt of prompts) {
-				let desc: string;
-				if (isLegacyPrompt(prompt)) {
-					desc =
-						prompt.intervalMinutes! > 0
-							? `⚠️ Legacy: Every ${prompt.intervalMinutes} min (migration needed)`
-							: "Manual only";
-				} else if (isTimeWindowPrompt(prompt)) {
-					const timeStr = formatTimeWindows(prompt.timeWindows!);
-					const daysStr = formatDaysOfWeek(prompt.daysOfWeek);
-					desc = `${timeStr} (${daysStr})`;
-				} else {
-					desc = "Manual only";
-				}
-				desc += ` · ${prompt.content.slice(0, 60)}${prompt.content.length > 60 ? "…" : ""}`;
-
-				const promptSetting = new Setting(contentEl)
-					.setName(prompt.name)
-					.setDesc(desc)
-					.addToggle((toggle) =>
-						toggle
-							.setValue(prompt.enabled)
-							.onChange(async (value) => {
-								prompt.enabled = value;
-								this.plugin.updateSchedulerStatusBar();
-								await this.plugin.saveSettings();
-							}),
-					)
-					.addButton((btn) =>
-						btn
-							.setIcon("play")
-							.setTooltip("Run now")
-							.onClick(() => {
-								void this.plugin.scheduledPromptRunner.runNow(
-									prompt.id,
-								);
-							}),
-					)
-					.addButton((btn) =>
-						btn
-							.setIcon("pencil")
-							.setTooltip("Edit")
-							.onClick(() => {
-								this.openEditModal(prompt);
-							}),
-					)
-					.addButton((btn) =>
-						btn
-							.setIcon("trash")
-							.setTooltip("Delete")
-							.onClick(async () => {
-								this.plugin.settings.customPrompts =
-									this.plugin.settings.customPrompts.filter(
-										(p) => p.id !== prompt.id,
-									);
-								this.plugin.updateSchedulerStatusBar();
-								await this.plugin.saveSettings();
-								this.renderContent();
-							}),
-					);
-				promptSetting.settingEl.addClass(
-					"agent-client-custom-prompt-item",
-				);
+			for (const { meta } of prompts) {
+				this.renderPromptRow(contentEl, meta);
 			}
 		}
-
-		// ── Add new prompt form ───────────────────────────────────────────────
-		new Setting(contentEl).setName("Add custom prompt").setHeading();
-
-		let newName = "";
-		new Setting(contentEl)
-			.setName("Name")
-			.setDesc("A short label for this prompt.")
-			.addText((text) =>
-				text.setPlaceholder("Daily summary").onChange((value) => {
-					newName = value.trim();
-				}),
-			);
-
-		let newContent = "";
-		new Setting(contentEl)
-			.setName("Prompt text")
-			.setDesc("The prompt text to send to the agent.")
-			.addTextArea((area) => {
-				area.setPlaceholder(
-					"Summarise my recent notes and suggest next steps.",
-				).onChange((value) => {
-					newContent = value;
-				});
-				area.inputEl.rows = 4;
-			});
-
-		const newTimeWindows: TimeWindow[] = [];
-		const timeWindowsContainer = contentEl.createDiv({
-			cls: "agent-client-time-windows",
-		});
-
-		const renderTimeWindows = () => {
-			timeWindowsContainer.empty();
-			new Setting(timeWindowsContainer)
-				.setName("Time windows")
-				.setDesc(
-					"Specify when this prompt can be executed. Leave empty for manual-only.",
-				);
-			if (newTimeWindows.length === 0) {
-				timeWindowsContainer.createEl("p", {
-					text: "No time windows yet. Add one below.",
-					cls: "agent-client-settings-empty-hint",
-				});
-			} else {
-				for (let i = 0; i < newTimeWindows.length; i++) {
-					const tw = newTimeWindows[i];
-					new Setting(timeWindowsContainer)
-						.setName(`Window ${i + 1}`)
-						.addText((text) => {
-							text.setValue(tw.startTime)
-								.setPlaceholder("08:00")
-								.onChange((value) => {
-									tw.startTime = value;
-								});
-							text.inputEl.type = "time";
-							text.inputEl.addClass("agent-client-time-input");
-						})
-						.addText((text) => {
-							text.setValue(tw.endTime)
-								.setPlaceholder("10:00")
-								.onChange((value) => {
-									tw.endTime = value;
-								});
-							text.inputEl.type = "time";
-							text.inputEl.addClass("agent-client-time-input");
-						})
-						.addButton((btn) =>
-							btn
-								.setIcon("trash")
-								.setTooltip("Remove")
-								.onClick(() => {
-									newTimeWindows.splice(i, 1);
-									renderTimeWindows();
-								}),
-						);
-				}
-			}
-			new Setting(timeWindowsContainer).addButton((btn) =>
-				btn.setButtonText("Add time window").onClick(() => {
-					newTimeWindows.push({
-						startTime: "08:00",
-						endTime: "10:00",
-					});
-					renderTimeWindows();
-				}),
-			);
-		};
-		renderTimeWindows();
-
-		const newDaysOfWeek: number[] = [];
-		const daysSetting = new Setting(contentEl)
-			.setName("Days of week")
-			.setDesc(
-				"Select days when the prompt should run. Leave empty for every day.",
-			)
-			.setClass("agent-client-days-of-week");
-		const daysContainer = daysSetting.settingEl.createDiv({
-			cls: "agent-client-days-checkboxes",
-		});
-		for (let day = 0; day < 7; day++) {
-			const dayLabel = DAY_LABELS[day];
-			const checkboxWrapper = daysContainer.createDiv({
-				cls: "agent-client-day-checkbox",
-			});
-			const checkbox = checkboxWrapper.createEl("input", {
-				type: "checkbox",
-			});
-			checkbox.id = `new-prompt-day-${day}`;
-			checkbox.addEventListener("change", () => {
-				if (checkbox.checked) {
-					if (!newDaysOfWeek.includes(day)) newDaysOfWeek.push(day);
-				} else {
-					const idx = newDaysOfWeek.indexOf(day);
-					if (idx >= 0) newDaysOfWeek.splice(idx, 1);
-				}
-			});
-			checkboxWrapper.createEl("label", {
-				text: dayLabel,
-				attr: { for: `new-prompt-day-${day}` },
-			});
-		}
-
-		let newEnabled = true;
-		new Setting(contentEl)
-			.setName("Enable on creation")
-			.addToggle((toggle) =>
-				toggle.setValue(true).onChange((value) => {
-					newEnabled = value;
-				}),
-			)
-			.addButton((btn) =>
-				btn
-					.setButtonText("Add prompt")
-					.setCta()
-					.onClick(async () => {
-						if (!newName) {
-							new Notice("Please enter a name for the prompt.");
-							return;
-						}
-						if (!newContent.trim()) {
-							new Notice("Please enter the prompt text.");
-							return;
-						}
-						for (const tw of newTimeWindows) {
-							const sm = /^(\d{1,2}):(\d{2})$/.exec(tw.startTime);
-							const em = /^(\d{1,2}):(\d{2})$/.exec(tw.endTime);
-							if (!sm || !em) {
-								new Notice(
-									"Invalid time format. Use HH:MM (e.g., 08:00).",
-								);
-								return;
-							}
-							if (
-								timeMatchToMinutes(sm) >= timeMatchToMinutes(em)
-							) {
-								new Notice(
-									"Start time must be before end time.",
-								);
-								return;
-							}
-						}
-						this.plugin.settings.customPrompts.push({
-							id: crypto.randomUUID(),
-							name: newName,
-							content: newContent.trim(),
-							enabled: newEnabled,
-							timeWindows:
-								newTimeWindows.length > 0
-									? [...newTimeWindows]
-									: undefined,
-							daysOfWeek:
-								newDaysOfWeek.length > 0 &&
-								newDaysOfWeek.length < 7
-									? [...newDaysOfWeek]
-									: undefined,
-						});
-						if (!this.plugin.settings.schedulerPaused) {
-							this.plugin.scheduledPromptRunner.resume();
-						}
-						this.plugin.updateSchedulerStatusBar();
-						await this.plugin.saveSettings();
-						this.renderContent();
-					}),
-			);
 
 		// ── Execution history ─────────────────────────────────────────────────
 		const history = this.plugin.settings.promptExecutionHistory;
@@ -1062,7 +831,7 @@ export class CustomPromptsModal extends Modal {
 					cls: "agent-client-prompt-history-row",
 				});
 				row.createSpan({
-					text: `${statusIcon} ${record.promptName}`,
+					text: `${statusIcon} ${record.title}`,
 					cls: "agent-client-prompt-history-name",
 				});
 				row.createSpan({
@@ -1080,55 +849,103 @@ export class CustomPromptsModal extends Modal {
 				btn.setButtonText("Clear history").onClick(async () => {
 					this.plugin.settings.promptExecutionHistory = [];
 					await this.plugin.saveSettings();
-					this.renderContent();
+					void this.renderContent();
 				}),
 			);
 		}
 	}
 
-	private openEditModal(prompt: CustomPrompt): void {
-		const modal = new Modal(this.app);
-		modal.titleEl.setText("Edit custom prompt");
+	// ──────────────────────────────────────────────────────────────────────────
+	// Prompt row rendering
+	// ──────────────────────────────────────────────────────────────────────────
 
-		let editedName = prompt.name;
-		let editedContent = prompt.content;
-		let editedEnabled = prompt.enabled;
-		const editedTimeWindows: TimeWindow[] = (prompt.timeWindows ?? []).map(
-			(tw) => ({ ...tw }),
-		);
-		const editedDaysOfWeek: number[] = [...(prompt.daysOfWeek ?? [])];
+	private renderPromptRow(
+		container: HTMLElement,
+		meta: PromptFileMeta,
+	): void {
+		const isExpanded = this.expandedFilePath === meta.filePath;
 
-		new Setting(modal.contentEl)
-			.setName("Name")
-			.setDesc("A short label for this prompt.")
-			.addText((text) =>
-				text.setValue(editedName).onChange((value) => {
-					editedName = value.trim();
-				}),
+		// ── Summary row ──────────────────────────────────────────────────────
+		const rowSetting = new Setting(container)
+			.setName(meta.title)
+			.setDesc(meta.description ?? "")
+			.addButton((btn) =>
+				btn
+					.setIcon("play")
+					.setTooltip("Run now")
+					.onClick(() => {
+						void this.plugin.scheduledPromptRunner.runNow(
+							meta.filePath,
+						);
+					}),
+			)
+			.addButton((btn) =>
+				btn
+					.setIcon("pencil")
+					.setTooltip("Open in editor")
+					.onClick(() => {
+						this.openInEditor(meta.filePath);
+					}),
 			);
 
-		new Setting(modal.contentEl)
-			.setName("Prompt text")
-			.setDesc("The prompt text to send to the agent.")
-			.addTextArea((area) => {
-				area.setValue(editedContent).onChange((value) => {
-					editedContent = value;
-				});
-				area.inputEl.rows = 6;
-			});
+		rowSetting.settingEl.addClass("agent-client-custom-prompt-item");
+		rowSetting.settingEl.setAttribute("aria-expanded", String(isExpanded));
 
-		const twContainer = modal.contentEl.createDiv({
+		// Click on name or description to toggle expand
+		const toggle = () => {
+			this.expandedFilePath = isExpanded ? null : meta.filePath;
+			void this.renderContent();
+		};
+		rowSetting.nameEl.addEventListener("click", toggle);
+		rowSetting.descEl.addEventListener("click", toggle);
+
+		if (!isExpanded) return;
+
+		// ── Expanded inline form ─────────────────────────────────────────────
+		const formEl = container.createDiv({
+			cls: "agent-client-prompt-form",
+		});
+
+		let editedTitle = meta.title;
+		let editedDescription = meta.description ?? "";
+		let editedEnabled = meta.enabled;
+		const editedTimeWindows: TimeWindow[] = meta.timeWindows.map((tw) => ({
+			...tw,
+		}));
+		const editedDaysOfWeek: number[] = [...(meta.daysOfWeek ?? [])];
+
+		new Setting(formEl).setName("Title").addText((text) =>
+			text.setValue(editedTitle).onChange((v) => {
+				editedTitle = v.trim();
+			}),
+		);
+
+		new Setting(formEl).setName("Description").addText((text) =>
+			text.setValue(editedDescription).onChange((v) => {
+				editedDescription = v;
+			}),
+		);
+
+		new Setting(formEl).setName("Enabled").addToggle((toggle) =>
+			toggle.setValue(editedEnabled).onChange((v) => {
+				editedEnabled = v;
+			}),
+		);
+
+		// Time windows
+		const twContainer = formEl.createDiv({
 			cls: "agent-client-time-windows",
 		});
 		const renderTw = () => {
 			twContainer.empty();
 			new Setting(twContainer)
-				.setName("Time windows")
+				.setName("Time windows") // eslint-disable-line obsidianmd/ui/sentence-case
 				.setDesc(
-					"Specify when this prompt can be executed. Leave empty for manual-only.",
+					"When this prompt can run. Leave empty for manual-only.",
 				);
 			if (editedTimeWindows.length === 0) {
 				twContainer.createEl("p", {
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
 					text: "No time windows yet. Add one below.",
 					cls: "agent-client-settings-empty-hint",
 				});
@@ -1178,24 +995,24 @@ export class CustomPromptsModal extends Modal {
 		};
 		renderTw();
 
-		const editDaysSetting = new Setting(modal.contentEl)
+		// Days of week
+		const daysSetting = new Setting(formEl)
 			.setName("Days of week")
 			.setDesc(
 				"Select days when the prompt should run. Leave empty for every day.",
 			)
 			.setClass("agent-client-days-of-week");
-		const daysContainer = editDaysSetting.settingEl.createDiv({
+		const daysContainer = daysSetting.settingEl.createDiv({
 			cls: "agent-client-days-checkboxes",
 		});
+		const safeId = meta.filePath.replace(/[^a-zA-Z0-9]/g, "_");
 		for (let day = 0; day < 7; day++) {
-			const checkboxWrapper = daysContainer.createDiv({
+			const wrapper = daysContainer.createDiv({
 				cls: "agent-client-day-checkbox",
 			});
-			const checkbox = checkboxWrapper.createEl("input", {
-				type: "checkbox",
-			});
+			const checkbox = wrapper.createEl("input", { type: "checkbox" });
+			checkbox.id = `edit-day-${safeId}-${day}`;
 			checkbox.checked = editedDaysOfWeek.includes(day);
-			checkbox.id = `edit-day-${prompt.id}-${day}`;
 			checkbox.addEventListener("change", () => {
 				if (checkbox.checked) {
 					if (!editedDaysOfWeek.includes(day))
@@ -1205,37 +1022,26 @@ export class CustomPromptsModal extends Modal {
 					if (idx >= 0) editedDaysOfWeek.splice(idx, 1);
 				}
 			});
-			checkboxWrapper.createEl("label", {
+			wrapper.createEl("label", {
 				text: DAY_LABELS[day],
-				attr: { for: `edit-day-${prompt.id}-${day}` },
+				attr: { for: checkbox.id },
 			});
 		}
 
-		new Setting(modal.contentEl).setName("Enable").addToggle((toggle) =>
-			toggle.setValue(editedEnabled).onChange((value) => {
-				editedEnabled = value;
-			}),
-		);
-
-		new Setting(modal.contentEl)
+		// Save / Cancel
+		new Setting(formEl)
 			.addButton((btn) =>
 				btn
 					.setButtonText("Save")
 					.setCta()
 					.onClick(async () => {
-						if (!editedName) {
-							new Notice("Please enter a name for the prompt.");
-							return;
-						}
-						if (!editedContent.trim()) {
-							new Notice("Please enter the prompt text.");
-							return;
-						}
+						// Validate time windows
 						for (const tw of editedTimeWindows) {
 							const sm = /^(\d{1,2}):(\d{2})$/.exec(tw.startTime);
 							const em = /^(\d{1,2}):(\d{2})$/.exec(tw.endTime);
 							if (!sm || !em) {
 								new Notice(
+									// eslint-disable-next-line obsidianmd/ui/sentence-case
 									"Invalid time format. Use HH:MM (e.g., 08:00).",
 								);
 								return;
@@ -1249,34 +1055,95 @@ export class CustomPromptsModal extends Modal {
 								return;
 							}
 						}
-						prompt.name = editedName;
-						prompt.content = editedContent.trim();
-						prompt.enabled = editedEnabled;
-						prompt.timeWindows =
-							editedTimeWindows.length > 0
-								? [...editedTimeWindows]
-								: undefined;
-						prompt.daysOfWeek =
-							editedDaysOfWeek.length > 0 &&
-							editedDaysOfWeek.length < 7
-								? [...editedDaysOfWeek]
-								: undefined;
-						prompt.intervalMinutes = undefined;
-						if (!this.plugin.settings.schedulerPaused) {
-							this.plugin.scheduledPromptRunner.resume();
+						// Write back to the file's YAML front-matter
+						const file =
+							this.plugin.app.vault.getAbstractFileByPath(
+								meta.filePath,
+							);
+						if (!(file instanceof TFile)) {
+							new Notice(
+								`[Agent Client] File not found: ${meta.filePath}`,
+							);
+							return;
 						}
+						await this.plugin.app.fileManager.processFrontMatter(
+							file,
+							(fm: Record<string, unknown>) => {
+								fm.title = editedTitle || meta.title;
+								fm.description =
+									editedDescription.trim() || undefined;
+								fm.enabled = editedEnabled;
+								fm.timeWindows =
+									editedTimeWindows.length > 0
+										? editedTimeWindows.map((tw) => ({
+												...tw,
+											}))
+										: undefined;
+								fm.daysOfWeek =
+									editedDaysOfWeek.length > 0 &&
+									editedDaysOfWeek.length < 7
+										? [...editedDaysOfWeek].sort(
+												(a, b) => a - b,
+											)
+										: undefined;
+							},
+						);
 						this.plugin.updateSchedulerStatusBar();
-						await this.plugin.saveSettings();
-						modal.close();
-						this.renderContent();
+						this.expandedFilePath = null;
+						void this.renderContent();
 					}),
 			)
 			.addButton((btn) =>
 				btn.setButtonText("Cancel").onClick(() => {
-					modal.close();
+					this.expandedFilePath = null;
+					void this.renderContent();
 				}),
 			);
+	}
 
-		modal.open();
+	// ──────────────────────────────────────────────────────────────────────────
+	// Helpers
+	// ──────────────────────────────────────────────────────────────────────────
+
+	private openInEditor(filePath: string): void {
+		const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
+		if (!(file instanceof TFile)) {
+			new Notice(`[Agent Client] File not found: ${filePath}`);
+			return;
+		}
+		void this.plugin.app.workspace.openLinkText(filePath, "", false);
+		this.close();
+	}
+
+	private async createSamplePrompt(): Promise<void> {
+		const folderPath = this.plugin.settings.promptsFolder || "Prompts";
+
+		// Ensure the folder exists
+		const existingFolder =
+			this.plugin.app.vault.getAbstractFileByPath(folderPath);
+		if (!existingFolder) {
+			try {
+				await this.plugin.app.vault.createFolder(folderPath);
+			} catch {
+				// created concurrently – ignore
+			}
+		}
+
+		// Generate a unique filename
+		const baseName = "Daily Note Summary";
+		let filePath = `${folderPath}/${baseName}.md`;
+		let counter = 1;
+		while (this.plugin.app.vault.getAbstractFileByPath(filePath)) {
+			filePath = `${folderPath}/${baseName} ${counter}.md`;
+			counter++;
+		}
+
+		const file = await this.plugin.app.vault.create(
+			filePath,
+			SAMPLE_PROMPT_TEMPLATE,
+		);
+		new Notice(`[Agent Client] Created: ${filePath}`);
+		void this.plugin.app.workspace.openLinkText(file.path, "", false);
+		this.close();
 	}
 }

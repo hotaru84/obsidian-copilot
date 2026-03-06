@@ -124,4 +124,28 @@ export interface IVaultAccess {
 	 * @returns Promise resolving to array of all folder metadata
 	 */
 	listFolders(): Promise<FolderMetadata[]>;
+
+	/**
+	 * List all markdown notes in a specific folder (non-recursive).
+	 *
+	 * @param folderPath - Vault-relative path to the folder
+	 * @returns Promise resolving to array of note metadata for .md files in the folder,
+	 *          or an empty array if the folder does not exist
+	 */
+	listNotesInFolder(folderPath: string): Promise<NoteMetadata[]>;
+
+	/**
+	 * Update the YAML frontmatter of a note using Obsidian's processFrontMatter API.
+	 *
+	 * The updater function receives the current frontmatter object (mutable) and
+	 * should mutate it in place.  Obsidian will write the changes back to the file.
+	 *
+	 * @param filePath - Vault-relative path to the note
+	 * @param updater  - Callback that mutates the frontmatter object
+	 * @throws Error if the file does not exist or cannot be written
+	 */
+	updateNoteFrontmatter(
+		filePath: string,
+		updater: (frontmatter: Record<string, unknown>) => void,
+	): Promise<void>;
 }

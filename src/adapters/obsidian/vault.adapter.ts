@@ -325,6 +325,46 @@ export class ObsidianVaultAdapter implements IVaultAccess {
 	}
 
 	/**
+	 * List all markdown notes in a specific folder (non-recursive).
+	 *
+	 * @param folderPath - Vault-relative path to the folder
+	 * @returns Promise resolving to NoteMetadata[] for .md files,
+	 *          or empty array if the folder does not exist
+	 */
+	listNotesInFolder(folderPath: string): Promise<NoteMetadata[]> {
+		const folder = this.plugin.app.vault.getFolderByPath(folderPath);
+		if (!folder) return Promise.resolve([]);
+
+		const notes: NoteMetadata[] = [];
+		for (const child of folder.children) {
+			if (child instanceof TFile && child.extension === "md") {
+				notes.push(this.convertToMetadata(child));
+			}
+		}
+		return Promise.resolve(notes);
+	}
+
+	/**
+	 * Update the YAML frontmatter of a note via Obsidian's processFrontMatter API.
+	 *
+	 * @param filePath - Vault-relative path to the note
+	 * @param updater  - Callback that receives and mutates the frontmatter object
+	 */
+	async updateNoteFrontmatter(
+		filePath: string,
+		updater: (frontmatter: Record<string, unknown>) => void,
+	): Promise<void> {
+		const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
+		if (!(file instanceof TFile)) {
+			throw new Error(`File not found: ${filePath}`);
+		}
+		await this.plugin.app.fileManager.processFrontMatter(
+			file,
+			(fm: Record<string, unknown>) => updater(fm),
+		);
+	}
+
+	/**
 	 * Search for folders matching a query.
 	 *
 	 * Uses fuzzy search against folder names and paths.
