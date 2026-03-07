@@ -133,6 +133,8 @@ export interface ChatInputProps {
 	onRestartAgent?: () => void;
 	/** Callback for opening plugin settings */
 	onOpenSettings?: () => void;
+	/** Callback for opening custom prompts modal */
+	onOpenCustomPrompts?: () => void;
 	/** Callback for closing window (floating view only) */
 	onCloseWindow?: () => void;
 }
@@ -180,6 +182,7 @@ export function ChatInput({
 	onSwitchAgent,
 	onRestartAgent,
 	onOpenSettings,
+	onOpenCustomPrompts,
 	onCloseWindow,
 	agentId,
 	// Controlled component props
@@ -873,6 +876,8 @@ export function ChatInput({
 	onRestartAgentRef.current = onRestartAgent;
 	const onOpenSettingsRef = useRef(onOpenSettings);
 	onOpenSettingsRef.current = onOpenSettings;
+	const onOpenCustomPromptsRef = useRef(onOpenCustomPrompts);
+	onOpenCustomPromptsRef.current = onOpenCustomPrompts;
 	const onCloseWindowRef = useRef(onCloseWindow);
 	onCloseWindowRef.current = onCloseWindow;
 
@@ -961,6 +966,17 @@ export function ChatInput({
 			});
 
 			menu.addSeparator();
+
+			// Custom prompts
+			menu.addItem((item) => {
+				item.setTitle("Custom prompts")
+					.setIcon("calendar-clock")
+					.onClick(() => {
+						if (onOpenCustomPromptsRef.current) {
+							onOpenCustomPromptsRef.current();
+						}
+					});
+			});
 
 			// Plugin settings
 			menu.addItem((item) => {

@@ -13,6 +13,7 @@ import type { ChatInputState } from "../../domain/models/chat-input-state";
 // Component imports
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
+import { CustomPromptsModal } from "../settings/AgentClientSettingTab";
 // Utility imports
 import { getLogger, Logger } from "../../shared/logger";
 
@@ -204,6 +205,10 @@ function ChatComponent({
 		const appWithSettings = plugin.app as unknown as AppWithSettings;
 		appWithSettings.setting.open();
 		appWithSettings.setting.openTabById(plugin.manifest.id);
+	}, [plugin]);
+
+	const handleOpenCustomPrompts = useCallback(() => {
+		new CustomPromptsModal(plugin.app, plugin).open();
 	}, [plugin]);
 
 	// ============================================================
@@ -580,6 +585,7 @@ function ChatComponent({
 				}
 				onRestartAgent={() => void handleRestartAgent()}
 				onOpenSettings={handleOpenSettings}
+				onOpenCustomPrompts={handleOpenCustomPrompts}
 			/>
 		</div>
 	);
