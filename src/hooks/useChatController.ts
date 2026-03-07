@@ -10,6 +10,11 @@ import { ConfirmDeleteModal } from "../components/chat/ConfirmDeleteModal";
 import { NoteMentionService } from "../adapters/obsidian/mention-service";
 import { getLogger, Logger } from "../shared/logger";
 import { ChatExporter } from "../shared/chat-exporter";
+import { extractConversationTitle } from "../shared/conversation-title";
+import {
+	notifyWindowsChatEvent,
+	type ChatNotificationMode,
+} from "../shared/windows-notification";
 
 // Adapter imports
 import { ObsidianVaultAdapter } from "../adapters/obsidian/vault.adapter";
@@ -37,6 +42,36 @@ import type { ImagePromptContent } from "../domain/models/prompt-content";
 interface AgentInfo {
 	id: string;
 	displayName: string;
+}
+
+function hasAssistantResponseInLatestTurn(
+	messages: ReturnType<typeof useChat>["messages"],
+): boolean {
+	let sawLatestUserMessage = false;
+
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+		if (message.role === "user") {
+			sawLatestUserMessage = true;
+			break;
+		}
+	}
+
+	if (!sawLatestUserMessage) {
+		return false;
+	}
+
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+		if (message.role === "user") {
+			return false;
+		}
+		if (message.role === "assistant") {
+			return message.content.length > 0;
+		}
+	}
+
+	return false;
 }
 
 export interface UseChatControllerOptions {
@@ -724,6 +759,11 @@ export function useChatController(
 	// Effects - Save Session Messages on Turn End
 	// ============================================================
 	const prevIsSendingRef = useRef<boolean>(false);
+	const notifiedPermissionRequestIdsRef = useRef<Set<string>>(new Set());
+
+	useEffect(() => {
+		notifiedPermissionRequestIdsRef.current.clear();
+	}, [session.sessionId]);
 
 	useEffect(() => {
 		const wasSending = prevIsSendingRef.current;
@@ -740,8 +780,53 @@ export function useChatController(
 			logger.log(
 				`[useChatController] Session messages saved: ${session.sessionId}`,
 			);
+
+			if (hasAssistantResponseInLatestTurn(messages)) {
+				notifyWindowsChatEvent({
+					mode: settings.windowsNotificationMode as ChatNotificationMode,
+					eventType: "response-complete",
+					conversationTitle: extractConversationTitle(messages),
+					logger,
+				});
+			}
 		}
-	}, [isSending, session.sessionId, messages, sessionHistory, logger]);
+	}, [
+		isSending,
+		session.sessionId,
+		messages,
+		sessionHistory,
+		settings.windowsNotificationMode,
+		logger,
+	]);
+
+	useEffect(() => {
+		const activePermission = permission.activePermission;
+		if (!activePermission) {
+			return;
+		}
+
+		if (
+			notifiedPermissionRequestIdsRef.current.has(
+				activePermission.requestId,
+			)
+		) {
+			return;
+		}
+
+		notifiedPermissionRequestIdsRef.current.add(activePermission.requestId);
+
+		notifyWindowsChatEvent({
+			mode: settings.windowsNotificationMode as ChatNotificationMode,
+			eventType: "permission-request",
+			conversationTitle: extractConversationTitle(messages),
+			logger,
+		});
+	}, [
+		permission.activePermission,
+		settings.windowsNotificationMode,
+		messages,
+		logger,
+	]);
 
 	// ============================================================
 	// Effects - Auto-mention Active Note Tracking

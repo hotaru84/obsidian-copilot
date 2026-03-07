@@ -97,6 +97,14 @@ export type ChatViewLocation =
 	| "editor-tab"
 	| "editor-split";
 
+/**
+ * Windows notification behavior configuration.
+ * - 'disabled': never send notifications
+ * - 'always': send regardless of window focus
+ * - 'background-only': send only when Obsidian is not focused
+ */
+export type WindowsNotificationMode = "disabled" | "always" | "background-only";
+
 export interface AgentClientPluginSettings {
 	copilot: CopilotAgentSettings;
 	autoAllowPermissions: boolean;
@@ -117,6 +125,7 @@ export interface AgentClientPluginSettings {
 	// WSL settings (Windows only)
 	windowsWslMode: boolean;
 	windowsWslDistribution?: string;
+	windowsNotificationMode: WindowsNotificationMode;
 	// Input behavior
 	sendMessageShortcut: SendMessageShortcut;
 	// View settings
@@ -171,6 +180,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	},
 	windowsWslMode: false,
 	windowsWslDistribution: undefined,
+	windowsNotificationMode: "disabled",
 	sendMessageShortcut: "enter",
 	chatViewLocation: "right-tab",
 	displaySettings: {
@@ -1331,6 +1341,12 @@ export default class AgentClientPlugin extends Plugin {
 				typeof rawSettings.windowsWslDistribution === "string"
 					? rawSettings.windowsWslDistribution
 					: DEFAULT_SETTINGS.windowsWslDistribution,
+			windowsNotificationMode:
+				rawSettings.windowsNotificationMode === "disabled" ||
+				rawSettings.windowsNotificationMode === "always" ||
+				rawSettings.windowsNotificationMode === "background-only"
+					? rawSettings.windowsNotificationMode
+					: DEFAULT_SETTINGS.windowsNotificationMode,
 			sendMessageShortcut:
 				rawSettings.sendMessageShortcut === "enter" ||
 				rawSettings.sendMessageShortcut === "cmd-enter"

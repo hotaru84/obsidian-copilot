@@ -1,6 +1,10 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
-import type { AgentEnvVar, ChatViewLocation } from "../../plugin";
+import type {
+	AgentEnvVar,
+	ChatViewLocation,
+	WindowsNotificationMode,
+} from "../../plugin";
 import { normalizeEnvVars } from "../../shared/settings-utils";
 import {
 	CHAT_FONT_SIZE_MAX,
@@ -436,6 +440,27 @@ export class AgentClientSettingTab extends PluginSettingTab {
 							}),
 					);
 			}
+
+			new Setting(containerEl)
+				.setName("Chat notifications")
+				.setDesc(
+					"Notify on response completion and permission requests. In background-only mode, notifications are sent only when the Obsidian window is not focused.",
+				)
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOption("disabled", "Disabled")
+						.addOption("always", "Always")
+						.addOption(
+							"background-only",
+							"Only when app is in background",
+						)
+						.setValue(this.plugin.settings.windowsNotificationMode)
+						.onChange(async (value) => {
+							this.plugin.settings.windowsNotificationMode =
+								value as WindowsNotificationMode;
+							await this.plugin.saveSettings();
+						}),
+				);
 		}
 	}
 
