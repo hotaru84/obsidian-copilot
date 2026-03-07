@@ -50,8 +50,74 @@ export class CustomPromptsModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		// ── Folder settings ───────────────────────────────────────────────────
-		new Setting(contentEl).setName("Prompts folder").setHeading();
+		// ── Header with pause and create buttons ──────────────────────────────
+		const headerContainer = contentEl.createDiv({
+			cls: "agent-client-prompts-header-container",
+		});
+
+		// Pause scheduler button (left)
+		const pauseButtonEl = headerContainer.createEl("button", {
+			cls: "clickable-icon",
+		});
+
+		const updatePauseIcon = () => {
+			pauseButtonEl.empty();
+			const isPaused = this.plugin.settings.schedulerPaused;
+			setIcon(pauseButtonEl, isPaused ? "play" : "pause");
+			pauseButtonEl.setAttribute(
+				"aria-label",
+				isPaused
+					? "Resume all scheduled prompts"
+					: "Pause all scheduled prompts",
+			);
+			pauseButtonEl.setAttribute(
+				"title",
+				isPaused
+					? "Resume all scheduled prompts"
+					: "Pause all scheduled prompts",
+			);
+		};
+		updatePauseIcon();
+
+		pauseButtonEl.addEventListener("click", async () => {
+			this.plugin.settings.schedulerPaused =
+				!this.plugin.settings.schedulerPaused;
+			if (this.plugin.settings.schedulerPaused) {
+				this.plugin.scheduledPromptRunner.pause();
+			} else {
+				this.plugin.scheduledPromptRunner.resume();
+			}
+			updatePauseIcon();
+			this.plugin.updateSchedulerStatusBar();
+			await this.plugin.saveSettings();
+		});
+
+		// Create new prompt button (right)
+		const createButtonEl = headerContainer.createEl("button", {
+			cls: "clickable-icon",
+			attr: {
+				"aria-label": "Create new custom prompt",
+				title: "Create new custom prompt",
+			},
+		});
+		setIcon(createButtonEl, "plus");
+		createButtonEl.addEventListener("click", () => {
+			void this.createSamplePrompt();
+		});
+
+		// ── Prompts list ─────────────────────────────────────────────────────
+		const prompts = await this.plugin.loadPromptsFromFolder();
+
+		if (prompts.length === 0) {
+			contentEl.createEl("p", {
+				text: `No .md files found in "${this.plugin.settings.promptsFolder}". Use "Create sample prompt" to get started.`,
+				cls: "agent-client-settings-empty-hint",
+			});
+		} else {
+			for (const { meta } of prompts) {
+				this.renderPromptRow(contentEl, meta);
+			}
+		}
 
 		new Setting(contentEl)
 			.setName("Folder path")
@@ -67,54 +133,7 @@ export class CustomPromptsModal extends Modal {
 							value.trim() || "Prompts";
 						await this.plugin.saveSettings();
 					}),
-			)
-			.addButton((btn) =>
-				btn
-					.setButtonText("Create sample prompt")
-					.setTooltip(
-						"Generate a sample .md prompt file in the folder",
-					)
-					.onClick(() => {
-						void this.createSamplePrompt();
-					}),
 			);
-
-		// ── Pause toggle ──────────────────────────────────────────────────────
-		new Setting(contentEl)
-			.setName("Pause scheduler")
-			.setDesc(
-				"Pause all scheduled prompt executions without removing the prompts.",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.schedulerPaused)
-					.onChange(async (value) => {
-						this.plugin.settings.schedulerPaused = value;
-						if (value) {
-							this.plugin.scheduledPromptRunner.pause();
-						} else {
-							this.plugin.scheduledPromptRunner.resume();
-						}
-						this.plugin.updateSchedulerStatusBar();
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		// ── Prompt file list ──────────────────────────────────────────────────
-		new Setting(contentEl).setName("Prompt files").setHeading();
-
-		const prompts = await this.plugin.loadPromptsFromFolder();
-
-		if (prompts.length === 0) {
-			contentEl.createEl("p", {
-				text: `No .md files found in "${this.plugin.settings.promptsFolder}". Use "Create sample prompt" to get started.`,
-				cls: "agent-client-settings-empty-hint",
-			});
-		} else {
-			for (const { meta } of prompts) {
-				this.renderPromptRow(contentEl, meta);
-			}
-		}
 
 		// ── Execution history ─────────────────────────────────────────────────
 		const history = this.plugin.settings.promptExecutionHistory;
@@ -182,45 +201,39 @@ export class CustomPromptsModal extends Modal {
 		});
 		setIcon(chevronEl, "chevron-right");
 
-		// Title + description
+		// Title + description + schedule indicator
 		const infoEl = headerEl.createDiv({
 			cls: "agent-client-accordion-info",
 		});
-		infoEl.createEl("div", {
+
+		const titleContainerEl = infoEl.createDiv({
+			cls: "agent-client-accordion-title-container",
+		});
+
+		// Schedule indicator icon
+		const hasSchedule =
+			meta.timeWindows.length > 0 ||
+			(meta.daysOfWeek && meta.daysOfWeek.length > 0) ||
+			meta.scheduledDate;
+
+		if (hasSchedule) {
+			const scheduleIconEl = titleContainerEl.createDiv({
+				cls: "agent-client-schedule-indicator",
+			});
+			setIcon(scheduleIconEl, "calendar");
+		}
+
+		titleContainerEl.createEl("div", {
 			text: meta.title,
 			cls: "agent-client-accordion-title",
 		});
+
 		if (meta.description) {
 			infoEl.createEl("div", {
 				text: meta.description,
 				cls: "agent-client-accordion-desc",
 			});
 		}
-
-		// Action buttons (stop propagation so they don't toggle the accordion)
-		const actionsEl = headerEl.createDiv({
-			cls: "agent-client-accordion-actions",
-		});
-
-		const runBtn = actionsEl.createEl("button", {
-			cls: "clickable-icon",
-			attr: { "aria-label": "Run now" },
-		});
-		setIcon(runBtn, "play");
-		runBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			void this.plugin.scheduledPromptRunner.runNow(meta.filePath);
-		});
-
-		const editBtn = actionsEl.createEl("button", {
-			cls: "clickable-icon",
-			attr: { "aria-label": "Open in editor" },
-		});
-		setIcon(editBtn, "pencil");
-		editBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.openInEditor(meta.filePath);
-		});
 
 		// Toggle open/close by flipping CSS class (no full re-render)
 		headerEl.addEventListener("click", () => {
@@ -241,13 +254,36 @@ export class CustomPromptsModal extends Modal {
 		const bodyEl = accordionEl.createDiv({
 			cls: "agent-client-accordion-body",
 		});
+
+		// Action buttons (visible only when expanded)
+		const bodyActionsEl = bodyEl.createDiv({
+			cls: "agent-client-accordion-body-actions",
+		});
+
+		const runBtn = bodyActionsEl.createEl("button", {
+			cls: "clickable-icon",
+			attr: { "aria-label": "Run now" },
+		});
+		setIcon(runBtn, "play");
+		runBtn.addEventListener("click", () => {
+			void this.plugin.scheduledPromptRunner.runNow(meta.filePath);
+		});
+
+		const editBtn = bodyActionsEl.createEl("button", {
+			cls: "clickable-icon",
+			attr: { "aria-label": "Open in editor" },
+		});
+		setIcon(editBtn, "pencil");
+		editBtn.addEventListener("click", () => {
+			this.openInEditor(meta.filePath);
+		});
+
 		const formEl = bodyEl.createDiv({
 			cls: "agent-client-prompt-form",
 		});
 
 		let editedTitle = meta.title;
 		let editedDescription = meta.description ?? "";
-		let editedEnabled = meta.enabled;
 		const editedTimeWindows: TimeWindow[] = meta.timeWindows.map((tw) => ({
 			...tw,
 		}));
@@ -263,12 +299,6 @@ export class CustomPromptsModal extends Modal {
 		new Setting(formEl).setName("Description").addText((text) =>
 			text.setValue(editedDescription).onChange((v) => {
 				editedDescription = v;
-			}),
-		);
-
-		new Setting(formEl).setName("Enabled").addToggle((toggle) =>
-			toggle.setValue(editedEnabled).onChange((v) => {
-				editedEnabled = v;
 			}),
 		);
 
@@ -441,12 +471,10 @@ export class CustomPromptsModal extends Modal {
 								fm.title = editedTitle || meta.title;
 								fm.description =
 									editedDescription.trim() || undefined;
-								fm.enabled = editedEnabled;
+								fm.enabled = editedTimeWindows.length > 0;
 								fm.timeWindows =
 									editedTimeWindows.length > 0
-										? editedTimeWindows.map((tw) => ({
-												...tw,
-											}))
+										? editedTimeWindows
 										: undefined;
 								fm.daysOfWeek =
 									editedDaysOfWeek.length > 0 &&
