@@ -19,10 +19,8 @@ import {
 	createSettingsStore,
 	type SettingsStore,
 } from "./adapters/obsidian/settings-store.adapter";
-import {
-	AgentClientSettingTab,
-	CustomPromptsModal,
-} from "./components/settings/AgentClientSettingTab";
+import { AgentClientSettingTab } from "./components/settings/AgentClientSettingTab";
+import { CustomPromptsModal } from "./components/settings/CustomPromptsModal";
 import { AcpAdapter } from "./adapters/acp/acp.adapter";
 import { sanitizeArgs, normalizeEnvVars } from "./shared/settings-utils";
 import { parseChatFontSize } from "./shared/display-settings";

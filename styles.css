@@ -2098,13 +2098,77 @@ If your plugin does not need CSS, delete this file.
    Custom Prompts / Scheduler Settings
    ───────────────────────────────────────────────────── */
 
-.agent-client-custom-prompt-item {
-	cursor: pointer;
+.agent-client-accordion-item {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	margin-bottom: 8px;
+	overflow: hidden;
 }
 
-.agent-client-custom-prompt-item .setting-item-description {
+.agent-client-accordion-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+	user-select: none;
+}
+
+.agent-client-accordion-header:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.agent-client-accordion-chevron {
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	transition: transform 0.2s ease;
+}
+
+.agent-client-accordion-item.is-open .agent-client-accordion-chevron {
+	transform: rotate(90deg);
+}
+
+.agent-client-accordion-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.agent-client-accordion-title {
+	font-weight: var(--font-semibold);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.agent-client-accordion-desc {
 	font-size: 12px;
 	color: var(--text-muted);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.agent-client-accordion-actions {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.agent-client-accordion-body {
+	max-height: 0;
+	overflow: hidden;
+	transition: max-height 0.25s ease;
+}
+
+.agent-client-accordion-item.is-open .agent-client-accordion-body {
+	max-height: 2000px;
+}
+
+.agent-client-prompt-form {
+	padding: 12px 16px 16px;
+	border-top: 1px solid var(--background-modifier-border);
 }
 
 .agent-client-settings-empty-hint {

@@ -13,7 +13,7 @@ import type { ChatInputState } from "../../domain/models/chat-input-state";
 // Component imports
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
-import { CustomPromptsModal } from "../settings/AgentClientSettingTab";
+import { CustomPromptsModal } from "../settings/CustomPromptsModal";
 // Utility imports
 import { getLogger, Logger } from "../../shared/logger";
 
