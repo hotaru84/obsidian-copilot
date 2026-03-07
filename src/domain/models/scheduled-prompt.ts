@@ -33,6 +33,12 @@ enabled: boolean;
 timeWindows: TimeWindow[];
 /** Days of week when the prompt can run (0=Sun, 6=Sat; empty = every day) */
 daysOfWeek?: number[];
+/**
+ * Specific date on which the prompt should run (front-matter `scheduledDate`, YYYY-MM-DD).
+ * When set, the prompt only executes on that calendar date (one-time scheduling).
+ * The timeWindows filter still applies within that day.
+ */
+scheduledDate?: string;
 /** Vault-relative path to the source file – injected at runtime */
 filePath: string;
 }
