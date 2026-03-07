@@ -646,8 +646,9 @@ export class ChatView extends ItemView implements IChatViewContainer {
 
 	/**
 	 * Update the tab title shown in the workspace tab header.
-	 * Truncates to 50 characters and triggers a layout-change to
-	 * make Obsidian re-read the display text.
+	 * Truncates to 50 characters, then calls the internal `leaf.updateHeader()`
+	 * which causes Obsidian to re-read `getDisplayText()` and re-render the tab
+	 * header reactively — no direct DOM manipulation needed.
 	 */
 	setTabTitle(title: string): void {
 		const trimmed = title.split("\n")[0].trim();
@@ -656,13 +657,21 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		const newText = truncated || "Copilot chat";
 		if (this.displayText === newText) return;
 		this.displayText = newText;
-		this.app.workspace.trigger("layout-change");
+
+		// `updateHeader()` is Obsidian's internal method that calls getDisplayText()
+		// and getIcon() to re-render the tab header. Fall back to layout-change if absent.
+		const leaf = this.leaf as unknown as Record<string, unknown>;
+		if ("updateHeader" in leaf && typeof leaf.updateHeader === "function") {
+			(leaf.updateHeader as () => void)();
+		} else {
+			this.app.workspace.trigger("layout-change");
+		}
 	}
 
 	/**
 	 * Show or hide a running-animation on the tab icon.
-	 * When running, the icon switches to "loader-circle" with a CSS spin;
-	 * when stopped, it reverts to the default icon.
+	 * When running, the bot icon pulses with a CSS animation and turns accent-colored;
+	 * when stopped, it reverts to the default appearance.
 	 *
 	 * Note: `tabHeaderIconEl` is an Obsidian internal DOM property exposed on
 	 * WorkspaceLeaf but not typed in the public API. We check for its presence
@@ -671,16 +680,15 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	setTabRunning(running: boolean): void {
 		const leaf = this.leaf as unknown as Record<string, unknown>;
 		const iconEl =
-			"tabHeaderIconEl" in leaf && leaf.tabHeaderIconEl instanceof HTMLElement
+			"tabHeaderIconEl" in leaf &&
+			leaf.tabHeaderIconEl instanceof HTMLElement
 				? leaf.tabHeaderIconEl
 				: null;
 		if (!iconEl) return;
 		if (running) {
-			setIcon(iconEl, "loader-circle");
 			iconEl.addClass("agent-client-tab-running");
 		} else {
 			iconEl.removeClass("agent-client-tab-running");
-			setIcon(iconEl, this.getIcon());
 		}
 	}
 
