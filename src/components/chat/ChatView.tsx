@@ -147,13 +147,17 @@ function ChatComponent({
 		const firstUserMsg = messages.find((m) => m.role === "user");
 		if (firstUserMsg) {
 			const textContent = firstUserMsg.content.find(
-				(c): c is Extract<MessageContent, { type: "text" }> =>
-					c.type === "text",
+				(
+					c,
+				): c is Extract<
+					MessageContent,
+					{ type: "text" | "text_with_context" }
+				> => c.type === "text" || c.type === "text_with_context",
 			);
 			if (textContent) {
-				// Strip [[mention]] annotations and use the first line
+				// Strip mention annotations (@folder[[name]], @[[name]], [[name]]) and use the first line
 				const text = textContent.text
-					.replace(/\[\[.*?\]\]/g, "")
+					.replace(/@folder\[\[.*?\]\]|@?\[\[.*?\]\]/g, "")
 					.trim();
 				view.setTabTitle(text || "Copilot chat");
 			}

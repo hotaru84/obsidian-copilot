@@ -118,6 +118,12 @@ history: PromptExecutionRecord[],
 if (!meta.enabled) return false;
 if (meta.timeWindows.length === 0) return false;
 if (isExecutedToday(meta.filePath, history)) return false;
+
+// If a specific date is set, only allow execution on that exact date.
+if (meta.scheduledDate) {
+if (getLocalDateString(now) !== meta.scheduledDate) return false;
+}
+
 if (meta.daysOfWeek && meta.daysOfWeek.length > 0) {
 if (!meta.daysOfWeek.includes(now.getDay())) return false;
 }
@@ -209,6 +215,12 @@ if (!meta.enabled || meta.timeWindows.length === 0) continue;
 for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
 const candidateDay = new Date(now);
 candidateDay.setDate(now.getDate() + dayOffset);
+
+// If a specific date is set, only consider that exact date.
+if (meta.scheduledDate) {
+if (getLocalDateString(candidateDay) !== meta.scheduledDate)
+continue;
+}
 
 if (meta.daysOfWeek && meta.daysOfWeek.length > 0) {
 if (!meta.daysOfWeek.includes(candidateDay.getDay()))

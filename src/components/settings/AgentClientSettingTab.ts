@@ -913,6 +913,7 @@ export class CustomPromptsModal extends Modal {
 			...tw,
 		}));
 		const editedDaysOfWeek: number[] = [...(meta.daysOfWeek ?? [])];
+		let editedScheduledDate: string = meta.scheduledDate ?? "";
 
 		new Setting(formEl).setName("Title").addText((text) =>
 			text.setValue(editedTitle).onChange((v) => {
@@ -1028,6 +1029,24 @@ export class CustomPromptsModal extends Modal {
 			});
 		}
 
+		// Scheduled date (one-time execution)
+		new Setting(formEl)
+			.setName("Scheduled date")
+			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				"Run only on this specific date (YYYY-MM-DD). Leave empty for recurring execution.",
+			)
+			.addText((text) => {
+				text.setValue(editedScheduledDate)
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
+					.setPlaceholder("YYYY-MM-DD")
+					.onChange((v) => {
+						editedScheduledDate = v.trim();
+					});
+				text.inputEl.type = "date";
+				text.inputEl.addClass("agent-client-date-input");
+			});
+
 		// Save / Cancel
 		new Setting(formEl)
 			.addButton((btn) =>
@@ -1054,6 +1073,17 @@ export class CustomPromptsModal extends Modal {
 								);
 								return;
 							}
+						}
+						// Validate scheduled date if provided
+						if (
+							editedScheduledDate &&
+							!/^\d{4}-\d{2}-\d{2}$/.test(editedScheduledDate)
+						) {
+							new Notice(
+								// eslint-disable-next-line obsidianmd/ui/sentence-case
+								"Invalid date format. Use YYYY-MM-DD (e.g., 2024-03-15).",
+							);
+							return;
 						}
 						// Write back to the file's YAML front-matter
 						const file =
@@ -1086,6 +1116,8 @@ export class CustomPromptsModal extends Modal {
 												(a, b) => a - b,
 											)
 										: undefined;
+								fm.scheduledDate =
+									editedScheduledDate || undefined;
 							},
 						);
 						this.plugin.updateSchedulerStatusBar();

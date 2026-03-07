@@ -33,8 +33,9 @@ const enabled = fm.enabled === false ? false : true;
 
 const timeWindows = parseTimeWindows(fm.timeWindows);
 const daysOfWeek = parseDaysOfWeek(fm.daysOfWeek);
+const scheduledDate = parseScheduledDate(fm.scheduledDate);
 
-return { title, description, enabled, timeWindows, daysOfWeek, filePath };
+return { title, description, enabled, timeWindows, daysOfWeek, scheduledDate, filePath };
 }
 
 function parseTimeWindows(raw: unknown): TimeWindow[] {
@@ -63,6 +64,21 @@ const nums = raw
 .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
 if (nums.length === 0) return undefined;
 return nums;
+}
+
+/**
+ * Parse a YYYY-MM-DD date string from front-matter.
+ * Returns the string as-is if valid, or undefined otherwise.
+ */
+function parseScheduledDate(raw: unknown): string | undefined {
+if (typeof raw !== "string") return undefined;
+const trimmed = raw.trim();
+if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined;
+// Validate it is an actual calendar date (guards against e.g. 2024-02-30)
+const date = new Date(trimmed);
+if (isNaN(date.getTime())) return undefined;
+if (date.toISOString().slice(0, 10) !== trimmed) return undefined;
+return trimmed;
 }
 
 /**
