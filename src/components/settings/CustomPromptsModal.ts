@@ -79,17 +79,19 @@ export class CustomPromptsModal extends Modal {
 		};
 		updatePauseIcon();
 
-		pauseButtonEl.addEventListener("click", async () => {
-			this.plugin.settings.schedulerPaused =
-				!this.plugin.settings.schedulerPaused;
-			if (this.plugin.settings.schedulerPaused) {
-				this.plugin.scheduledPromptRunner.pause();
-			} else {
-				this.plugin.scheduledPromptRunner.resume();
-			}
-			updatePauseIcon();
-			this.plugin.updateSchedulerStatusBar();
-			await this.plugin.saveSettings();
+		pauseButtonEl.addEventListener("click", () => {
+			void (async () => {
+				this.plugin.settings.schedulerPaused =
+					!this.plugin.settings.schedulerPaused;
+				if (this.plugin.settings.schedulerPaused) {
+					this.plugin.scheduledPromptRunner.pause();
+				} else {
+					this.plugin.scheduledPromptRunner.resume();
+				}
+				updatePauseIcon();
+				this.plugin.updateSchedulerStatusBar();
+				await this.plugin.saveSettings();
+			})();
 		});
 
 		// Create new prompt button (right)

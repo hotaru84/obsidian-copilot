@@ -464,8 +464,12 @@ export class ScheduledPromptRunner {
 			if (trigger === "scheduled" && view) {
 				try {
 					await view.close();
-				} catch {
+				} catch (error) {
 					// Best-effort cleanup; view lifecycle errors should not block history.
+					console.warn(
+						`[ScheduledPromptRunner] Failed to close scheduled view for "${meta.title}" (${meta.filePath})`,
+						error,
+					);
 				}
 			}
 			record.completedAt = new Date().toISOString();

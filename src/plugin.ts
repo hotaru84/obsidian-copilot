@@ -619,9 +619,15 @@ export default class AgentClientPlugin extends Plugin {
 			);
 		}
 
+		// One final check avoids racing with a registration that happened
+		// right after the last wait iteration completed.
+		const registeredAfterTimeout = this.viewRegistry.get(viewId);
+		if (registeredAfterTimeout) {
+			return registeredAfterTimeout;
+		}
+
 		this.scheduledPromptViewIds.delete(viewId);
-		await this.removeAdapter(viewId);
-		leaf.detach();
+		await chatView.close();
 		return null;
 	}
 

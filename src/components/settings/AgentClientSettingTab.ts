@@ -105,7 +105,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 	}
 
 	private renderCoreSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName("Core settings").setHeading();
+		new Setting(containerEl).setName("Core").setHeading();
 
 		new Setting(containerEl)
 			.setName("Node.js path")

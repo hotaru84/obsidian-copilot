@@ -609,6 +609,10 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	private root: Root | null = null;
 	private plugin: AgentClientPlugin;
 	private logger: Logger;
+	/** Prevent recursive/double close lifecycle execution. */
+	private isClosing = false;
+	/** Tracks whether the view close lifecycle has fully completed once. */
+	private isClosed = false;
 	/** Unique identifier for this view instance (for multi-session support) */
 	readonly viewId: string;
 	/** View type for IChatViewContainer */
@@ -845,10 +849,26 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	}
 
 	/**
-	 * Close this sidebar chat view by detaching its leaf.
+	 * Close this sidebar chat view.
+	 *
+	 * IMPORTANT: Call this API instead of detaching the leaf directly from callers.
+	 * This method is idempotent to avoid recursive close/detach loops.
 	 */
 	async close(): Promise<void> {
-		this.leaf.detach();
+		if (this.isClosing || this.isClosed) {
+			return;
+		}
+
+		this.isClosing = true;
+		try {
+			this.leaf.detach();
+		} catch (error) {
+			this.logger.warn(
+				`[ChatView] close() detach failed for view ${this.viewId}`,
+				error,
+			);
+			this.isClosing = false;
+		}
 	}
 
 	// ============================================================
@@ -931,18 +951,34 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	}
 
 	async onClose(): Promise<void> {
+		if (this.isClosed) {
+			return;
+		}
+
+		if (this.isClosing) {
+			this.logger.log(
+				`[ChatView] onClose() while already closing: ${this.viewId}`,
+			);
+		}
+
+		this.isClosing = true;
 		this.logger.log("[ChatView] onClose() called");
 
-		// Unregister from plugin's view registry
-		this.plugin.viewRegistry.unregister(this.viewId);
+		try {
+			// Unregister from plugin's view registry
+			this.plugin.viewRegistry.unregister(this.viewId);
 
-		// Cleanup is handled by React useEffect cleanup in ChatComponent
-		// which performs auto-export and closeSession
-		if (this.root) {
-			this.root.unmount();
-			this.root = null;
+			// Cleanup is handled by React useEffect cleanup in ChatComponent
+			// which performs auto-export and closeSession
+			if (this.root) {
+				this.root.unmount();
+				this.root = null;
+			}
+			// Remove adapter for this view (disconnect process)
+			await this.plugin.removeAdapter(this.viewId);
+		} finally {
+			this.isClosed = true;
+			this.isClosing = false;
 		}
-		// Remove adapter for this view (disconnect process)
-		await this.plugin.removeAdapter(this.viewId);
 	}
 }
