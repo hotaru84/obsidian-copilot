@@ -1282,10 +1282,6 @@ export default class AgentClientPlugin extends Plugin {
 				?.getCachedPrompts()
 				.filter((e) => e.meta.enabled && e.meta.timeWindows.length > 0)
 				.length ?? 0;
-		if (enabledCount === 0) {
-			el.title = "";
-			return;
-		}
 
 		const now = new Date();
 		const running =
@@ -1295,6 +1291,15 @@ export default class AgentClientPlugin extends Plugin {
 
 		const iconEl = el.createSpan({ cls: "agent-client-scheduler-icon" });
 		const textEl = el.createSpan({ cls: "agent-client-scheduler-label" });
+
+		// Show when no enabled schedules exist
+		if (enabledCount === 0) {
+			setIcon(iconEl, "timer");
+			iconEl.addClass("is-inactive");
+			textEl.textContent = "0";
+			el.title = "No scheduled prompts enabled. Click to configure.";
+			return;
+		}
 
 		if (running) {
 			const elapsedMs =
