@@ -193,6 +193,10 @@ export class FloatingViewContainer implements IChatViewContainer {
 		await this.callbacks?.cancelOperation();
 	}
 
+	async close(): Promise<void> {
+		this.unmount();
+	}
+
 	getContainerEl(): HTMLElement {
 		return this.containerEl;
 	}

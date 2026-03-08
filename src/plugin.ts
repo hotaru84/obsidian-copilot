@@ -28,6 +28,7 @@ import {
 	AgentEnvVar,
 	CopilotAgentSettings,
 } from "./domain/models/agent-config";
+import type { IChatViewContainer } from "./domain/ports/chat-view-container.port";
 import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
 import type {
@@ -151,6 +152,8 @@ export interface AgentClientPluginSettings {
 	// Scheduled / custom prompt settings
 	/** Vault-relative path to the folder containing prompt .md files */
 	promptsFolder: string;
+	/** Auto-allow permissions for scheduled execution chat tabs only */
+	autoAllowPermissionsForScheduledChats: boolean;
 	promptExecutionHistory: PromptExecutionRecord[];
 	schedulerPaused: boolean;
 }
@@ -198,6 +201,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	floatingWindowSize: { width: 400, height: 500 },
 	floatingButtonPosition: { right: 40, bottom: 30 },
 	promptsFolder: "Prompts",
+	autoAllowPermissionsForScheduledChats: true,
 	promptExecutionHistory: [],
 	schedulerPaused: false,
 };
@@ -224,6 +228,8 @@ export default class AgentClientPlugin extends Plugin {
 	scheduledPromptRunner!: ScheduledPromptRunner;
 	/** Status bar item for scheduler status */
 	private schedulerStatusBarItem: HTMLElement | null = null;
+	/** View IDs created for scheduled prompt execution tabs */
+	private scheduledPromptViewIds = new Set<string>();
 
 	async onload() {
 		await this.loadSettings();
@@ -351,7 +357,11 @@ export default class AgentClientPlugin extends Plugin {
 			onStateChange: () => {
 				this.updateSchedulerStatusBar();
 			},
-			getOrOpenView: async () => {
+			getOrOpenView: async (trigger) => {
+				if (trigger === "scheduled") {
+					return this.openScheduledPromptView();
+				}
+
 				// Prefer the focused view; fall back to any available view
 				const focused = this.viewRegistry.getFocused();
 				if (focused) return focused;
@@ -430,6 +440,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		// Clear legacy storage
 		this.floatingChatInstances.clear();
+		this.scheduledPromptViewIds.clear();
 	}
 
 	// ──────────────────────────────────────────────────────────────
@@ -485,6 +496,7 @@ export default class AgentClientPlugin extends Plugin {
 	 * Called when a ChatView is closed.
 	 */
 	async removeAdapter(viewId: string): Promise<void> {
+		this.scheduledPromptViewIds.delete(viewId);
 		const adapter = this._adapters.get(viewId);
 		if (adapter) {
 			try {
@@ -549,6 +561,68 @@ export default class AgentClientPlugin extends Plugin {
 			await workspace.revealLeaf(leaf);
 			this.focusTextarea(leaf);
 		}
+	}
+
+	/**
+	 * Open a dedicated sidebar chat tab for scheduled prompt execution.
+	 * The tab is created in the background (no reveal/focus).
+	 */
+	private async openScheduledPromptView(): Promise<IChatViewContainer | null> {
+		const { workspace } = this.app;
+
+		// Open new tab in background using Obsidian's native API
+		const leaf = workspace.getLeaf("tab");
+		if (!leaf) {
+			return null;
+		}
+
+		await leaf.setViewState({
+			type: VIEW_TYPE_CHAT,
+			active: false,
+			state: { initialAgentId: "copilot" },
+		});
+
+		// Restore focus to another leaf to keep the new tab in the background
+		// by finding a leaf that is not the new one and setting it as active
+		let leafToActivate: WorkspaceLeaf | null = null;
+		workspace.iterateAllLeaves((iterLeaf: WorkspaceLeaf) => {
+			if (leafToActivate === null && iterLeaf !== leaf) {
+				leafToActivate = iterLeaf;
+			}
+		});
+
+		if (leafToActivate) {
+			workspace.setActiveLeaf(leafToActivate);
+		}
+
+		const chatView = leaf.view;
+		if (!(chatView instanceof ChatView)) {
+			return null;
+		}
+
+		const viewId = chatView.viewId;
+		this.scheduledPromptViewIds.add(viewId);
+
+		const adapter = this.getOrCreateAdapter(viewId);
+		adapter.setAutoAllowPermissionsOverride(
+			this.settings.autoAllowPermissionsForScheduledChats,
+		);
+
+		for (let i = 0; i < MAX_VIEW_REGISTRATION_WAIT_SECONDS; i++) {
+			const registered = this.viewRegistry.get(viewId);
+			if (registered) {
+				return registered;
+			}
+
+			await new Promise<void>((resolve) =>
+				window.setTimeout(resolve, 1000),
+			);
+		}
+
+		this.scheduledPromptViewIds.delete(viewId);
+		await this.removeAdapter(viewId);
+		leaf.detach();
+		return null;
 	}
 
 	/**
@@ -1034,6 +1108,8 @@ export default class AgentClientPlugin extends Plugin {
 		const menu = new Menu();
 		const now = new Date();
 		const running = this.scheduledPromptRunner.getCurrentExecution();
+		const pendingCount =
+			this.scheduledPromptRunner.getPendingExecutionCount();
 		const next = this.scheduledPromptRunner.getNextScheduledExecution(now);
 		const todayHistory = this.getTodayPromptHistory();
 		const latestRecord = this.settings.promptExecutionHistory.at(-1);
@@ -1049,6 +1125,15 @@ export default class AgentClientPlugin extends Plugin {
 				item.setTitle(
 					`Running: ${running.title} (${formatDuration(elapsedMs)})`,
 				).setIsLabel(true);
+			});
+			if (pendingCount > 0) {
+				menu.addItem((item) => {
+					item.setTitle(`Queued: ${pendingCount}`).setIsLabel(true);
+				});
+			}
+		} else if (pendingCount > 0) {
+			menu.addItem((item) => {
+				item.setTitle(`Queued: ${pendingCount}`).setIsLabel(true);
 			});
 		} else if (this.scheduledPromptRunner.isPaused) {
 			menu.addItem((item) => {
@@ -1075,6 +1160,19 @@ export default class AgentClientPlugin extends Plugin {
 				item.setTitle(
 					`Last ${latestStatus}: ${latestRecord.title} at ${formatClock(finishedAt)}`,
 				).setIsLabel(true);
+			});
+		}
+
+		if (pendingCount > 0) {
+			menu.addItem((item) => {
+				item.setTitle("Clear queue")
+					.setIcon("x")
+					.onClick(() => {
+						this.scheduledPromptRunner.clearQueue();
+						new Notice(
+							`[Agent Client] Cleared ${pendingCount} queued prompt${pendingCount > 1 ? "s" : ""}`,
+						);
+					});
 			});
 		}
 
@@ -1192,6 +1290,8 @@ export default class AgentClientPlugin extends Plugin {
 		const now = new Date();
 		const running =
 			this.scheduledPromptRunner?.getCurrentExecution() ?? null;
+		const pendingCount =
+			this.scheduledPromptRunner?.getPendingExecutionCount() ?? 0;
 
 		const iconEl = el.createSpan({ cls: "agent-client-scheduler-icon" });
 		const textEl = el.createSpan({ cls: "agent-client-scheduler-label" });
@@ -1201,8 +1301,14 @@ export default class AgentClientPlugin extends Plugin {
 				now.getTime() - new Date(running.startedAt).getTime();
 			setIcon(iconEl, "loader-circle");
 			iconEl.addClass("is-running");
-			textEl.textContent = truncateText(running.title, 18);
-			el.title = `Running (${formatDuration(elapsedMs)}). Click for details.`;
+			textEl.textContent =
+				pendingCount > 0
+					? `${truncateText(running.title, 16)} +${pendingCount}`
+					: truncateText(running.title, 18);
+			el.title =
+				pendingCount > 0
+					? `Running (${formatDuration(elapsedMs)}), ${pendingCount} queued. Click for details.`
+					: `Running (${formatDuration(elapsedMs)}). Click for details.`;
 			return;
 		}
 
@@ -1464,6 +1570,11 @@ export default class AgentClientPlugin extends Plugin {
 				rawSettings.promptsFolder.trim().length > 0
 					? rawSettings.promptsFolder.trim()
 					: DEFAULT_SETTINGS.promptsFolder,
+			autoAllowPermissionsForScheduledChats:
+				typeof rawSettings.autoAllowPermissionsForScheduledChats ===
+				"boolean"
+					? rawSettings.autoAllowPermissionsForScheduledChats
+					: DEFAULT_SETTINGS.autoAllowPermissionsForScheduledChats,
 			promptExecutionHistory: (() => {
 				if (!Array.isArray(rawSettings.promptExecutionHistory)) {
 					return DEFAULT_SETTINGS.promptExecutionHistory;

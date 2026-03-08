@@ -637,6 +637,24 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Custom prompts").setHeading();
 
 		new Setting(containerEl)
+			.setName("Auto-allow permissions in scheduled chat tabs")
+			.setDesc(
+				"Automatically allow permission requests in background tabs created for scheduled prompt execution. ⚠️ use with caution - this gives scheduled runs full access to your system.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings
+							.autoAllowPermissionsForScheduledChats,
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.autoAllowPermissionsForScheduledChats =
+							value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
 			.setName("Scheduled prompts")
 			.setDesc(
 				// eslint-disable-next-line obsidianmd/ui/sentence-case

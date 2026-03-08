@@ -10,9 +10,9 @@
 
 import { Notice } from "obsidian";
 import type {
-PromptFileMeta,
-PromptExecutionRecord,
-TimeWindow,
+	PromptFileMeta,
+	PromptExecutionRecord,
+	TimeWindow,
 } from "../domain/models/scheduled-prompt";
 import type { IChatViewContainer } from "../domain/ports/chat-view-container.port";
 
@@ -20,38 +20,46 @@ import type { IChatViewContainer } from "../domain/ports/chat-view-container.por
 const MAX_HISTORY = 50;
 
 export interface SchedulerCallbacks {
-/**
- * Async callback that loads all prompts from the configured folder.
- * Called once per scheduler tick and for manual runs (if cache is empty).
- */
-getPromptsFromFolder: () => Promise<
-Array<{ meta: PromptFileMeta; body: string }>
->;
-/** Return the current execution history */
-getHistory: () => PromptExecutionRecord[];
-/** Called after each execution attempt to persist the record */
-onRecord: (record: PromptExecutionRecord) => void;
-/** Called when execution state changes (start/finish) */
-onStateChange?: () => void;
-/**
- * Return a chat view for sending, opening one if necessary.
- * Called once per execution; may open a new sidebar view when none is
- * registered.
- */
-getOrOpenView: () => Promise<IChatViewContainer | null>;
+	/**
+	 * Async callback that loads all prompts from the configured folder.
+	 * Called once per scheduler tick and for manual runs (if cache is empty).
+	 */
+	getPromptsFromFolder: () => Promise<
+		Array<{ meta: PromptFileMeta; body: string }>
+	>;
+	/** Return the current execution history */
+	getHistory: () => PromptExecutionRecord[];
+	/** Called after each execution attempt to persist the record */
+	onRecord: (record: PromptExecutionRecord) => void;
+	/** Called when execution state changes (start/finish) */
+	onStateChange?: () => void;
+	/**
+	 * Return a chat view for sending, opening one if necessary.
+	 * Called once per execution; may open a new sidebar view when none is
+	 * registered.
+	 */
+	getOrOpenView: (
+		trigger: "scheduled" | "manual",
+	) => Promise<IChatViewContainer | null>;
 }
 
 export interface CurrentExecutionInfo {
-filePath: string;
-title: string;
-startedAt: string;
-trigger: "scheduled" | "manual";
+	filePath: string;
+	title: string;
+	startedAt: string;
+	trigger: "scheduled" | "manual";
 }
 
 export interface NextScheduledExecutionInfo {
-filePath: string;
-title: string;
-runAt: string;
+	filePath: string;
+	title: string;
+	runAt: string;
+}
+
+interface QueueItem {
+	meta: PromptFileMeta;
+	body: string;
+	trigger: "scheduled" | "manual";
 }
 
 /** Maximum retry attempts while waiting for the session to become ready (1 attempt/s). */
@@ -62,72 +70,72 @@ const MAX_SESSION_INIT_RETRY_ATTEMPTS = 30;
 // ──────────────────────────────────────────────────────────────
 
 function parseTime(timeStr: string): { hours: number; minutes: number } | null {
-const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr);
-if (!match) return null;
-const hours = parseInt(match[1], 10);
-const minutes = parseInt(match[2], 10);
-if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-return { hours, minutes };
+	const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr);
+	if (!match) return null;
+	const hours = parseInt(match[1], 10);
+	const minutes = parseInt(match[2], 10);
+	if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+	return { hours, minutes };
 }
 
 function getLocalDateString(date: Date): string {
-const year = date.getFullYear();
-const month = String(date.getMonth() + 1).padStart(2, "0");
-const day = String(date.getDate()).padStart(2, "0");
-return `${year}-${month}-${day}`;
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
 }
 
 function isExecutedOnDate(
-filePath: string,
-date: Date,
-history: PromptExecutionRecord[],
+	filePath: string,
+	date: Date,
+	history: PromptExecutionRecord[],
 ): boolean {
-const target = getLocalDateString(date);
-return history.some((record) => {
-if (record.filePath !== filePath || !record.success) return false;
-return getLocalDateString(new Date(record.executedAt)) === target;
-});
+	const target = getLocalDateString(date);
+	return history.some((record) => {
+		if (record.filePath !== filePath || !record.success) return false;
+		return getLocalDateString(new Date(record.executedAt)) === target;
+	});
 }
 
 function isInTimeWindow(now: Date, window: TimeWindow): boolean {
-const start = parseTime(window.startTime);
-const end = parseTime(window.endTime);
-if (!start || !end) return false;
-const nowMinutes = now.getHours() * 60 + now.getMinutes();
-const startMinutes = start.hours * 60 + start.minutes;
-const endMinutes = end.hours * 60 + end.minutes;
-return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
+	const start = parseTime(window.startTime);
+	const end = parseTime(window.endTime);
+	if (!start || !end) return false;
+	const nowMinutes = now.getHours() * 60 + now.getMinutes();
+	const startMinutes = start.hours * 60 + start.minutes;
+	const endMinutes = end.hours * 60 + end.minutes;
+	return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
 }
 
 function isExecutedToday(
-filePath: string,
-history: PromptExecutionRecord[],
+	filePath: string,
+	history: PromptExecutionRecord[],
 ): boolean {
-const today = getLocalDateString(new Date());
-return history.some((record) => {
-if (record.filePath !== filePath || !record.success) return false;
-return getLocalDateString(new Date(record.executedAt)) === today;
-});
+	const today = getLocalDateString(new Date());
+	return history.some((record) => {
+		if (record.filePath !== filePath || !record.success) return false;
+		return getLocalDateString(new Date(record.executedAt)) === today;
+	});
 }
 
 function shouldRunPrompt(
-meta: PromptFileMeta,
-now: Date,
-history: PromptExecutionRecord[],
+	meta: PromptFileMeta,
+	now: Date,
+	history: PromptExecutionRecord[],
 ): boolean {
-if (!meta.enabled) return false;
-if (meta.timeWindows.length === 0) return false;
-if (isExecutedToday(meta.filePath, history)) return false;
+	if (!meta.enabled) return false;
+	if (meta.timeWindows.length === 0) return false;
+	if (isExecutedToday(meta.filePath, history)) return false;
 
-// If a specific date is set, only allow execution on that exact date.
-if (meta.scheduledDate) {
-if (getLocalDateString(now) !== meta.scheduledDate) return false;
-}
+	// If a specific date is set, only allow execution on that exact date.
+	if (meta.scheduledDate) {
+		if (getLocalDateString(now) !== meta.scheduledDate) return false;
+	}
 
-if (meta.daysOfWeek && meta.daysOfWeek.length > 0) {
-if (!meta.daysOfWeek.includes(now.getDay())) return false;
-}
-return meta.timeWindows.some((w) => isInTimeWindow(now, w));
+	if (meta.daysOfWeek && meta.daysOfWeek.length > 0) {
+		if (!meta.daysOfWeek.includes(now.getDay())) return false;
+	}
+	return meta.timeWindows.some((w) => isInTimeWindow(now, w));
 }
 
 /**
@@ -142,268 +150,336 @@ return meta.timeWindows.some((w) => isInTimeWindow(now, w));
  *   runner.runNow(filePath);     // manual one-shot execution
  */
 export class ScheduledPromptRunner {
-private intervalId: number | null = null;
-private _paused = false;
-private currentExecution: CurrentExecutionInfo | null = null;
-private readonly callbacks: SchedulerCallbacks;
+	private intervalId: number | null = null;
+	private _paused = false;
+	private currentExecution: CurrentExecutionInfo | null = null;
+	private readonly callbacks: SchedulerCallbacks;
+	private readonly executionQueue: QueueItem[] = [];
+	private readonly queuedScheduledFilePaths = new Set<string>();
+	private isExecuting = false;
 
-/** Cached prompt list from the last tick (used by getNextScheduledExecution) */
-private cachedPrompts: Array<{ meta: PromptFileMeta; body: string }> = [];
+	/** Cached prompt list from the last tick (used by getNextScheduledExecution) */
+	private cachedPrompts: Array<{ meta: PromptFileMeta; body: string }> = [];
 
-constructor(callbacks: SchedulerCallbacks) {
-this.callbacks = callbacks;
-}
+	constructor(callbacks: SchedulerCallbacks) {
+		this.callbacks = callbacks;
+	}
 
-// ──────────────────────────────────────────────────────────────
-// Lifecycle
-// ──────────────────────────────────────────────────────────────
+	// ──────────────────────────────────────────────────────────────
+	// Lifecycle
+	// ──────────────────────────────────────────────────────────────
 
-/** Start the 1-minute scheduler tick. Idempotent. */
-start(): void {
-if (this.intervalId !== null) return;
-this.intervalId = window.setInterval(() => void this.tick(), 60_000);
-}
+	/** Start the 1-minute scheduler tick. Idempotent. */
+	start(): void {
+		if (this.intervalId !== null) return;
+		this.intervalId = window.setInterval(() => void this.tick(), 60_000);
+	}
 
-/** Stop the scheduler tick permanently (call on plugin unload). */
-stop(): void {
-if (this.intervalId !== null) {
-window.clearInterval(this.intervalId);
-this.intervalId = null;
-}
-}
+	/** Stop the scheduler tick permanently (call on plugin unload). */
+	stop(): void {
+		if (this.intervalId !== null) {
+			window.clearInterval(this.intervalId);
+			this.intervalId = null;
+		}
+	}
 
-/** Suspend scheduled execution without stopping the tick. */
-pause(): void {
-this._paused = true;
-}
+	/** Suspend scheduled execution without stopping the tick. */
+	pause(): void {
+		this._paused = true;
+	}
 
-/** Resume suspended execution. */
-resume(): void {
-this._paused = false;
-}
+	/** Resume suspended execution. */
+	resume(): void {
+		this._paused = false;
+	}
 
-/** Whether the scheduler is actively executing prompts (running and not paused). */
-get isActive(): boolean {
-return this.intervalId !== null && !this._paused;
-}
+	/** Whether the scheduler is actively executing prompts (running and not paused). */
+	get isActive(): boolean {
+		return this.intervalId !== null && !this._paused;
+	}
 
-/** Whether execution has been suspended via pause(). */
-get isPaused(): boolean {
-return this._paused;
-}
+	/** Whether execution has been suspended via pause(). */
+	get isPaused(): boolean {
+		return this._paused;
+	}
 
-/** Currently running prompt execution, if any. */
-getCurrentExecution(): CurrentExecutionInfo | null {
-return this.currentExecution;
-}
+	/** Currently running prompt execution, if any. */
+	getCurrentExecution(): CurrentExecutionInfo | null {
+		return this.currentExecution;
+	}
 
-/** Returns the last cached prompts (populated after each tick). */
-getCachedPrompts(): Array<{ meta: PromptFileMeta; body: string }> {
-return this.cachedPrompts;
-}
+	/** Returns the last cached prompts (populated after each tick). */
+	getCachedPrompts(): Array<{ meta: PromptFileMeta; body: string }> {
+		return this.cachedPrompts;
+	}
 
-/** Estimate the next execution time among all enabled scheduled prompts (uses cache). */
-getNextScheduledExecution(
-now: Date = new Date(),
-): NextScheduledExecutionInfo | null {
-const history = this.callbacks.getHistory();
-let best: NextScheduledExecutionInfo | null = null;
+	/** Number of queued executions waiting behind the current run. */
+	getPendingExecutionCount(): number {
+		return this.executionQueue.length;
+	}
 
-for (const { meta } of this.cachedPrompts) {
-if (!meta.enabled || meta.timeWindows.length === 0) continue;
+	/**
+	 * Clear all pending executions from the queue.
+	 * Does not cancel the currently running execution.
+	 */
+	clearQueue(): void {
+		this.executionQueue.length = 0;
+		this.queuedScheduledFilePaths.clear();
+		this.callbacks.onStateChange?.();
+	}
 
-for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
-const candidateDay = new Date(now);
-candidateDay.setDate(now.getDate() + dayOffset);
+	/** Estimate the next execution time among all enabled scheduled prompts (uses cache). */
+	getNextScheduledExecution(
+		now: Date = new Date(),
+	): NextScheduledExecutionInfo | null {
+		const history = this.callbacks.getHistory();
+		let best: NextScheduledExecutionInfo | null = null;
 
-// If a specific date is set, only consider that exact date.
-if (meta.scheduledDate) {
-if (getLocalDateString(candidateDay) !== meta.scheduledDate)
-continue;
-}
+		for (const { meta } of this.cachedPrompts) {
+			if (!meta.enabled || meta.timeWindows.length === 0) continue;
 
-if (meta.daysOfWeek && meta.daysOfWeek.length > 0) {
-if (!meta.daysOfWeek.includes(candidateDay.getDay()))
-continue;
-}
+			for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
+				const candidateDay = new Date(now);
+				candidateDay.setDate(now.getDate() + dayOffset);
 
-if (isExecutedOnDate(meta.filePath, candidateDay, history))
-continue;
+				// If a specific date is set, only consider that exact date.
+				if (meta.scheduledDate) {
+					if (getLocalDateString(candidateDay) !== meta.scheduledDate)
+						continue;
+				}
 
-for (const window of meta.timeWindows) {
-const start = parseTime(window.startTime);
-const end = parseTime(window.endTime);
-if (!start || !end) continue;
+				if (meta.daysOfWeek && meta.daysOfWeek.length > 0) {
+					if (!meta.daysOfWeek.includes(candidateDay.getDay()))
+						continue;
+				}
 
-const candidate = new Date(candidateDay);
-candidate.setHours(start.hours, start.minutes, 0, 0);
+				if (isExecutedOnDate(meta.filePath, candidateDay, history))
+					continue;
 
-if (dayOffset === 0) {
-const nowMinutes =
-now.getHours() * 60 + now.getMinutes();
-const startMinutes = start.hours * 60 + start.minutes;
-const endMinutes = end.hours * 60 + end.minutes;
-if (
-nowMinutes >= startMinutes &&
-nowMinutes <= endMinutes
-) {
-candidate.setTime(now.getTime());
-}
-}
+				for (const window of meta.timeWindows) {
+					const start = parseTime(window.startTime);
+					const end = parseTime(window.endTime);
+					if (!start || !end) continue;
 
-if (candidate.getTime() < now.getTime()) continue;
+					const candidate = new Date(candidateDay);
+					candidate.setHours(start.hours, start.minutes, 0, 0);
 
-const next: NextScheduledExecutionInfo = {
-filePath: meta.filePath,
-title: meta.title,
-runAt: candidate.toISOString(),
-};
+					if (dayOffset === 0) {
+						const nowMinutes =
+							now.getHours() * 60 + now.getMinutes();
+						const startMinutes = start.hours * 60 + start.minutes;
+						const endMinutes = end.hours * 60 + end.minutes;
+						if (
+							nowMinutes >= startMinutes &&
+							nowMinutes <= endMinutes
+						) {
+							candidate.setTime(now.getTime());
+						}
+					}
 
-if (
-!best ||
-new Date(next.runAt).getTime() <
-new Date(best.runAt).getTime()
-) {
-best = next;
-}
-}
+					if (candidate.getTime() < now.getTime()) continue;
 
-if (best && dayOffset === 0) {
-if (new Date(best.runAt).getTime() === now.getTime())
-return best;
-}
-}
-}
+					const next: NextScheduledExecutionInfo = {
+						filePath: meta.filePath,
+						title: meta.title,
+						runAt: candidate.toISOString(),
+					};
 
-return best;
-}
+					if (
+						!best ||
+						new Date(next.runAt).getTime() <
+							new Date(best.runAt).getTime()
+					) {
+						best = next;
+					}
+				}
 
-// ──────────────────────────────────────────────────────────────
-// Manual Execution
-// ──────────────────────────────────────────────────────────────
+				if (best && dayOffset === 0) {
+					if (new Date(best.runAt).getTime() === now.getTime())
+						return best;
+				}
+			}
+		}
 
-/** Execute the prompt at the given vault path immediately, regardless of schedule. */
-async runNow(filePath: string): Promise<void> {
-// Try cached first, fall back to fresh load
-let entry = this.cachedPrompts.find(
-(p) => p.meta.filePath === filePath,
-);
-if (!entry) {
-const fresh = await this.callbacks.getPromptsFromFolder();
-this.cachedPrompts = fresh;
-entry = fresh.find((p) => p.meta.filePath === filePath);
-}
-if (!entry) {
-new Notice(`[Agent Client] Prompt file not found: ${filePath}`);
-return;
-}
-await this.executePrompt(entry.meta, entry.body, "manual");
-}
+		return best;
+	}
 
-// ──────────────────────────────────────────────────────────────
-// Internal
-// ──────────────────────────────────────────────────────────────
+	// ──────────────────────────────────────────────────────────────
+	// Manual Execution
+	// ──────────────────────────────────────────────────────────────
 
-private async tick(): Promise<void> {
-if (this._paused) return;
+	/** Execute the prompt at the given vault path immediately, regardless of schedule. */
+	async runNow(filePath: string): Promise<void> {
+		// Try cached first, fall back to fresh load
+		let entry = this.cachedPrompts.find(
+			(p) => p.meta.filePath === filePath,
+		);
+		if (!entry) {
+			const fresh = await this.callbacks.getPromptsFromFolder();
+			this.cachedPrompts = fresh;
+			entry = fresh.find((p) => p.meta.filePath === filePath);
+		}
+		if (!entry) {
+			new Notice(`[Agent Client] Prompt file not found: ${filePath}`);
+			return;
+		}
+		this.enqueueExecution(entry.meta, entry.body, "manual");
+		await this.processQueue();
+	}
 
-const prompts = await this.callbacks.getPromptsFromFolder();
-this.cachedPrompts = prompts;
+	// ──────────────────────────────────────────────────────────────
+	// Internal
+	// ──────────────────────────────────────────────────────────────
 
-const now = new Date();
-const history = this.callbacks.getHistory();
-const toRun = prompts.filter(({ meta }) =>
-shouldRunPrompt(meta, now, history),
-);
+	private async tick(): Promise<void> {
+		if (this._paused) return;
 
-for (const { meta, body } of toRun) {
-await this.executePrompt(meta, body, "scheduled");
-}
-}
+		const prompts = await this.callbacks.getPromptsFromFolder();
+		this.cachedPrompts = prompts;
 
-private async executePrompt(
-meta: PromptFileMeta,
-body: string,
-trigger: "scheduled" | "manual",
-): Promise<void> {
-const startedAtIso = new Date().toISOString();
-this.currentExecution = {
-filePath: meta.filePath,
-title: meta.title,
-startedAt: startedAtIso,
-trigger,
-};
-this.callbacks.onStateChange?.();
+		const now = new Date();
+		const history = this.callbacks.getHistory();
+		const toRun = prompts.filter(({ meta }) =>
+			shouldRunPrompt(meta, now, history),
+		);
 
-const record: PromptExecutionRecord = {
-id: crypto.randomUUID(),
-filePath: meta.filePath,
-title: meta.title,
-executedAt: startedAtIso,
-trigger,
-success: false,
-};
+		for (const { meta, body } of toRun) {
+			this.enqueueExecution(meta, body, "scheduled");
+		}
 
-try {
-const view = await this.callbacks.getOrOpenView();
+		await this.processQueue();
+	}
 
-if (!view) {
-record.error = "No chat view could be opened";
-new Notice(
-`[Agent Client] Scheduled prompt "${meta.title}": No chat view could be opened`,
-5000,
-);
-return;
-}
+	private enqueueExecution(
+		meta: PromptFileMeta,
+		body: string,
+		trigger: "scheduled" | "manual",
+	): void {
+		if (
+			trigger === "scheduled" &&
+			this.queuedScheduledFilePaths.has(meta.filePath)
+		) {
+			return;
+		}
 
-let sent = false;
-for (
-let attempt = 0;
-attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS;
-attempt++
-) {
-sent = await view.sendTextPrompt(body);
-if (sent) break;
-if (attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS - 1) {
-await new Promise<void>((resolve) =>
-window.setTimeout(resolve, 1000),
-);
-}
-}
+		this.executionQueue.push({ meta, body, trigger });
+		if (trigger === "scheduled") {
+			this.queuedScheduledFilePaths.add(meta.filePath);
+		}
+		this.callbacks.onStateChange?.();
+	}
 
-if (sent) {
-record.success = true;
-new Notice(
-`[Agent Client] Scheduled prompt "${meta.title}" executed`,
-3000,
-);
-} else {
-record.error = "Session not ready";
-new Notice(
-`[Agent Client] Scheduled prompt "${meta.title}": Session not ready`,
-5000,
-);
-}
-} catch (error) {
-record.error =
-error instanceof Error ? error.message : String(error);
-new Notice(
-`[Agent Client] Scheduled prompt "${meta.title}" failed: ${record.error}`,
-5000,
-);
-} finally {
-record.completedAt = new Date().toISOString();
-this.callbacks.onRecord(record);
-this.currentExecution = null;
-this.callbacks.onStateChange?.();
-}
-}
+	private async processQueue(): Promise<void> {
+		if (this.isExecuting) return;
+		this.isExecuting = true;
+
+		try {
+			while (this.executionQueue.length > 0) {
+				const item = this.executionQueue.shift();
+				if (!item) continue;
+
+				await this.executePrompt(item.meta, item.body, item.trigger);
+				if (item.trigger === "scheduled") {
+					this.queuedScheduledFilePaths.delete(item.meta.filePath);
+				}
+				this.callbacks.onStateChange?.();
+			}
+		} finally {
+			this.isExecuting = false;
+		}
+	}
+
+	private async executePrompt(
+		meta: PromptFileMeta,
+		body: string,
+		trigger: "scheduled" | "manual",
+	): Promise<void> {
+		const startedAtIso = new Date().toISOString();
+		this.currentExecution = {
+			filePath: meta.filePath,
+			title: meta.title,
+			startedAt: startedAtIso,
+			trigger,
+		};
+		this.callbacks.onStateChange?.();
+
+		const record: PromptExecutionRecord = {
+			id: crypto.randomUUID(),
+			filePath: meta.filePath,
+			title: meta.title,
+			executedAt: startedAtIso,
+			trigger,
+			success: false,
+		};
+		let view: IChatViewContainer | null = null;
+
+		try {
+			view = await this.callbacks.getOrOpenView(trigger);
+
+			if (!view) {
+				record.error = "No chat view could be opened";
+				new Notice(
+					`[Agent Client] Scheduled prompt "${meta.title}": No chat view could be opened`,
+					5000,
+				);
+				return;
+			}
+
+			let sent = false;
+			for (
+				let attempt = 0;
+				attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS;
+				attempt++
+			) {
+				sent = await view.sendTextPrompt(body);
+				if (sent) break;
+				if (attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS - 1) {
+					await new Promise<void>((resolve) =>
+						window.setTimeout(resolve, 1000),
+					);
+				}
+			}
+
+			if (sent) {
+				record.success = true;
+				new Notice(
+					`[Agent Client] Scheduled prompt "${meta.title}" executed`,
+					3000,
+				);
+			} else {
+				record.error = "Session not ready";
+				new Notice(
+					`[Agent Client] Scheduled prompt "${meta.title}": Session not ready`,
+					5000,
+				);
+			}
+		} catch (error) {
+			record.error =
+				error instanceof Error ? error.message : String(error);
+			new Notice(
+				`[Agent Client] Scheduled prompt "${meta.title}" failed: ${record.error}`,
+				5000,
+			);
+		} finally {
+			if (trigger === "scheduled" && view) {
+				try {
+					await view.close();
+				} catch {
+					// Best-effort cleanup; view lifecycle errors should not block history.
+				}
+			}
+			record.completedAt = new Date().toISOString();
+			this.callbacks.onRecord(record);
+			this.currentExecution = null;
+			this.callbacks.onStateChange?.();
+		}
+	}
 }
 
 /** Trim execution history to at most MAX_HISTORY entries (newest first). */
 export function trimExecutionHistory(
-records: PromptExecutionRecord[],
+	records: PromptExecutionRecord[],
 ): PromptExecutionRecord[] {
-if (records.length <= MAX_HISTORY) return records;
-return records.slice(records.length - MAX_HISTORY);
+	if (records.length <= MAX_HISTORY) return records;
+	return records.slice(records.length - MAX_HISTORY);
 }

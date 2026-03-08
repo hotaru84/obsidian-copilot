@@ -93,6 +93,7 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 	private isInitializedFlag = false;
 	private currentAgentId: string | null = null;
 	private autoAllowPermissions = false;
+	private autoAllowPermissionsOverride: boolean | null = null;
 
 	// IAcpClient implementation properties
 	private terminalManager: TerminalManager;
@@ -139,6 +140,14 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		updateMessage: (toolCallId: string, content: MessageContent) => void,
 	): void {
 		this.updateMessage = updateMessage;
+	}
+
+	/**
+	 * Override permission auto-allow behavior for this adapter instance.
+	 * Set null to fall back to global plugin setting behavior.
+	 */
+	setAutoAllowPermissionsOverride(value: boolean | null): void {
+		this.autoAllowPermissionsOverride = value;
 	}
 
 	/**
@@ -1247,9 +1256,11 @@ export class AcpAdapter implements IAgentClient, IAcpClient {
 		params: acp.RequestPermissionRequest,
 	): Promise<acp.RequestPermissionResponse> {
 		this.logger.log("[AcpAdapter] Permission request received:", params);
+		const shouldAutoAllow =
+			this.autoAllowPermissionsOverride ?? this.autoAllowPermissions;
 
 		// If auto-allow is enabled, automatically approve the first allow option
-		if (this.autoAllowPermissions) {
+		if (shouldAutoAllow) {
 			const allowOption =
 				params.options.find(
 					(option) =>

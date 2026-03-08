@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Platform, Notice, setIcon } from "obsidian";
+import { ItemView, WorkspaceLeaf, Platform, Notice } from "obsidian";
 import type {
 	IChatViewContainer,
 	ChatViewType,
@@ -842,6 +842,13 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	 */
 	async cancelOperation(): Promise<void> {
 		await this.cancelCallback?.();
+	}
+
+	/**
+	 * Close this sidebar chat view by detaching its leaf.
+	 */
+	async close(): Promise<void> {
+		this.leaf.detach();
 	}
 
 	// ============================================================

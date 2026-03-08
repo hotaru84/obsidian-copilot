@@ -137,6 +137,12 @@ export interface IChatViewContainer {
 	 */
 	cancelOperation(): Promise<void>;
 
+	/**
+	 * Close this view instance.
+	 * For sidebar views this detaches the leaf, for floating views this unmounts.
+	 */
+	close(): Promise<void>;
+
 	// ============================================================
 	// Container Access
 	// ============================================================
