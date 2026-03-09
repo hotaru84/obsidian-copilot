@@ -33,6 +33,8 @@ export interface ChatMessagesProps {
 		requestId: string,
 		optionId: string,
 	) => Promise<void>;
+	/** Whether there is an active (pending) permission request */
+	hasActivePermission?: boolean;
 }
 
 /**
@@ -54,9 +56,11 @@ export function ChatMessages({
 	view,
 	acpClient,
 	onApprovePermission,
+	hasActivePermission = false,
 }: ChatMessagesProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [isAtBottom, setIsAtBottom] = useState(true);
+	const [isPermissionVisible, setIsPermissionVisible] = useState(true);
 
 	/**
 	 * Check if the scroll position is near the bottom.
@@ -74,12 +78,67 @@ export function ChatMessages({
 	}, []);
 
 	/**
-	 * Scroll to the bottom of the container.
+	 * Check if the active permission request element is visible in the container.
+	 */
+	const checkPermissionVisibility = useCallback(() => {
+		if (!hasActivePermission) {
+			setIsPermissionVisible(true);
+			return;
+		}
+		const container = containerRef.current;
+		if (!container) return;
+
+		const permEl = container.querySelector(
+			".agent-client-message-permission-request-options",
+		);
+		if (!permEl) {
+			setIsPermissionVisible(false);
+			return;
+		}
+
+		const containerRect = container.getBoundingClientRect();
+		const permRect = permEl.getBoundingClientRect();
+		const isVisible =
+			permRect.top < containerRect.bottom &&
+			permRect.bottom > containerRect.top;
+		setIsPermissionVisible(isVisible);
+	}, [hasActivePermission]);
+
+	/**
+	 * Scroll to the bottom of the container (instant, used for auto-scroll).
 	 */
 	const scrollToBottom = useCallback(() => {
 		const container = containerRef.current;
 		if (container) {
 			container.scrollTop = container.scrollHeight;
+		}
+	}, []);
+
+	/**
+	 * Scroll smoothly to the bottom of the container (used for button click).
+	 */
+	const handleScrollToBottomClick = useCallback(() => {
+		const container = containerRef.current;
+		if (container) {
+			container.scrollTo({
+				top: container.scrollHeight,
+				behavior: "smooth",
+			});
+		}
+	}, []);
+
+	/**
+	 * Scroll to the active permission request element.
+	 */
+	const scrollToPermission = useCallback(() => {
+		const container = containerRef.current;
+		if (!container) return;
+
+		const permEl = container.querySelector(
+			".agent-client-message-permission-request-options",
+		);
+		if (permEl) {
+			permEl.scrollIntoView({ behavior: "smooth", block: "center" });
 		}
 	}, []);
 
@@ -93,6 +152,14 @@ export function ChatMessages({
 		}
 	}, [messages, isAtBottom, scrollToBottom]);
 
+	// Re-check permission visibility when active permission state changes
+	useEffect(() => {
+		// Use setTimeout to ensure DOM has updated before checking visibility
+		window.setTimeout(() => {
+			checkPermissionVisibility();
+		}, 0);
+	}, [hasActivePermission, messages, checkPermissionVisibility]);
+
 	// Set up scroll event listener
 	useEffect(() => {
 		const container = containerRef.current;
@@ -100,13 +167,15 @@ export function ChatMessages({
 
 		const handleScroll = () => {
 			checkIfAtBottom();
+			checkPermissionVisibility();
 		};
 
 		view.registerDomEvent(container, "scroll", handleScroll);
 
 		// Initial check
 		checkIfAtBottom();
-	}, [view, checkIfAtBottom]);
+		checkPermissionVisibility();
+	}, [view, checkIfAtBottom, checkPermissionVisibility]);
 
 	return (
 		<div ref={containerRef} className="agent-client-chat-view-messages">
@@ -144,23 +213,29 @@ export function ChatMessages({
 							<div className="agent-client-loading-dot"></div>
 						</div>
 					</div>
-					{!isAtBottom && (
-						<button
-							className="agent-client-scroll-to-bottom"
-							onClick={() => {
-								const container = containerRef.current;
-								if (container) {
-									container.scrollTo({
-										top: container.scrollHeight,
-										behavior: "smooth",
-									});
-								}
-							}}
-							ref={(el) => {
-								if (el) setIcon(el, "chevron-down");
-							}}
-						/>
-					)}
+					{(hasActivePermission && !isPermissionVisible) ||
+					!isAtBottom ? (
+						<div className="agent-client-chat-scroll-buttons">
+							{hasActivePermission && !isPermissionVisible && (
+								<button
+									className="agent-client-scroll-to-permission"
+									onClick={scrollToPermission}
+									ref={(el) => {
+										if (el) setIcon(el, "shield-alert");
+									}}
+								/>
+							)}
+							{!isAtBottom && (
+								<button
+									className="agent-client-scroll-to-bottom"
+									onClick={handleScrollToBottomClick}
+									ref={(el) => {
+										if (el) setIcon(el, "chevron-down");
+									}}
+								/>
+							)}
+						</div>
+					) : null}
 				</>
 			)}
 		</div>

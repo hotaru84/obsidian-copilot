@@ -49,10 +49,18 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* ===== Scroll to Bottom Button ===== */
-.agent-client-scroll-to-bottom {
+.agent-client-chat-scroll-buttons {
 	position: sticky;
 	bottom: 4px;
 	align-self: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	z-index: 10;
+}
+
+.agent-client-scroll-to-bottom {
 	padding: 6px !important;
 	margin: 0 !important;
 	border: none !important;
@@ -68,7 +76,6 @@ If your plugin does not need CSS, delete this file.
 	box-shadow: none !important;
 	min-width: unset !important;
 	min-height: unset !important;
-	z-index: 10;
 }
 
 .agent-client-scroll-to-bottom svg {
@@ -81,6 +88,37 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-scroll-to-bottom:hover svg {
+	color: var(--interactive-accent);
+}
+
+.agent-client-scroll-to-permission {
+	padding: 6px !important;
+	margin: 0 !important;
+	border: none !important;
+	border-radius: 50%;
+	background-color: var(--background-primary) !important;
+	color: var(--text-accent);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	outline: none !important;
+	appearance: none;
+	box-shadow: none !important;
+	min-width: unset !important;
+	min-height: unset !important;
+}
+
+.agent-client-scroll-to-permission svg {
+	color: var(--text-accent);
+	transition: color 0.2s ease;
+}
+
+.agent-client-scroll-to-permission:hover {
+	background-color: var(--background-primary) !important;
+}
+
+.agent-client-scroll-to-permission:hover svg {
 	color: var(--interactive-accent);
 }
 
