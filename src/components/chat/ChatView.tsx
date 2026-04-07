@@ -18,7 +18,7 @@ import { CustomPromptsModal } from "../settings/CustomPromptsModal";
 import { getLogger, Logger } from "../../shared/logger";
 
 // Adapter imports
-import type { IAcpClient } from "../../adapters/acp/acp.adapter";
+import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 
 // Hooks imports
 import { useChatController } from "../../hooks/useChatController";
@@ -179,7 +179,7 @@ function ChatComponent({
 	// ============================================================
 	// Refs
 	// ============================================================
-	const acpClientRef = useRef<IAcpClient>(acpAdapter);
+	const acpClientRef = useRef<IChatAgentClient>(acpAdapter);
 	/** Track if initial agent restoration has been performed (prevent re-triggering) */
 	const hasRestoredAgentRef = useRef(false);
 

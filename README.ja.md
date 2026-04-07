@@ -11,9 +11,7 @@
   <a href="README.md">English</a>
 </p>
 
-GitHub CopilotをObsidianで直接チャット。Agent Client Protocol（ACP）を使ってAIアシスタントをVault内で利用できます。
-
-[Agent Client Protocol (ACP)](https://github.com/zed-industries/agent-client-protocol) by Zed を基に構築。
+GitHub CopilotをObsidianで直接チャット。組み込みのremote runtime SDKでVault内にAIアシスタントを統合します。
 
 https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 
@@ -33,7 +31,6 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 - **ターミナル統合**: Copilotがコマンドを実行し結果を返す
 - **MCPツール表示**: Model Context Protocolのツール呼び出しをチャット内でインライン表示
 - **入力履歴**: ↑/↓キーで過去のメッセージを呼び出し
-- **WSLサポート**: Windows Subsystem for Linux内でCopilot CLIを実行（Windowsのみ）
 - **自動許可**: エージェントのパーミッションリクエストを自動承認するオプション
 - **表示カスタマイズ**: フォントサイズ、絵文字表示、差分の折りたたみを調整
 
@@ -49,35 +46,15 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 ### 手動インストール
 
 1. [リリース](https://github.com/hotaru84/obsidian-copilot/releases)から `main.js`、`manifest.json`、`styles.css` をダウンロード
-2. `VaultFolder/.obsidian/plugins/obsidian-copilot/` に配置
+2. `VaultFolder/.obsidian/plugins/obsidian-copilot-agent/` に配置
 3. **設定 → コミュニティプラグイン** でプラグインを有効化
 
 ## クイックスタート
 
-GitHub Copilotは Agent Client Protocol をネイティブにサポートしているため、セットアップは簡単です。
-
-1. **GitHub Copilot CLIをインストール**:
-   ```bash
-   npm install -g @github/copilot-cli
-   ```
-
-2. **認証**:
-   ```bash
-   copilot auth login
-   ```
-   ブラウザの指示に従いGitHubで認証します。
-
-3. **パスを確認**:
-   ```bash
-   which copilot    # macOS/Linux
-   where.exe copilot # Windows
-   ```
-
-4. **設定 → Copilot for Obsidian** で設定:
-   - **GitHub Copilot CLI path**: 例: `/usr/local/bin/copilot`（Windowsは `C:\path\to\copilot.exe`）
-   - **Node.js path**: （任意）Node.jsがPATHにない場合に指定
-
-5. **チャット開始**: リボンのロボットアイコンをクリック（またはキーボードショートカットを使用）
+1. **設定 → Copilot for Obsidian → Runtime** を開く
+2. **Bundled server**（推奨）または **External server** を選ぶ
+3. 必要に応じてポート/URL・タイムアウトを調整
+4. リボンのロボットアイコンからチャット開始
 
 ## 変更履歴
 
@@ -98,7 +75,7 @@ UI上では権限リクエスト自体が一度も表示されていない状態
    `requestPermission` 呼び出しが `isActive: false` を発行し、承認ボタンが
    非表示になっていた。
 
-2. **`tool_call_update` でのステータス逆行** — ACP の `ToolCallUpdate.status` は
+2. **`tool_call_update` でのステータス逆行** — runtime の `ToolCallUpdate.status` は
    nullable（`null` = 「変更なし」）だが、アダプターが `status || "pending"` で
    `null` を `"pending"` に変換していた。すでに `in_progress` 状態のツールコールが
    `pending` に逆行するケースが発生していた。

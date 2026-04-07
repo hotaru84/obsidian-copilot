@@ -7,7 +7,13 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig([
 	{
-		ignores: ["node_modules/", "main.js", "obsidian-copilot-agent/", "docs/"],
+		ignores: [
+			"node_modules/",
+			"main.js",
+			"obsidian-copilot-agent/",
+			"docs/",
+			"vendor/",
+		],
 	},
 	...obsidianmd.configs.recommended,
 	...tseslint.configs.recommended,

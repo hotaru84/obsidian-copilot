@@ -35,7 +35,6 @@ export default defineConfig({
     nav: [
       { text: "Home", link: "/" },
       { text: "Getting Started", link: "/getting-started/" },
-      { text: "Agent Setup", link: "/agent-setup/" },
       { text: "Usage", link: "/usage/" },
       { text: "GitHub", link: "https://github.com/RAIT-09/obsidian-agent-client" },
     ],
@@ -50,16 +49,6 @@ export default defineConfig({
         items: [
           { text: "Installation", link: "/getting-started/" },
           { text: "Quick Start", link: "/getting-started/quick-start" },
-        ],
-      },
-      {
-        text: "Agent Setup",
-        items: [
-          { text: "Overview", link: "/agent-setup/" },
-          { text: "Claude Code", link: "/agent-setup/claude-code" },
-          { text: "Codex", link: "/agent-setup/codex" },
-          { text: "Gemini CLI", link: "/agent-setup/gemini-cli" },
-          { text: "Custom Agents", link: "/agent-setup/custom-agents" },
         ],
       },
       {
@@ -86,12 +75,6 @@ export default defineConfig({
         items: [
           { text: "FAQ", link: "/help/faq" },
           { text: "Troubleshooting", link: "/help/troubleshooting" },
-        ],
-      },
-      {
-        text: "Reference",
-        items: [
-          { text: "ACP Protocol Support", link: "/reference/acp-support" },
         ],
       },
     ],

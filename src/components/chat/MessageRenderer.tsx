@@ -3,14 +3,14 @@ import type {
 	ChatMessage,
 	MessageContent,
 } from "../../domain/models/chat-message";
-import type { IAcpClient } from "../../adapters/acp/acp.adapter";
+import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import type AgentClientPlugin from "../../plugin";
 import { MessageContentRenderer } from "./MessageContentRenderer";
 
 interface MessageRendererProps {
 	message: ChatMessage;
 	plugin: AgentClientPlugin;
-	acpClient?: IAcpClient;
+	acpClient?: IChatAgentClient;
 	/** Callback to approve a permission request */
 	onApprovePermission?: (
 		requestId: string,

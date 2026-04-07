@@ -1,11 +1,6 @@
-import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
-import type {
-	AgentEnvVar,
-	ChatViewLocation,
-	WindowsNotificationMode,
-} from "../../plugin";
-import { normalizeEnvVars } from "../../shared/settings-utils";
+import type { ChatViewLocation, WindowsNotificationMode } from "../../plugin";
 import {
 	CHAT_FONT_SIZE_MAX,
 	CHAT_FONT_SIZE_MIN,
@@ -26,12 +21,11 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		this.renderDocLink(containerEl);
-		this.renderCopilotSection(containerEl);
+		this.renderRuntimeSection(containerEl);
 		this.renderCoreSection(containerEl);
 		this.renderDisplaySection(containerEl);
 		this.renderFloatingChatSection(containerEl);
 		this.renderPermissionsSection(containerEl);
-		this.renderWindowsWslSection(containerEl);
 		this.renderExportSection(containerEl);
 		this.renderCustomPromptsSection(containerEl);
 		this.renderDeveloperSection(containerEl);
@@ -44,82 +38,157 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		docContainer.createSpan({ text: "Need help? Check out the " });
 		docContainer.createEl("a", {
 			text: "GitHub Copilot documentation",
-			href: "https://docs.github.com/en/copilot/reference/acp-server",
+			href: "https://docs.github.com/en/copilot",
 		});
 		docContainer.createSpan({ text: "." });
 	}
 
-	private renderCopilotSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName("GitHub Copilot").setHeading();
+	private renderRuntimeSection(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName("Runtime").setHeading();
 
 		new Setting(containerEl)
-			.setName("Copilot CLI path")
+			.setName("Remote server mode")
 			.setDesc(
-				'Absolute path to GitHub Copilot CLI. Use "which copilot" (macOS/Linux) or "where copilot" (Windows) to find it. Leave empty to use "copilot" command from path.',
+				"Use bundled runtime server binary or connect to an external remote runtime endpoint.",
 			)
-			.addText((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("copilot")
-					.setValue(this.plugin.settings.copilot.command)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("bundled", "Bundled server")
+					.addOption("external", "External server")
+					.setValue(this.plugin.settings.remoteRuntime.serverMode)
 					.onChange(async (value) => {
-						this.plugin.settings.copilot.command = value.trim();
+						this.plugin.settings.remoteRuntime.serverMode =
+							value as "bundled" | "external";
 						await this.plugin.saveSettings();
-					});
-			});
+						this.display();
+					}),
+			);
 
 		new Setting(containerEl)
-			.setName("Authentication")
-			.setDesc(
-				"Before using this plugin, you must authenticate with GitHub Copilot CLI. Run: copilot auth login",
-			)
-			.addButton((button) => {
-				button.setButtonText("📋 view auth setup").onClick(() => {
-					new Notice(
-						"To authenticate GitHub Copilot CLI:\n" +
-							"1. Open a terminal\n" +
-							"2. Run: copilot auth login\n" +
-							"3. Follow the prompts",
-						10000,
-					);
-				});
-			});
+			.setName("Server address")
+			.setDesc("Websocket address for external mode.")
+			.addText((text) =>
+				text
+					.setPlaceholder("ws://127.0.0.1:39453")
+					.setValue(this.plugin.settings.remoteRuntime.serverUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.remoteRuntime.serverUrl =
+							value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		if (this.plugin.settings.remoteRuntime.serverMode === "bundled") {
+			new Setting(containerEl)
+				.setName("Bundled server port")
+				.setDesc(
+					"TCP port used when launching the bundled runtime server.",
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder("39453")
+						.setValue(
+							String(
+								this.plugin.settings.remoteRuntime
+									.bundledServerPort,
+							),
+						)
+						.onChange(async (value) => {
+							const port = Number.parseInt(value, 10);
+							if (!Number.isFinite(port) || port <= 0) {
+								return;
+							}
+							this.plugin.settings.remoteRuntime.bundledServerPort =
+								port;
+							await this.plugin.saveSettings();
+						}),
+				);
+
+			new Setting(containerEl)
+				.setName("Auto-start bundled server")
+				.setDesc(
+					"Automatically start bundled server when a remote runtime session is initialized.",
+				)
+				.addToggle((toggle) =>
+					toggle
+						.setValue(
+							this.plugin.settings.remoteRuntime
+								.autoStartBundledServer,
+						)
+						.onChange(async (value) => {
+							this.plugin.settings.remoteRuntime.autoStartBundledServer =
+								value;
+							await this.plugin.saveSettings();
+						}),
+				);
+
+			new Setting(containerEl)
+				.setName("Bundled executable override")
+				.setDesc(
+					"Optional absolute path to custom runtime server executable.",
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder("C:/path/to/copilot-server-go.exe")
+						.setValue(
+							this.plugin.settings.remoteRuntime
+								.executablePathOverride,
+						)
+						.onChange(async (value) => {
+							this.plugin.settings.remoteRuntime.executablePathOverride =
+								value.trim();
+							await this.plugin.saveSettings();
+						}),
+				);
+		}
 
 		new Setting(containerEl)
-			.setName("ACP arguments")
-			.setDesc(
-				"Command-line arguments for GitHub Copilot CLI in ACP mode.",
-			)
-			.addTextArea((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("--acp\n--stdio")
+			.setName("Startup timeout (ms)")
+			.setDesc("Timeout for remote runtime startup checks.")
+			.addText((text) =>
+				text
+					.setPlaceholder("15000")
 					.setValue(
-						this.formatArgs(this.plugin.settings.copilot.args),
+						String(
+							this.plugin.settings.remoteRuntime.startupTimeoutMs,
+						),
 					)
 					.onChange(async (value) => {
-						this.plugin.settings.copilot.args =
-							this.parseArgs(value);
+						const timeout = Number.parseInt(value, 10);
+						if (!Number.isFinite(timeout) || timeout < 1000) {
+							return;
+						}
+						this.plugin.settings.remoteRuntime.startupTimeoutMs =
+							timeout;
 						await this.plugin.saveSettings();
-					});
-				text.inputEl.rows = 2;
-			});
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Request timeout (ms)")
+			.setDesc("Timeout for runtime server probes and requests.")
+			.addText((text) =>
+				text
+					.setPlaceholder("10000")
+					.setValue(
+						String(
+							this.plugin.settings.remoteRuntime.requestTimeoutMs,
+						),
+					)
+					.onChange(async (value) => {
+						const timeout = Number.parseInt(value, 10);
+						if (!Number.isFinite(timeout) || timeout < 1000) {
+							return;
+						}
+						this.plugin.settings.remoteRuntime.requestTimeoutMs =
+							timeout;
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 
 	private renderCoreSection(containerEl: HTMLElement): void {
 		new Setting(containerEl).setName("Core").setHeading();
-
-		new Setting(containerEl)
-			.setName("Node.js path")
-			.setDesc(
-				'Absolute path to Node.js executable. Use "which node" (macOS/Linux) or "where node" (Windows) to find it.',
-			)
-			.addText((text) => {
-				text.setPlaceholder("Absolute path to node")
-					.setValue(this.plugin.settings.nodePath)
-					.onChange(async (value) => {
-						this.plugin.settings.nodePath = value.trim();
-						await this.plugin.saveSettings();
-					});
-			});
 
 		new Setting(containerEl)
 			.setName("Send message shortcut")
@@ -397,71 +466,27 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-	}
 
-	private renderWindowsWslSection(containerEl: HTMLElement): void {
-		if (Platform.isWin) {
-			new Setting(containerEl)
-				.setName("Windows subsystem for Linux")
-				.setHeading();
-
-			new Setting(containerEl)
-				.setName("Enable WSL mode")
-				.setDesc(
-					"Run GitHub Copilot inside Windows subsystem for Linux. Useful for better Windows compatibility.",
-				)
-				.addToggle((toggle) =>
-					toggle
-						.setValue(this.plugin.settings.windowsWslMode)
-						.onChange(async (value) => {
-							this.plugin.settings.windowsWslMode = value;
-							await this.plugin.saveSettings();
-							this.display();
-						}),
-				);
-
-			if (this.plugin.settings.windowsWslMode) {
-				new Setting(containerEl)
-					.setName("WSL distribution")
-					.setDesc(
-						"Specify WSL distribution name (leave empty for default). Example: ubuntu, debian",
+		new Setting(containerEl)
+			.setName("Chat notifications")
+			.setDesc(
+				"Notify on response completion and permission requests. In background-only mode, notifications are sent only when the Obsidian window is not focused.",
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("disabled", "Disabled")
+					.addOption("always", "Always")
+					.addOption(
+						"background-only",
+						"Only when app is in background",
 					)
-					.addText((text) =>
-						text
-							.setPlaceholder("Leave empty for default")
-							.setValue(
-								this.plugin.settings.windowsWslDistribution ||
-									"",
-							)
-							.onChange(async (value) => {
-								this.plugin.settings.windowsWslDistribution =
-									value.trim() || undefined;
-								await this.plugin.saveSettings();
-							}),
-					);
-			}
-
-			new Setting(containerEl)
-				.setName("Chat notifications")
-				.setDesc(
-					"Notify on response completion and permission requests. In background-only mode, notifications are sent only when the Obsidian window is not focused.",
-				)
-				.addDropdown((dropdown) =>
-					dropdown
-						.addOption("disabled", "Disabled")
-						.addOption("always", "Always")
-						.addOption(
-							"background-only",
-							"Only when app is in background",
-						)
-						.setValue(this.plugin.settings.windowsNotificationMode)
-						.onChange(async (value) => {
-							this.plugin.settings.windowsNotificationMode =
-								value as WindowsNotificationMode;
-							await this.plugin.saveSettings();
-						}),
-				);
-		}
+					.setValue(this.plugin.settings.windowsNotificationMode)
+					.onChange(async (value) => {
+						this.plugin.settings.windowsNotificationMode =
+							value as WindowsNotificationMode;
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 
 	private renderExportSection(containerEl: HTMLElement): void {
@@ -686,45 +711,5 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-	}
-
-	private formatArgs(args: string[]): string {
-		return args.join("\n");
-	}
-
-	private parseArgs(value: string): string[] {
-		return value
-			.split(/\r?\n/)
-			.map((line) => line.trim())
-			.filter((line) => line.length > 0);
-	}
-
-	private formatEnv(env: AgentEnvVar[]): string {
-		return env
-			.map((entry) => `${entry.key}=${entry.value ?? ""}`)
-			.join("\n");
-	}
-
-	private parseEnv(value: string): AgentEnvVar[] {
-		const envVars: AgentEnvVar[] = [];
-
-		for (const line of value.split(/\r?\n/)) {
-			const trimmed = line.trim();
-			if (!trimmed) {
-				continue;
-			}
-			const delimiter = trimmed.indexOf("=");
-			if (delimiter === -1) {
-				continue;
-			}
-			const key = trimmed.slice(0, delimiter).trim();
-			const envValue = trimmed.slice(delimiter + 1).trim();
-			if (!key) {
-				continue;
-			}
-			envVars.push({ key, value: envValue });
-		}
-
-		return normalizeEnvVars(envVars);
 	}
 }

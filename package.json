@@ -1,11 +1,12 @@
 {
 	"name": "obsidian-copilot",
 	"version": "0.1.0",
-	"description": "Use GitHub Copilot directly inside Obsidian via the Agent Client Protocol",
+	"description": "Use GitHub Copilot directly inside Obsidian via Remote SDK runtime",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"sync:remote-sdk": "node scripts/sync-remote-sdk-artifacts.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"format": "prettier --write \"src/**/*.{ts,tsx}\" \"*.css\"",
 		"format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"*.css\"",
@@ -36,12 +37,12 @@
 		"vitepress": "^1.6.4"
 	},
 	"dependencies": {
-		"@agentclientprotocol/sdk": "^0.13.1",
 		"@codemirror/state": "6.5.0",
 		"@codemirror/view": "^6.35.0",
 		"diff": "^8.0.2",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
-		"semver": "^7.7.3"
+		"semver": "^7.7.3",
+		"zod": "^4.3.6"
 	}
 }

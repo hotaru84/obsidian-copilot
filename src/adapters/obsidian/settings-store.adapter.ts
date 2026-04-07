@@ -6,7 +6,6 @@
  * via useSyncExternalStore, and handles persistence to Obsidian's data.json.
  */
 
-import { Platform } from "obsidian";
 import type { ISettingsAccess } from "../../domain/ports/settings-access.port";
 import type { AgentClientPluginSettings } from "../../plugin";
 import type AgentClientPlugin from "../../plugin";
@@ -15,7 +14,6 @@ import type {
 	MessageContent,
 } from "../../domain/models/chat-message";
 import type { SavedSessionInfo } from "../../domain/models/session-info";
-import { convertWindowsPathToWsl } from "../../shared/wsl-utils";
 
 /** Listener callback invoked when settings change */
 type Listener = () => void;
@@ -153,28 +151,19 @@ export class SettingsStore implements ISettingsAccess {
 	 */
 	async saveSession(info: SavedSessionInfo): Promise<void> {
 		this.sessionLock = this.sessionLock.then(async () => {
-			// Convert Windows path to WSL path if in WSL mode
-			let sessionInfo = info;
-			if (Platform.isWin && this.state.windowsWslMode && info.cwd) {
-				sessionInfo = {
-					...info,
-					cwd: convertWindowsPathToWsl(info.cwd),
-				};
-			}
-
 			const sessions = [...(this.state.savedSessions || [])];
 
 			// Find existing session by sessionId
 			const existingIndex = sessions.findIndex(
-				(s) => s.sessionId === sessionInfo.sessionId,
+				(s) => s.sessionId === info.sessionId,
 			);
 
 			if (existingIndex >= 0) {
 				// Update existing session
-				sessions[existingIndex] = sessionInfo;
+				sessions[existingIndex] = info;
 			} else {
 				// Add new session at the beginning
-				sessions.unshift(sessionInfo);
+				sessions.unshift(info);
 
 				// Remove oldest sessions if exceeding limit
 				if (sessions.length > SettingsStore.MAX_SAVED_SESSIONS) {
@@ -203,12 +192,7 @@ export class SettingsStore implements ISettingsAccess {
 			sessions = sessions.filter((s) => s.agentId === agentId);
 		}
 		if (cwd) {
-			// Convert Windows path to WSL path if in WSL mode for filtering
-			let filterCwd = cwd;
-			if (Platform.isWin && this.state.windowsWslMode) {
-				filterCwd = convertWindowsPathToWsl(cwd);
-			}
-			sessions = sessions.filter((s) => s.cwd === filterCwd);
+			sessions = sessions.filter((s) => s.cwd === cwd);
 		}
 
 		// Sort by updatedAt descending (newest first)

@@ -1,12 +1,12 @@
 import * as React from "react";
 const { useState, useRef, useEffect } = React;
-import type { IAcpClient } from "../../adapters/acp/acp.adapter";
+import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import { getLogger } from "../../shared/logger";
 import type AgentClientPlugin from "../../plugin";
 
 interface TerminalRendererProps {
 	terminalId: string;
-	acpClient: IAcpClient | null;
+	acpClient: IChatAgentClient | null;
 	plugin: AgentClientPlugin;
 }
 

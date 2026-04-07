@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { MessageContent } from "../../domain/models/chat-message";
-import type { IAcpClient } from "../../adapters/acp/acp.adapter";
+import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import type AgentClientPlugin from "../../plugin";
 import { MarkdownTextRenderer } from "./MarkdownTextRenderer";
 import { CollapsibleThought } from "./CollapsibleThought";
@@ -13,7 +13,7 @@ interface MessageContentRendererProps {
 	plugin: AgentClientPlugin;
 	messageId?: string;
 	messageRole?: "user" | "assistant";
-	acpClient?: IAcpClient;
+	acpClient?: IChatAgentClient;
 	/** Callback to approve a permission request */
 	onApprovePermission?: (
 		requestId: string,

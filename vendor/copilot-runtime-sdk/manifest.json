@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-04-07T14:30:37.971Z",
+  "artifacts": [
+    {
+      "kind": "sdk-client",
+      "packageName": "@copilot-runtime-sdk/client",
+      "version": "0.1.0",
+      "path": "sdk-client"
+    },
+    {
+      "kind": "go-server",
+      "file": "copilot-server-go.exe",
+      "path": "server-go/copilot-server-go.exe"
+    }
+  ]
+}

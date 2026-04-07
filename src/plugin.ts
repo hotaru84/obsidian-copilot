@@ -21,13 +21,17 @@ import {
 } from "./adapters/obsidian/settings-store.adapter";
 import { AgentClientSettingTab } from "./components/settings/AgentClientSettingTab";
 import { CustomPromptsModal } from "./components/settings/CustomPromptsModal";
-import { AcpAdapter } from "./adapters/acp/acp.adapter";
-import { sanitizeArgs, normalizeEnvVars } from "./shared/settings-utils";
+import { RemoteAdapter } from "./adapters/remote/remote.adapter";
 import { parseChatFontSize } from "./shared/display-settings";
 import {
-	AgentEnvVar,
-	CopilotAgentSettings,
-} from "./domain/models/agent-config";
+	DEFAULT_REMOTE_SERVER_PORT,
+	buildBundledRemoteServerUrl,
+	resolveBundledRemoteServerPath,
+} from "./shared/remote-sdk-artifacts";
+import { RemoteServerManager } from "./shared/remote-server-manager";
+import { getVaultBasePath } from "./shared/path-utils";
+import type { RemoteRuntimeSettings } from "./domain/models/remote-runtime-config";
+import type { IChatAgentClient } from "./domain/ports/chat-agent-client.port";
 import type { IChatViewContainer } from "./domain/ports/chat-view-container.port";
 import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
@@ -75,9 +79,6 @@ function truncateText(value: string, maxLength: number): string {
 /** Maximum seconds to wait for a new chat view to register after opening one. */
 const MAX_VIEW_REGISTRATION_WAIT_SECONDS = 10;
 
-// Re-export for backward compatibility
-export type { AgentEnvVar };
-
 /**
  * Send message shortcut configuration.
  * - 'enter': Enter to send, Shift+Enter for newline (default)
@@ -107,11 +108,10 @@ export type ChatViewLocation =
 export type WindowsNotificationMode = "disabled" | "always" | "background-only";
 
 export interface AgentClientPluginSettings {
-	copilot: CopilotAgentSettings;
+	remoteRuntime: RemoteRuntimeSettings;
 	autoAllowPermissions: boolean;
 	autoMentionActiveNote: boolean;
 	debugMode: boolean;
-	nodePath: string;
 	exportSettings: {
 		defaultFolder: string;
 		filenameTemplate: string;
@@ -123,9 +123,6 @@ export interface AgentClientPluginSettings {
 		imageCustomFolder: string;
 		frontmatterTag: string;
 	};
-	// WSL settings (Windows only)
-	windowsWslMode: boolean;
-	windowsWslDistribution?: string;
 	windowsNotificationMode: WindowsNotificationMode;
 	// Input behavior
 	sendMessageShortcut: SendMessageShortcut;
@@ -159,17 +156,18 @@ export interface AgentClientPluginSettings {
 }
 
 const DEFAULT_SETTINGS: AgentClientPluginSettings = {
-	copilot: {
-		id: "copilot",
-		displayName: "GitHub Copilot",
-		command: "copilot",
-		args: ["--acp", "--stdio"],
-		env: [],
+	remoteRuntime: {
+		serverMode: "bundled",
+		serverUrl: buildBundledRemoteServerUrl(DEFAULT_REMOTE_SERVER_PORT),
+		bundledServerPort: DEFAULT_REMOTE_SERVER_PORT,
+		autoStartBundledServer: true,
+		executablePathOverride: "",
+		startupTimeoutMs: 15000,
+		requestTimeoutMs: 10000,
 	},
 	autoAllowPermissions: false,
 	autoMentionActiveNote: true,
 	debugMode: false,
-	nodePath: "",
 	exportSettings: {
 		defaultFolder: "Agent Client",
 		filenameTemplate: "agent_client_{date}_{time}",
@@ -181,8 +179,6 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 		imageCustomFolder: "Agent Client",
 		frontmatterTag: "agent-client",
 	},
-	windowsWslMode: false,
-	windowsWslDistribution: undefined,
 	windowsNotificationMode: "disabled",
 	sendMessageShortcut: "enter",
 	chatViewLocation: "right-tab",
@@ -213,8 +209,8 @@ export default class AgentClientPlugin extends Plugin {
 	/** Registry for all chat view containers (sidebar + floating) */
 	viewRegistry = new ChatViewRegistry();
 
-	/** Map of viewId to AcpAdapter for multi-session support */
-	private _adapters: Map<string, AcpAdapter> = new Map();
+	/** Map of viewId to chat agent adapters for multi-session support */
+	private _adapters: Map<string, IChatAgentClient> = new Map();
 	/** Floating button container (independent from chat view instances) */
 	private floatingButton: FloatingButtonContainer | null = null;
 	/** Map of viewId to floating chat roots and containers (legacy, being migrated to viewRegistry) */
@@ -226,6 +222,8 @@ export default class AgentClientPlugin extends Plugin {
 	private floatingChatCounter = 0;
 	/** Scheduled prompt runner */
 	scheduledPromptRunner!: ScheduledPromptRunner;
+	/** Shared bundled remote runtime server manager (used by remote-sdk mode) */
+	private remoteServerManager: RemoteServerManager | null = null;
 	/** Status bar item for scheduler status */
 	private schedulerStatusBarItem: HTMLElement | null = null;
 	/** View IDs created for scheduled prompt execution tabs */
@@ -407,6 +405,7 @@ export default class AgentClientPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on("quit", () => {
 				// Fire and forget - don't block Obsidian from quitting
+				void this.remoteServerManager?.stop();
 				for (const [viewId, adapter] of this._adapters) {
 					adapter.disconnect().catch((error) => {
 						console.warn(
@@ -441,6 +440,8 @@ export default class AgentClientPlugin extends Plugin {
 		// Clear legacy storage
 		this.floatingChatInstances.clear();
 		this.scheduledPromptViewIds.clear();
+		void this.remoteServerManager?.stop();
+		this.remoteServerManager = null;
 	}
 
 	// ──────────────────────────────────────────────────────────────
@@ -479,16 +480,19 @@ export default class AgentClientPlugin extends Plugin {
 	}
 
 	/**
-	 * Get or create an AcpAdapter for a specific view.
+	 * Get or create a chat adapter for a specific view.
 	 * Each ChatView has its own adapter for independent sessions.
 	 */
-	getOrCreateAdapter(viewId: string): AcpAdapter {
-		let adapter = this._adapters.get(viewId);
-		if (!adapter) {
-			adapter = new AcpAdapter(this);
-			this._adapters.set(viewId, adapter);
+	getOrCreateAdapter(viewId: string): IChatAgentClient {
+		const existingAdapter = this._adapters.get(viewId);
+		if (existingAdapter) {
+			return existingAdapter;
 		}
-		return adapter;
+
+		const createdAdapter: IChatAgentClient = new RemoteAdapter(this);
+
+		this._adapters.set(viewId, createdAdapter);
+		return createdAdapter;
 	}
 
 	/**
@@ -511,6 +515,53 @@ export default class AgentClientPlugin extends Plugin {
 		}
 		// Note: lastActiveChatViewId is now managed by viewRegistry
 		// Clearing happens automatically when view is unregistered
+	}
+
+	getRemoteServerUrl(): string {
+		if (this.settings.remoteRuntime.serverMode === "external") {
+			return this.settings.remoteRuntime.serverUrl;
+		}
+
+		return buildBundledRemoteServerUrl(
+			this.settings.remoteRuntime.bundledServerPort,
+		);
+	}
+
+	getBundledRemoteServerPath(): string | null {
+		const overridePath =
+			this.settings.remoteRuntime.executablePathOverride.trim();
+		if (overridePath.length > 0) {
+			return overridePath;
+		}
+
+		return resolveBundledRemoteServerPath(this);
+	}
+
+	getOrCreateRemoteServerManager(): RemoteServerManager | null {
+		if (this.settings.remoteRuntime.serverMode !== "bundled") {
+			return null;
+		}
+
+		if (this.remoteServerManager) {
+			return this.remoteServerManager;
+		}
+
+		const executablePath = this.getBundledRemoteServerPath();
+		if (!executablePath) {
+			return null;
+		}
+
+		this.remoteServerManager = new RemoteServerManager({
+			executablePath,
+			serverUrl: this.getRemoteServerUrl(),
+			port: this.settings.remoteRuntime.bundledServerPort,
+			startupTimeoutMs: this.settings.remoteRuntime.startupTimeoutMs,
+			requestTimeoutMs: this.settings.remoteRuntime.requestTimeoutMs,
+			cwd: getVaultBasePath(this.app.vault.adapter) ?? undefined,
+			logger: console,
+		});
+
+		return this.remoteServerManager;
 	}
 
 	/**
@@ -827,10 +878,8 @@ export default class AgentClientPlugin extends Plugin {
 	getAvailableAgents(): Array<{ id: string; displayName: string }> {
 		return [
 			{
-				id: this.settings.copilot.id,
-				displayName:
-					this.settings.copilot.displayName ||
-					this.settings.copilot.id,
+				id: "copilot",
+				displayName: "GitHub Copilot",
 			},
 		];
 	}
@@ -1351,34 +1400,61 @@ export default class AgentClientPlugin extends Plugin {
 			unknown
 		>;
 
-		const copilotFromRaw =
-			typeof rawSettings.copilot === "object" &&
-			rawSettings.copilot !== null
-				? (rawSettings.copilot as Record<string, unknown>)
-				: {};
-
-		const resolvedCopilotArgs = sanitizeArgs(copilotFromRaw.args);
-		const resolvedCopilotEnv = normalizeEnvVars(copilotFromRaw.env);
-
 		this.settings = {
-			copilot: {
-				id: DEFAULT_SETTINGS.copilot.id,
-				displayName:
-					typeof copilotFromRaw.displayName === "string" &&
-					copilotFromRaw.displayName.trim().length > 0
-						? copilotFromRaw.displayName.trim()
-						: DEFAULT_SETTINGS.copilot.displayName,
-				command:
-					typeof copilotFromRaw.command === "string" &&
-					copilotFromRaw.command.trim().length > 0
-						? copilotFromRaw.command.trim()
-						: DEFAULT_SETTINGS.copilot.command,
-				args:
-					resolvedCopilotArgs.length > 0
-						? resolvedCopilotArgs
-						: DEFAULT_SETTINGS.copilot.args,
-				env: resolvedCopilotEnv.length > 0 ? resolvedCopilotEnv : [],
-			},
+			remoteRuntime: (() => {
+				const rawRemote = rawSettings.remoteRuntime as
+					| Record<string, unknown>
+					| null
+					| undefined;
+				if (rawRemote && typeof rawRemote === "object") {
+					const bundledServerPort =
+						typeof rawRemote.bundledServerPort === "number" &&
+						rawRemote.bundledServerPort > 0
+							? Math.floor(rawRemote.bundledServerPort)
+							: DEFAULT_SETTINGS.remoteRuntime.bundledServerPort;
+
+					return {
+						serverMode:
+							rawRemote.serverMode === "external" ||
+							rawRemote.serverMode === "bundled"
+								? rawRemote.serverMode
+								: DEFAULT_SETTINGS.remoteRuntime.serverMode,
+						serverUrl:
+							typeof rawRemote.serverUrl === "string" &&
+							rawRemote.serverUrl.trim().length > 0
+								? rawRemote.serverUrl.trim()
+								: buildBundledRemoteServerUrl(
+										bundledServerPort,
+									),
+						bundledServerPort,
+						autoStartBundledServer:
+							typeof rawRemote.autoStartBundledServer ===
+							"boolean"
+								? rawRemote.autoStartBundledServer
+								: DEFAULT_SETTINGS.remoteRuntime
+										.autoStartBundledServer,
+						executablePathOverride:
+							typeof rawRemote.executablePathOverride === "string"
+								? rawRemote.executablePathOverride.trim()
+								: DEFAULT_SETTINGS.remoteRuntime
+										.executablePathOverride,
+						startupTimeoutMs:
+							typeof rawRemote.startupTimeoutMs === "number" &&
+							rawRemote.startupTimeoutMs >= 1000
+								? Math.floor(rawRemote.startupTimeoutMs)
+								: DEFAULT_SETTINGS.remoteRuntime
+										.startupTimeoutMs,
+						requestTimeoutMs:
+							typeof rawRemote.requestTimeoutMs === "number" &&
+							rawRemote.requestTimeoutMs >= 1000
+								? Math.floor(rawRemote.requestTimeoutMs)
+								: DEFAULT_SETTINGS.remoteRuntime
+										.requestTimeoutMs,
+					};
+				}
+
+				return DEFAULT_SETTINGS.remoteRuntime;
+			})(),
 			autoAllowPermissions:
 				typeof rawSettings.autoAllowPermissions === "boolean"
 					? rawSettings.autoAllowPermissions
@@ -1391,10 +1467,6 @@ export default class AgentClientPlugin extends Plugin {
 				typeof rawSettings.debugMode === "boolean"
 					? rawSettings.debugMode
 					: DEFAULT_SETTINGS.debugMode,
-			nodePath:
-				typeof rawSettings.nodePath === "string"
-					? rawSettings.nodePath.trim()
-					: DEFAULT_SETTINGS.nodePath,
 			exportSettings: (() => {
 				const rawExport = rawSettings.exportSettings as
 					| Record<string, unknown>
@@ -1450,14 +1522,6 @@ export default class AgentClientPlugin extends Plugin {
 				}
 				return DEFAULT_SETTINGS.exportSettings;
 			})(),
-			windowsWslMode:
-				typeof rawSettings.windowsWslMode === "boolean"
-					? rawSettings.windowsWslMode
-					: DEFAULT_SETTINGS.windowsWslMode,
-			windowsWslDistribution:
-				typeof rawSettings.windowsWslDistribution === "string"
-					? rawSettings.windowsWslDistribution
-					: DEFAULT_SETTINGS.windowsWslDistribution,
 			windowsNotificationMode:
 				rawSettings.windowsNotificationMode === "disabled" ||
 				rawSettings.windowsNotificationMode === "always" ||

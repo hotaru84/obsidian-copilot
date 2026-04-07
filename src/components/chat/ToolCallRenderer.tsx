@@ -1,19 +1,18 @@
 import * as React from "react";
 const { useState, useMemo } = React;
-import { FileSystemAdapter } from "obsidian";
 import type { MessageContent } from "../../domain/models/chat-message";
-import type { IAcpClient } from "../../adapters/acp/acp.adapter";
+import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import type AgentClientPlugin from "../../plugin";
 import { TerminalRenderer } from "./TerminalRenderer";
 import { PermissionRequestSection } from "./PermissionRequestSection";
-import { toRelativePath } from "../../shared/path-utils";
+import { getVaultBasePath, toRelativePath } from "../../shared/path-utils";
 import * as Diff from "diff";
 // import { MarkdownTextRenderer } from "./MarkdownTextRenderer";
 
 interface ToolCallRendererProps {
 	content: Extract<MessageContent, { type: "tool_call" }>;
 	plugin: AgentClientPlugin;
-	acpClient?: IAcpClient;
+	acpClient?: IChatAgentClient;
 	/** Callback to approve a permission request */
 	onApprovePermission?: (
 		requestId: string,
@@ -52,11 +51,7 @@ export function ToolCallRenderer({
 
 	// Get vault path for relative path display
 	const vaultPath = useMemo(() => {
-		const adapter = plugin.app.vault.adapter;
-		if (adapter instanceof FileSystemAdapter) {
-			return adapter.getBasePath();
-		}
-		return "";
+		return getVaultBasePath(plugin.app.vault.adapter) || "";
 	}, [plugin]);
 
 	// Get showEmojis setting

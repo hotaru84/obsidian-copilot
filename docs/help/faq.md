@@ -6,7 +6,7 @@ Frequently asked questions about Agent Client.
 
 ### What is Agent Client?
 
-Agent Client is an Obsidian plugin that lets you chat with AI agents directly within Obsidian. It supports Claude Code, Codex, Gemini CLI, and any ACP-compatible agent. The plugin uses the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) to communicate with agents.
+Agent Client is an Obsidian plugin that lets you chat with GitHub Copilot directly within Obsidian using the remote runtime SDK.
 
 ### Is this an official Anthropic/OpenAI/Google plugin?
 
@@ -14,11 +14,11 @@ No. Agent Client is a community-developed plugin. It uses official agent package
 
 ### Does this work on mobile?
 
-No. Agent Client is desktop-only. Agents run as local processes, which is not supported on mobile devices.
+No. Agent Client is desktop-only.
 
 ### Is my data sent to AI providers?
 
-Yes. When you send a message, it's processed by the AI provider behind your selected agent (Anthropic, OpenAI, Google, etc.). Review each provider's privacy policy for details.
+Yes. When you send a message, it's processed by GitHub Copilot services. Review GitHub's privacy policy for details.
 
 ## Note Mentions
 
@@ -71,7 +71,7 @@ By default, new views open in the right pane. You can change this in **Settings 
 
 ### What is a custom agent?
 
-Any ACP-compatible agent beyond the built-in ones (Claude Code, Codex, Gemini CLI). You can add custom agents in **Settings → Agent Client → Custom agents**. See [Custom Agents](/agent-setup/custom-agents).
+Custom agents are no longer supported in the remote-sdk-only runtime.
 
 ### Do all agents support the same features?
 

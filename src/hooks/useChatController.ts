@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { Notice, FileSystemAdapter } from "obsidian";
+import { Notice } from "obsidian";
 
 import type AgentClientPlugin from "../plugin";
 import type { AttachedImage } from "../components/chat/ImagePreviewStrip";
@@ -15,10 +15,11 @@ import {
 	notifyWindowsChatEvent,
 	type ChatNotificationMode,
 } from "../shared/windows-notification";
+import { getVaultBasePath } from "../shared/path-utils";
 
 // Adapter imports
 import { ObsidianVaultAdapter } from "../adapters/obsidian/vault.adapter";
-import type { IAcpClient } from "../adapters/acp/acp.adapter";
+import type { IChatAgentClient } from "../domain/ports/chat-agent-client.port";
 
 // Hooks imports
 import { useSettings } from "./useSettings";
@@ -90,7 +91,7 @@ export interface UseChatControllerReturn {
 	// Memoized services/adapters
 	logger: Logger;
 	vaultPath: string;
-	acpAdapter: IAcpClient;
+	acpAdapter: IChatAgentClient;
 	vaultAccessAdapter: ObsidianVaultAdapter;
 	noteMentionService: NoteMentionService;
 
@@ -161,9 +162,9 @@ export function useChatController(
 		if (options.workingDirectory) {
 			return options.workingDirectory;
 		}
-		const adapter = plugin.app.vault.adapter;
-		if (adapter instanceof FileSystemAdapter) {
-			return adapter.getBasePath();
+		const basePath = getVaultBasePath(plugin.app.vault.adapter);
+		if (basePath) {
+			return basePath;
 		}
 		// Fallback for non-FileSystemAdapter (e.g., mobile)
 		return process.cwd();
@@ -218,7 +219,6 @@ export function useChatController(
 			promptCapabilities: session.promptCapabilities,
 		},
 		{
-			windowsWslMode: settings.windowsWslMode,
 			maxNoteLength: settings.displaySettings.maxNoteLength,
 			maxSelectionLength: settings.displaySettings.maxSelectionLength,
 		},
@@ -307,11 +307,8 @@ export function useChatController(
 	// Computed Values
 	// ============================================================
 	const activeAgentLabel = useMemo(() => {
-		// GitHub Copilot is the only available agent
-		return (
-			plugin.settings.copilot.displayName || plugin.settings.copilot.id
-		);
-	}, [plugin.settings.copilot]);
+		return "GitHub Copilot";
+	}, []);
 
 	const availableAgents = useMemo(() => {
 		return plugin.getAvailableAgents();

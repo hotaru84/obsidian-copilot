@@ -9,9 +9,6 @@ import type {
 } from "../domain/models/chat-session";
 import type { IAgentClient } from "../domain/ports/agent-client.port";
 import type { ISettingsAccess } from "../domain/ports/settings-access.port";
-import type { AgentClientPluginSettings } from "../plugin";
-import type { BaseAgentSettings } from "../domain/models/agent-config";
-import { toAgentConfig } from "../shared/settings-utils";
 
 // ============================================================================
 // Types
@@ -146,7 +143,7 @@ export interface UseAgentSessionReturn {
  * Get the default agent ID from settings (for new views).
  * GitHub Copilot is the only available agent.
  */
-function getDefaultAgentId(settings: AgentClientPluginSettings): string {
+function getDefaultAgentId(): string {
 	return "copilot";
 }
 
@@ -154,13 +151,11 @@ function getDefaultAgentId(settings: AgentClientPluginSettings): string {
  * Get list of all available agents from settings.
  * GitHub Copilot is the only available agent.
  */
-function getAvailableAgentsFromSettings(
-	settings: AgentClientPluginSettings,
-): AgentInfo[] {
+function getAvailableAgentsFromSettings(): AgentInfo[] {
 	return [
 		{
-			id: settings.copilot.id,
-			displayName: settings.copilot.displayName || settings.copilot.id,
+			id: "copilot",
+			displayName: "GitHub Copilot",
 		},
 	];
 }
@@ -168,12 +163,9 @@ function getAvailableAgentsFromSettings(
 /**
  * Get the currently active agent information from settings.
  */
-function getCurrentAgent(
-	settings: AgentClientPluginSettings,
-	agentId?: string,
-): AgentInfo {
-	const activeId = agentId || getDefaultAgentId(settings);
-	const agents = getAvailableAgentsFromSettings(settings);
+function getCurrentAgent(agentId?: string): AgentInfo {
+	const activeId = agentId || getDefaultAgentId();
+	const agents = getAvailableAgentsFromSettings();
 	return (
 		agents.find((agent) => agent.id === activeId) || {
 			id: activeId,
@@ -186,33 +178,14 @@ function getCurrentAgent(
 // Helper Functions (Inlined from ManageSessionUseCase)
 // ============================================================================
 
-/**
- * Find agent settings by ID from plugin settings.
- * GitHub Copilot is the only available agent.
- */
-function findAgentSettings(
-	settings: AgentClientPluginSettings,
-	agentId: string,
-): BaseAgentSettings | null {
-	if (agentId === settings.copilot.id) {
-		return settings.copilot;
-	}
-	return null;
-}
-
-/**
- * Build AgentConfig with API key injection for known agents.
- */
-function buildAgentConfigWithApiKey(
-	settings: AgentClientPluginSettings,
-	agentSettings: BaseAgentSettings,
-	agentId: string,
-	workingDirectory: string,
-) {
-	const baseConfig = toAgentConfig(agentSettings, workingDirectory);
-
-	// GitHub Copilot uses CLI authentication, no API key injection needed
-	return baseConfig;
+function buildRemoteAgentConfig(workingDirectory: string) {
+	return {
+		id: "copilot",
+		displayName: "GitHub Copilot",
+		command: "remote-runtime",
+		args: [],
+		workingDirectory,
+	};
 }
 
 // ============================================================================
@@ -264,13 +237,8 @@ export function useAgentSession(
 	initialAgentId?: string,
 ): UseAgentSessionReturn {
 	// Get initial agent info from settings
-	const initialSettings = settingsAccess.getSnapshot();
-	const effectiveInitialAgentId =
-		initialAgentId || getDefaultAgentId(initialSettings);
-	const initialAgent = getCurrentAgent(
-		initialSettings,
-		effectiveInitialAgentId,
-	);
+	const effectiveInitialAgentId = initialAgentId || getDefaultAgentId();
+	const initialAgent = getCurrentAgent(effectiveInitialAgentId);
 
 	// Session state
 	const [session, setSession] = useState<ChatSession>(() =>
@@ -295,8 +263,8 @@ export function useAgentSession(
 		async (overrideAgentId?: string) => {
 			// Get current settings and agent info
 			const settings = settingsAccess.getSnapshot();
-			const agentId = overrideAgentId || getDefaultAgentId(settings);
-			const currentAgent = getCurrentAgent(settings, agentId);
+			const agentId = overrideAgentId || getDefaultAgentId();
+			const currentAgent = getCurrentAgent(agentId);
 
 			// Reset to initializing state immediately
 			setSession((prev) => ({
@@ -320,27 +288,7 @@ export function useAgentSession(
 			setErrorInfo(null);
 
 			try {
-				// Find agent settings
-				const agentSettings = findAgentSettings(settings, agentId);
-
-				if (!agentSettings) {
-					setSession((prev) => ({ ...prev, state: "error" }));
-					setErrorInfo({
-						title: "Agent Not Found",
-						message: `Agent with ID "${agentId}" not found in settings`,
-						suggestion:
-							"Please check your agent configuration in settings.",
-					});
-					return;
-				}
-
-				// Build AgentConfig with API key injection
-				const agentConfig = buildAgentConfigWithApiKey(
-					settings,
-					agentSettings,
-					agentId,
-					workingDirectory,
-				);
+				const agentConfig = buildRemoteAgentConfig(workingDirectory);
 
 				// Check if initialization is needed
 				// Only initialize if agent is not initialized OR agent ID has changed
@@ -487,10 +435,8 @@ export function useAgentSession(
 	 */
 	const loadSession = useCallback(
 		async (sessionId: string) => {
-			// Get current settings and agent info
-			const settings = settingsAccess.getSnapshot();
-			const defaultAgentId = getDefaultAgentId(settings);
-			const currentAgent = getCurrentAgent(settings);
+			const defaultAgentId = getDefaultAgentId();
+			const currentAgent = getCurrentAgent();
 
 			// Reset to initializing state immediately
 			setSession((prev) => ({
@@ -510,30 +456,7 @@ export function useAgentSession(
 			setErrorInfo(null);
 
 			try {
-				// Find agent settings
-				const agentSettings = findAgentSettings(
-					settings,
-					defaultAgentId,
-				);
-
-				if (!agentSettings) {
-					setSession((prev) => ({ ...prev, state: "error" }));
-					setErrorInfo({
-						title: "Agent Not Found",
-						message: `Agent with ID "${defaultAgentId}" not found in settings`,
-						suggestion:
-							"Please check your agent configuration in settings.",
-					});
-					return;
-				}
-
-				// Build AgentConfig with API key injection
-				const agentConfig = buildAgentConfigWithApiKey(
-					settings,
-					agentSettings,
-					defaultAgentId,
-					workingDirectory,
-				);
+				const agentConfig = buildRemoteAgentConfig(workingDirectory);
 
 				// Check if initialization is needed
 				const needsInitialize =
@@ -709,9 +632,8 @@ export function useAgentSession(
 	 * Get list of available agents.
 	 */
 	const getAvailableAgents = useCallback(() => {
-		const settings = settingsAccess.getSnapshot();
-		return getAvailableAgentsFromSettings(settings);
-	}, [settingsAccess]);
+		return getAvailableAgentsFromSettings();
+	}, []);
 
 	/**
 	 * Update available slash commands.

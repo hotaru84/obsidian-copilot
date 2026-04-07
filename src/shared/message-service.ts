@@ -18,13 +18,7 @@ import type {
 	NoteMetadata,
 	EditorPosition,
 } from "../domain/ports/vault-access.port";
-import { AcpErrorCode, type AcpError } from "../domain/models/agent-error";
-import {
-	extractErrorCode,
-	toAcpError,
-	isEmptyResponseError,
-} from "./acp-error-utils";
-import type { AuthenticationMethod } from "../domain/models/chat-session";
+import type { AcpError } from "../domain/models/agent-error";
 import type {
 	PromptContent,
 	ImagePromptContent,
@@ -107,9 +101,6 @@ export interface SendPreparedPromptInput {
 
 	/** The display content (for error reporting) */
 	displayContent: PromptContent[];
-
-	/** Available authentication methods */
-	authMethods: AuthenticationMethod[];
 }
 
 /**
@@ -646,123 +637,18 @@ export async function sendPreparedPrompt(
 			agentContent: input.agentContent,
 		};
 	} catch (error) {
-		return await handleSendError(
-			error,
-			input.sessionId,
-			input.agentContent,
-			input.displayContent,
-			input.authMethods,
-			agentClient,
-		);
-	}
-}
-
-// ============================================================================
-// Error Handling Functions
-// ============================================================================
-
-/**
- * Handle errors that occur during prompt sending.
- *
- * Error handling strategy:
- * 1. "empty response text" errors are ignored (not real errors)
- * 2. -32000 (Authentication Required) triggers authentication retry
- * 3. All other errors are converted to AcpError and displayed directly
- */
-async function handleSendError(
-	error: unknown,
-	sessionId: string,
-	agentContent: PromptContent[],
-	displayContent: PromptContent[],
-	authMethods: AuthenticationMethod[],
-	agentClient: IAgentClient,
-): Promise<SendPromptResult> {
-	// Check for "empty response text" error - ignore silently
-	if (isEmptyResponseError(error)) {
-		return {
-			success: true,
-			displayContent,
-			agentContent,
-		};
-	}
-
-	const errorCode = extractErrorCode(error);
-
-	// Only attempt authentication retry for -32000 (Authentication Required)
-	if (errorCode === AcpErrorCode.AUTHENTICATION_REQUIRED) {
-		// Check if authentication methods are available
-		if (authMethods && authMethods.length > 0) {
-			// Try automatic authentication retry if only one method available
-			if (authMethods.length === 1) {
-				const retryResult = await retryWithAuthentication(
-					sessionId,
-					agentContent,
-					displayContent,
-					authMethods[0].id,
-					agentClient,
-				);
-
-				if (retryResult) {
-					return retryResult;
-				}
-			}
-
-			// Multiple auth methods or retry failed - let user choose
-			return {
-				success: false,
-				displayContent,
-				agentContent,
-				requiresAuth: true,
-				error: toAcpError(error, sessionId),
-			};
-		}
-
-		// No auth methods available - still show the error
-		// This is not an error condition, agent just doesn't support auth
-	}
-
-	// For all other errors, convert to AcpError and display directly
-	// The agent's error message is preserved and shown to the user
-	return {
-		success: false,
-		displayContent,
-		agentContent,
-		error: toAcpError(error, sessionId),
-	};
-}
-
-/**
- * Retry sending prompt after authentication.
- */
-async function retryWithAuthentication(
-	sessionId: string,
-	agentContent: PromptContent[],
-	displayContent: PromptContent[],
-	authMethodId: string,
-	agentClient: IAgentClient,
-): Promise<SendPromptResult | null> {
-	try {
-		const authSuccess = await agentClient.authenticate(authMethodId);
-
-		if (!authSuccess) {
-			return null;
-		}
-
-		await agentClient.sendPrompt(sessionId, agentContent);
-
-		return {
-			success: true,
-			displayContent,
-			agentContent,
-			retriedSuccessfully: true,
-		};
-	} catch (retryError) {
-		// Convert retry error to AcpError
+		const message = error instanceof Error ? error.message : String(error);
 		return {
 			success: false,
-			displayContent,
-			agentContent,
-			error: toAcpError(retryError, sessionId),
+			displayContent: input.displayContent,
+			agentContent: input.agentContent,
+			error: {
+				title: "Send Message Failed",
+				message,
+				code: -1,
+				sessionId: input.sessionId,
+				originalError: error,
+			},
 		};
 	}
 }

@@ -1,14 +1,8 @@
 /**
- * Port for communicating with ACP-compatible AI agents
+ * Port for communicating with chat runtime backends.
  *
- * This plugin is designed specifically for the Agent Client Protocol (ACP).
- * This interface abstracts the ACP connection lifecycle and messaging,
- * allowing the domain layer to work with agents without depending on
- * the specific ACP library implementation.
- *
- * Since ACP is a rapidly evolving protocol with frequent specification
- * changes, this port helps isolate the impact of those changes to the
- * adapter layer, keeping the domain logic stable.
+ * The interface is runtime-agnostic and keeps the domain layer independent
+ * from transport details (WebSocket, process bridge, etc.).
  */
 
 import type { PermissionOption } from "../models/chat-message";
@@ -128,7 +122,7 @@ export interface SessionCapabilities {
 }
 
 /**
- * Full agent capabilities from ACP initialization.
+ * Full agent capabilities from runtime initialization.
  *
  * Contains all capability information returned by the agent,
  * including session features, MCP support, and prompt capabilities.
@@ -217,19 +211,18 @@ export interface NewSessionResult {
 }
 
 /**
- * Interface for communicating with ACP-compatible agents.
+ * Interface for communicating with runtime adapters.
  *
  * Provides methods for connecting to agents, sending messages,
  * handling permission requests, and managing agent lifecycle.
  *
- * This port will be implemented by adapters that handle the actual
- * ACP protocol communication and process management.
+ * This port is implemented by adapters that handle protocol/transport details.
  */
 export interface IAgentClient {
 	/**
 	 * Initialize connection to an agent.
 	 *
-	 * Spawns the agent process and performs protocol handshake.
+	 * Establishes runtime connection and performs handshake.
 	 *
 	 * @param config - Agent configuration
 	 * @returns Promise resolving to initialization result

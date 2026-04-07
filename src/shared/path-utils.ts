@@ -19,6 +19,57 @@ export function resolveCommandDirectory(command: string): string | null {
 	return command.slice(0, lastSlash);
 }
 
+interface VaultAdapterWithBasePath {
+	getBasePath?: () => string;
+	basePath?: string;
+	getFullPath?: (normalizedPath: string) => string;
+}
+
+function normalizeNonEmptyPath(value: unknown): string | null {
+	if (typeof value !== "string") {
+		return null;
+	}
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed.replace(/[\\/]+$/, "") : null;
+}
+
+/**
+ * Resolve the on-disk vault base path from an Obsidian vault adapter.
+ * Uses duck typing because plugin runtime adapters do not always satisfy
+ * instanceof FileSystemAdapter checks in bundled environments.
+ *
+ * @param adapter - Obsidian vault adapter instance
+ * @returns Absolute vault path, or null if unavailable
+ */
+export function getVaultBasePath(adapter: unknown): string | null {
+	if (!adapter || typeof adapter !== "object") {
+		return null;
+	}
+
+	const candidate = adapter as VaultAdapterWithBasePath;
+
+	if (typeof candidate.getBasePath === "function") {
+		const basePath = normalizeNonEmptyPath(candidate.getBasePath());
+		if (basePath) {
+			return basePath;
+		}
+	}
+
+	const basePathField = normalizeNonEmptyPath(candidate.basePath);
+	if (basePathField) {
+		return basePathField;
+	}
+
+	if (typeof candidate.getFullPath === "function") {
+		const fullPath = normalizeNonEmptyPath(candidate.getFullPath(""));
+		if (fullPath) {
+			return fullPath;
+		}
+	}
+
+	return null;
+}
+
 /**
  * Convert absolute path to relative path if it's under basePath.
  * Otherwise return the absolute path as-is.

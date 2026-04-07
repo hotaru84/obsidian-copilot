@@ -11,9 +11,7 @@
   <a href="README.ja.md">日本語はこちら</a>
 </p>
 
-Chat with GitHub Copilot directly in Obsidian. Bring your AI assistant into your vault using the Agent Client Protocol (ACP).
-
-Built on [Agent Client Protocol (ACP)](https://github.com/zed-industries/agent-client-protocol) by Zed.
+Chat with GitHub Copilot directly in Obsidian using the built-in remote runtime SDK.
 
 https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 
@@ -33,7 +31,6 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 - **Terminal Integration**: Let Copilot execute commands and return results
 - **MCP Tool Calls**: View Model Context Protocol tool usage inline in chat
 - **Input History**: Navigate previous messages with ↑/↓ arrow keys
-- **WSL Support**: Run Copilot CLI inside Windows Subsystem for Linux (Windows only)
 - **Auto-Allow Permissions**: Optionally bypass agent permission prompts
 - **Display Customization**: Adjust font size, emoji display, and diff collapsing
 
@@ -49,35 +46,15 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 ### Manual Installation
 
 1. Download `main.js`, `manifest.json`, `styles.css` from [Releases](https://github.com/hotaru84/obsidian-copilot/releases)
-2. Place them in `VaultFolder/.obsidian/plugins/obsidian-copilot/`
+2. Place them in `VaultFolder/.obsidian/plugins/obsidian-copilot-agent/`
 3. Enable the plugin in **Settings → Community Plugins**
 
 ## Quick Start
 
-GitHub Copilot uses the Agent Client Protocol natively, so setup is simple:
-
-1. **Install GitHub Copilot CLI**:
-   ```bash
-   npm install -g @github/copilot-cli
-   ```
-
-2. **Authenticate**:
-   ```bash
-   copilot auth login
-   ```
-   Follow the browser prompts to authorize with GitHub.
-
-3. **Find the path**:
-   ```bash
-   which copilot    # macOS/Linux
-   where.exe copilot # Windows
-   ```
-
-4. **Configure** in **Settings → Copilot for Obsidian**:
-   - **GitHub Copilot CLI path**: e.g., `/usr/local/bin/copilot` (or `C:\path\to\copilot.exe` on Windows)
-   - **Node.js path**: (optional) Path to your Node.js installation if not in PATH
-
-5. **Start chatting**: Click the robot icon in the ribbon (or use keyboard shortcut)
+1. Open **Settings → Copilot for Obsidian → Runtime**.
+2. Choose **Bundled server** (recommended) or **External server**.
+3. If needed, adjust port/URL and startup timeout.
+4. Start chatting from the ribbon icon.
 
 **[Full Documentation](https://github.com/hotaru84/obsidian-copilot/wiki)**
 
@@ -100,7 +77,7 @@ the console despite no UI prompt being shown.
    the leftover entry caused the *next* `requestPermission` call to see
    `queue.length > 0` and emit `isActive: false`, hiding the approval buttons.
 
-2. **Status regression in `tool_call_update`** — The ACP `ToolCallUpdate.status`
+2. **Status regression in `tool_call_update`** — The runtime `ToolCallUpdate.status`
    field is nullable (`null` = "no change"). The adapter was treating `null` the
    same as `undefined` via `status || "pending"`, converting it to `"pending"`
    and overwriting an already-`in_progress` status.

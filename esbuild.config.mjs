@@ -44,6 +44,22 @@ const context = await esbuild.context({
 import fs from "fs";
 import path from "path";
 
+function copyIfExists(sourcePath, destinationPath) {
+	if (!fs.existsSync(sourcePath)) {
+		return false;
+	}
+
+	const stat = fs.statSync(sourcePath);
+	if (stat.isDirectory()) {
+		fs.cpSync(sourcePath, destinationPath, { recursive: true });
+	} else {
+		fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+		fs.copyFileSync(sourcePath, destinationPath);
+	}
+
+	return true;
+}
+
 if (prod) {
 	await context.rebuild();
 
@@ -63,6 +79,38 @@ if (prod) {
 	if (fs.existsSync("styles.css")) {
 		fs.copyFileSync("styles.css", path.join(outputDir, "styles.css"));
 		console.log(`✓ Copied styles.css to ${outputDir}/`);
+	}
+
+	const bundledServerDir = path.join(
+		"vendor",
+		"copilot-runtime-sdk",
+		"server-go",
+	);
+	if (copyIfExists(bundledServerDir, path.join(outputDir, "server-go"))) {
+		console.log(
+			`✓ Copied bundled remote server binaries to ${outputDir}/server-go/`,
+		);
+	}
+
+	const vendorManifestPath = path.join(
+		"vendor",
+		"copilot-runtime-sdk",
+		"manifest.json",
+	);
+	if (
+		copyIfExists(
+			vendorManifestPath,
+			path.join(
+				outputDir,
+				"vendor",
+				"copilot-runtime-sdk",
+				"manifest.json",
+			),
+		)
+	) {
+		console.log(
+			`✓ Copied remote SDK manifest to ${outputDir}/vendor/copilot-runtime-sdk/`,
+		);
 	}
 
 	console.log(`✓ Build complete! Output in ${outputDir}/`);

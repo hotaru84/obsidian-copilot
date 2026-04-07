@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import type {
 	ChatMessage,
 	MessageContent,
@@ -13,7 +13,6 @@ import type { ErrorInfo } from "../domain/models/agent-error";
 import type { ImagePromptContent } from "../domain/models/prompt-content";
 import type { IMentionService } from "../shared/mention-utils";
 import { preparePrompt, sendPreparedPrompt } from "../shared/message-service";
-import { Platform } from "obsidian";
 
 // ============================================================================
 // Types
@@ -142,7 +141,6 @@ export interface SessionContext {
  * Settings context required for message preparation.
  */
 export interface SettingsContext {
-	windowsWslMode: boolean;
 	maxNoteLength: number;
 	maxSelectionLength: number;
 }
@@ -235,7 +233,7 @@ function mergeToolCallContent(
  * @param vaultAccess - Vault access for reading notes
  * @param mentionService - Mention service for parsing mentions
  * @param sessionContext - Session information (sessionId, authMethods)
- * @param settingsContext - Settings information (windowsWslMode)
+ * @param settingsContext - Settings information
  */
 export function useChat(
 	agentClient: IAgentClient,
@@ -595,13 +593,6 @@ export function useChat(
 	}, []);
 
 	/**
-	 * Check if paths should be converted to WSL format.
-	 */
-	const shouldConvertToWsl = useMemo(() => {
-		return Platform.isWin && settingsContext.windowsWslMode;
-	}, [settingsContext.windowsWslMode]);
-
-	/**
 	 * Send a message to the agent.
 	 */
 	const sendMessage = useCallback(
@@ -623,7 +614,6 @@ export function useChat(
 					activeNote: options.activeNote,
 					vaultBasePath: options.vaultBasePath,
 					isAutoMentionDisabled: options.isAutoMentionDisabled,
-					convertToWsl: shouldConvertToWsl,
 					supportsEmbeddedContext:
 						sessionContext.promptCapabilities?.embeddedContext ??
 						false,
@@ -681,7 +671,6 @@ export function useChat(
 						sessionId: sessionContext.sessionId,
 						agentContent: prepared.agentContent,
 						displayContent: prepared.displayContent,
-						authMethods: sessionContext.authMethods,
 					},
 					agentClient,
 				);
@@ -722,7 +711,6 @@ export function useChat(
 			sessionContext.sessionId,
 			sessionContext.authMethods,
 			sessionContext.promptCapabilities,
-			shouldConvertToWsl,
 			addMessage,
 		],
 	);
