@@ -818,13 +818,13 @@ export function useAgentSession(
 				return;
 			}
 
-			// Capture previous agent ID for rollback before optimistic update
-			let previousAgentId: string | null = null;
+			// Store previous agent for rollback on error
+			const previousAgentId =
+				session.remoteAgents?.currentAgentId ?? null;
 
 			// Optimistic update - update UI immediately
 			setSession((prev) => {
 				if (!prev.remoteAgents) return prev;
-				previousAgentId = prev.remoteAgents.currentAgentId;
 				return {
 					...prev,
 					remoteAgents: {
@@ -851,7 +851,11 @@ export function useAgentSession(
 				});
 			}
 		},
-		[agentClient, session.sessionId],
+		[
+			agentClient,
+			session.sessionId,
+			session.remoteAgents?.currentAgentId,
+		],
 	);
 
 	/**
