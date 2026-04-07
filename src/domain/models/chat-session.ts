@@ -129,6 +129,41 @@ export interface SessionModeState {
 }
 
 // ============================================================================
+// Remote Agent
+// ============================================================================
+
+/**
+ * Represents a remote agent available through the runtime server.
+ *
+ * Remote agents are advertised by the server via the `listAgents()` SDK call
+ * and can be assigned to a session to override the default agent behavior.
+ */
+export interface RemoteAgentInfo {
+	/** Unique identifier for this remote agent */
+	agentId: string;
+
+	/** Human-readable name for display */
+	name: string;
+
+	/** Optional description of what this agent does */
+	description?: string;
+}
+
+/**
+ * State of available remote agents in a session.
+ *
+ * Contains both the list of available remote agents and the currently
+ * active remote agent (null means using the default agent).
+ */
+export interface SessionRemoteAgentState {
+	/** List of remote agents available from the server */
+	availableAgents: RemoteAgentInfo[];
+
+	/** ID of the currently active remote agent (null = default) */
+	currentAgentId: string | null;
+}
+
+// ============================================================================
 // Model (Experimental)
 // ============================================================================
 
@@ -216,6 +251,13 @@ export interface ChatSession {
 	 * Updated via NewSessionResponse initially.
 	 */
 	models?: SessionModelState;
+
+	/**
+	 * Remote agent state for this session.
+	 * Contains available remote agents and the currently active remote agent.
+	 * Only present when the server advertises agents via listAgents().
+	 */
+	remoteAgents?: SessionRemoteAgentState;
 
 	/**
 	 * Prompt capabilities supported by the agent.

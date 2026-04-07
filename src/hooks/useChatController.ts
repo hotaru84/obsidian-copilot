@@ -135,6 +135,7 @@ export interface UseChatControllerReturn {
 	handleOpenHistory: () => void;
 	handleSetMode: (modeId: string) => Promise<void>;
 	handleSetModel: (modelId: string) => Promise<void>;
+	handleSetRemoteAgent: (agentId: string | null) => Promise<void>;
 
 	// Input state (for broadcast commands - sidebar only)
 	inputValue: string;
@@ -601,6 +602,13 @@ export function useChatController(
 		[agentSession],
 	);
 
+	const handleSetRemoteAgent = useCallback(
+		async (agentId: string | null) => {
+			await agentSession.setRemoteAgent(agentId);
+		},
+		[agentSession],
+	);
+
 	// Update modal props when session history state changes
 	useEffect(() => {
 		if (historyModalRef.current) {
@@ -894,6 +902,7 @@ export function useChatController(
 		handleOpenHistory,
 		handleSetMode,
 		handleSetModel,
+		handleSetRemoteAgent,
 
 		// Input state
 		inputValue,

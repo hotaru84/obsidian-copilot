@@ -26,6 +26,8 @@ import type {
 	SessionModel,
 	SessionModeState,
 	SessionModelState,
+	RemoteAgentInfo,
+	SessionRemoteAgentState,
 } from "../../domain/models/chat-session";
 import type {
 	IChatAgentClient,
@@ -49,8 +51,10 @@ interface SessionState {
 	session: CopilotSession;
 	currentModeId: string;
 	currentModelId?: string;
+	currentRemoteAgentId?: string;
 	availableCommands: SlashCommand[];
 	availableModels: SessionModel[];
+	availableRemoteAgents: RemoteAgentInfo[];
 	messageDeltaBuffer: string;
 	thoughtDeltaBuffer: string;
 }
@@ -470,12 +474,14 @@ export class RemoteAdapter implements IChatAgentClient {
 		modes: SessionModeState;
 		models?: SessionModelState;
 		commands: SlashCommand[];
+		remoteAgents?: SessionRemoteAgentState;
 	}> {
 		const client = this.getClient();
-		const [models, customCommands, prompts] = await Promise.all([
+		const [models, customCommands, prompts, agents] = await Promise.all([
 			client.listModels().catch(() => []),
 			client.listCustomCommands().catch(() => []),
 			client.listPrompts().catch(() => []),
+			client.listAgents().catch(() => []),
 		]);
 
 		const availableModels: SessionModel[] = models.map((m) => ({
@@ -483,6 +489,14 @@ export class RemoteAdapter implements IChatAgentClient {
 			name: m.name || m.id,
 			description: undefined,
 		}));
+
+		const availableRemoteAgents: RemoteAgentInfo[] = agents
+			.filter((a) => a.enabled !== false)
+			.map((a) => ({
+				agentId: a.id,
+				name: a.name,
+				description: a.description,
+			}));
 
 		const commandEntries: SlashCommand[] = [
 			...customCommands.map((cmd) => ({
@@ -502,8 +516,10 @@ export class RemoteAdapter implements IChatAgentClient {
 			session,
 			currentModeId: "interactive",
 			currentModelId: availableModels[0]?.modelId,
+			currentRemoteAgentId: undefined,
 			availableCommands: commandEntries,
 			availableModels,
+			availableRemoteAgents,
 			messageDeltaBuffer: "",
 			thoughtDeltaBuffer: "",
 		};
@@ -530,6 +546,13 @@ export class RemoteAdapter implements IChatAgentClient {
 						}
 					: undefined,
 			commands: commandEntries,
+			remoteAgents:
+				availableRemoteAgents.length > 0
+					? {
+							availableAgents: availableRemoteAgents,
+							currentAgentId: null,
+						}
+					: undefined,
 		};
 	}
 
@@ -1005,6 +1028,7 @@ export class RemoteAdapter implements IChatAgentClient {
 			sessionId: created.sessionId,
 			modes: snapshot.modes,
 			models: snapshot.models,
+			remoteAgents: snapshot.remoteAgents,
 		};
 	}
 
@@ -1183,6 +1207,20 @@ export class RemoteAdapter implements IChatAgentClient {
 		const state = this.getSessionState(sessionId);
 		await state.session.setModel(modelId);
 		state.currentModelId = modelId;
+	}
+
+	async setSessionAgent(
+		sessionId: string,
+		agentId: string | null,
+	): Promise<void> {
+		const state = this.getSessionState(sessionId);
+		if (agentId === null) {
+			await state.session.clearAgent();
+			state.currentRemoteAgentId = undefined;
+		} else {
+			await state.session.setAgent(agentId);
+			state.currentRemoteAgentId = agentId;
+		}
 	}
 
 	async listSessions(

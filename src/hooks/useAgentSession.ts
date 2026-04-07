@@ -4,6 +4,7 @@ import type {
 	SessionState,
 	SessionModeState,
 	SessionModelState,
+	SessionRemoteAgentState,
 	SlashCommand,
 	AuthenticationMethod,
 } from "../domain/models/chat-session";
@@ -133,6 +134,13 @@ export interface UseAgentSessionReturn {
 	 * @param modelId - ID of the model to set
 	 */
 	setModel: (modelId: string) => Promise<void>;
+
+	/**
+	 * Set the remote agent for the session.
+	 * Sends a request to the agent to use a specific remote agent.
+	 * @param agentId - ID of the remote agent to use, or null to clear
+	 */
+	setRemoteAgent: (agentId: string | null) => Promise<void>;
 }
 
 // ============================================================================
@@ -209,6 +217,7 @@ function createInitialSession(
 		availableCommands: undefined,
 		modes: undefined,
 		models: undefined,
+		remoteAgents: undefined,
 		createdAt: new Date(),
 		lastActivityAt: new Date(),
 		workingDirectory,
@@ -277,6 +286,7 @@ export function useAgentSession(
 				availableCommands: undefined,
 				modes: undefined,
 				models: undefined,
+				remoteAgents: undefined,
 				// Keep capabilities/info from previous session if same agent
 				// They will be updated if re-initialization is needed
 				promptCapabilities: prev.promptCapabilities,
@@ -348,6 +358,7 @@ export function useAgentSession(
 					authMethods: authMethods,
 					modes: sessionResult.modes,
 					models: sessionResult.models,
+					remoteAgents: sessionResult.remoteAgents,
 					// Only update capabilities/info if we re-initialized
 					// Otherwise, keep the previous value (from the same agent)
 					promptCapabilities: needsInitialize
@@ -797,6 +808,53 @@ export function useAgentSession(
 	}, [agentClient]);
 
 	/**
+	 * Set the remote agent for the session.
+	 * Sends a request to assign a specific remote agent to the session.
+	 */
+	const setRemoteAgent = useCallback(
+		async (agentId: string | null) => {
+			if (!session.sessionId) {
+				console.warn("Cannot set remote agent: no active session");
+				return;
+			}
+
+			// Capture previous agent ID for rollback before optimistic update
+			let previousAgentId: string | null = null;
+
+			// Optimistic update - update UI immediately
+			setSession((prev) => {
+				if (!prev.remoteAgents) return prev;
+				previousAgentId = prev.remoteAgents.currentAgentId;
+				return {
+					...prev,
+					remoteAgents: {
+						...prev.remoteAgents,
+						currentAgentId: agentId,
+					},
+				};
+			});
+
+			try {
+				await agentClient.setSessionAgent(session.sessionId, agentId);
+			} catch (error) {
+				console.error("Failed to set remote agent:", error);
+				// Rollback to previous agent on error
+				setSession((prev) => {
+					if (!prev.remoteAgents) return prev;
+					return {
+						...prev,
+						remoteAgents: {
+							...prev.remoteAgents,
+							currentAgentId: previousAgentId,
+						},
+					};
+				});
+			}
+		},
+		[agentClient, session.sessionId],
+	);
+
+	/**
 	 * Update session state after loading/resuming/forking a session.
 	 * Called by useSessionHistory after a successful session operation.
 	 */
@@ -834,5 +892,6 @@ export function useAgentSession(
 		updateCurrentMode,
 		setMode,
 		setModel,
+		setRemoteAgent,
 	};
 }
