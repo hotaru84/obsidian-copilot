@@ -969,7 +969,7 @@ export class RemoteAdapter implements IChatAgentClient {
 				resolve({
 					kind: "denied-no-approval-rule-and-could-not-request-from-user",
 				});
-				this.activateNextPermission(sessionId);
+				this.activateNextPermission(pending.sessionId);
 			}, 30000);
 
 			this.pendingPermissions.set(requestId, {
