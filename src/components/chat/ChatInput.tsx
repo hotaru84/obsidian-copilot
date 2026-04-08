@@ -1,5 +1,5 @@
 import * as React from "react";
-const { useRef, useState, useEffect, useCallback } = React;
+const { useRef, useState, useEffect, useCallback, useMemo } = React;
 import { setIcon, Notice, Menu } from "obsidian";
 
 import type AgentClientPlugin from "../../plugin";
@@ -8,6 +8,7 @@ import type {
 	SlashCommand,
 	SessionModeState,
 	SessionModelState,
+	SessionRemoteAgentState,
 } from "../../domain/models/chat-session";
 import type { ImagePromptContent } from "../../domain/models/prompt-content";
 import type {
@@ -93,6 +94,10 @@ export interface ChatInputProps {
 	models?: SessionModelState;
 	/** Callback when model is changed */
 	onModelChange?: (modelId: string) => void;
+	/** Session remote agent state (available remote agents and current agent) */
+	remoteAgents?: SessionRemoteAgentState;
+	/** Callback when remote agent is changed (null to clear) */
+	onRemoteAgentChange?: (agentId: string | null) => void;
 	/** Whether the agent supports image attachments */
 	supportsImages?: boolean;
 	/** Current agent ID (used to clear images on agent switch) */
@@ -171,6 +176,8 @@ export function ChatInput({
 	onModeChange,
 	models,
 	onModelChange,
+	remoteAgents,
+	onRemoteAgentChange,
 	supportsImages = false,
 	availableAgents,
 	currentAgentId,
@@ -226,6 +233,8 @@ export function ChatInput({
 	const [, setIsModeDropdownOpen] = useState(false);
 	const modelButtonRef = useRef<HTMLDivElement>(null);
 	const [, setIsModelDropdownOpen] = useState(false);
+	const remoteAgentButtonRef = useRef<HTMLDivElement>(null);
+	const [, setIsRemoteAgentDropdownOpen] = useState(false);
 
 	// Clear attached images when agent changes
 	useEffect(() => {
@@ -858,6 +867,63 @@ export function ChatInput({
 	const onModelChangeRef = useRef(onModelChange);
 	onModelChangeRef.current = onModelChange;
 
+	// Stable references for remote agent callbacks
+	const onRemoteAgentChangeRef = useRef(onRemoteAgentChange);
+	onRemoteAgentChangeRef.current = onRemoteAgentChange;
+
+	// Memoized current remote agent info
+	const currentRemoteAgent = useMemo(
+		() =>
+			remoteAgents?.availableAgents.find(
+				(a) => a.agentId === remoteAgents.currentAgentId,
+			) ?? null,
+		[remoteAgents],
+	);
+
+	// Handle remote agent selector click
+	const handleRemoteAgentSelectorClick = useCallback(() => {
+		if (
+			!remoteAgentButtonRef.current ||
+			!remoteAgents?.availableAgents ||
+			remoteAgents.availableAgents.length === 0
+		) {
+			return;
+		}
+
+		const menu = new Menu();
+		const currentAgentId = remoteAgents.currentAgentId;
+
+		// Option to clear the agent (use default)
+		menu.addItem((item) => {
+			item.setTitle("Default")
+				.setIcon(currentAgentId === null ? "check" : "")
+				.onClick(() => {
+					if (onRemoteAgentChangeRef.current) {
+						onRemoteAgentChangeRef.current(null);
+					}
+					setIsRemoteAgentDropdownOpen(false);
+				});
+		});
+
+		for (const agent of remoteAgents.availableAgents) {
+			const isActive = agent.agentId === currentAgentId;
+			menu.addItem((item) => {
+				item.setTitle(agent.name)
+					.setIcon(isActive ? "check" : "")
+					.onClick(() => {
+						if (onRemoteAgentChangeRef.current) {
+							onRemoteAgentChangeRef.current(agent.agentId);
+						}
+						setIsRemoteAgentDropdownOpen(false);
+					});
+			});
+		}
+
+		const rect = remoteAgentButtonRef.current.getBoundingClientRect();
+		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
+		setIsRemoteAgentDropdownOpen(true);
+	}, [remoteAgents]);
+
 	// Tool menu button ref
 	const toolMenuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -1173,6 +1239,38 @@ export function ChatInput({
 
 				{/* Input Actions (Mode Selector + Model Selector + Send Button) */}
 				<div className="agent-client-chat-input-actions">
+					{/* Remote Agent Selector */}
+					{remoteAgents &&
+						remoteAgents.availableAgents.length > 0 && (
+							<div
+								ref={remoteAgentButtonRef}
+								className="agent-client-remote-agent-selector"
+								onClick={handleRemoteAgentSelectorClick}
+								role="button"
+								tabIndex={0}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										handleRemoteAgentSelectorClick();
+									}
+								}}
+								title={
+									currentRemoteAgent?.description ??
+									"Select agent"
+								}
+							>
+								<span className="agent-client-remote-agent-selector-text">
+									{currentRemoteAgent?.name ?? "Default"}
+								</span>
+								<span
+									className="agent-client-remote-agent-selector-icon"
+									ref={(el) => {
+										if (el) setIcon(el, "chevron-down");
+									}}
+								/>
+							</div>
+						)}
+
 					{/* Mode Selector */}
 					{modes && modes.availableModes.length > 1 && (
 						<div

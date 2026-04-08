@@ -10,6 +10,7 @@ import type {
 	AuthenticationMethod,
 	SessionModeState,
 	SessionModelState,
+	SessionRemoteAgentState,
 } from "../models/chat-session";
 import type { SessionUpdate } from "../models/session-update";
 import type { ProcessError } from "../models/agent-error";
@@ -208,6 +209,13 @@ export interface NewSessionResult {
 	 * Undefined if the agent does not support model selection.
 	 */
 	models?: SessionModelState;
+
+	/**
+	 * Remote agent state for this session.
+	 * Contains available remote agents from the server.
+	 * Undefined if the server does not advertise agents.
+	 */
+	remoteAgents?: SessionRemoteAgentState;
 }
 
 /**
@@ -360,6 +368,17 @@ export interface IAgentClient {
 	 * @param modelId - The model ID to set
 	 */
 	setSessionModel(sessionId: string, modelId: string): Promise<void>;
+
+	/**
+	 * Set the session remote agent.
+	 *
+	 * Assigns a specific remote agent to the session.
+	 * Pass null to clear the agent and use the default.
+	 *
+	 * @param sessionId - The session ID
+	 * @param agentId - The remote agent ID to set, or null to clear
+	 */
+	setSessionAgent(sessionId: string, agentId: string | null): Promise<void>;
 
 	// ========================================================================
 	// Session Management Methods

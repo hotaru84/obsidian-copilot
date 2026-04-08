@@ -255,6 +255,7 @@ function FloatingChatComponent({
 		handleOpenHistory,
 		handleSetMode,
 		handleSetModel,
+		handleSetRemoteAgent,
 		inputValue,
 		setInputValue,
 		attachedImages,
@@ -880,6 +881,10 @@ function FloatingChatComponent({
 					onModeChange={(modeId) => void handleSetMode(modeId)}
 					models={session.models}
 					onModelChange={(modelId) => void handleSetModel(modelId)}
+					remoteAgents={session.remoteAgents}
+					onRemoteAgentChange={(agentId) =>
+						void handleSetRemoteAgent(agentId)
+					}
 					supportsImages={session.promptCapabilities?.image ?? false}
 					agentId={session.agentId}
 					inputValue={inputValue}
