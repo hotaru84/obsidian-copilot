@@ -671,11 +671,19 @@ export function useChatController(
 	// ============================================================
 	// Effects - Session Lifecycle
 	// ============================================================
+	const lastAutoInitializedAgentKeyRef = useRef<string | null>(null);
+
 	// Initialize session on mount
 	useEffect(() => {
+		const requestedAgentId = config?.agent || initialAgentId || "copilot";
+		if (lastAutoInitializedAgentKeyRef.current === requestedAgentId) {
+			return;
+		}
+		lastAutoInitializedAgentKeyRef.current = requestedAgentId;
+
 		logger.log("[Debug] Starting connection setup via useAgentSession...");
-		void agentSession.createSession(config?.agent || initialAgentId);
-	}, [agentSession.createSession, config?.agent, initialAgentId]);
+		void agentSession.createSession(requestedAgentId);
+	}, [agentSession.createSession, config?.agent, initialAgentId, logger]);
 
 	// TODO(code-block): Apply configured model when session is ready
 	useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type {
 	ChatSession,
 	SessionState,
@@ -270,6 +270,7 @@ export function useAgentSession(
 
 	// Derived state
 	const isReady = session.state === "ready";
+	const isCreatingSessionRef = useRef(false);
 
 	/**
 	 * Create a new session with the active agent.
@@ -277,6 +278,11 @@ export function useAgentSession(
 	 */
 	const createSession = useCallback(
 		async (overrideAgentId?: string) => {
+			if (isCreatingSessionRef.current) {
+				return;
+			}
+			isCreatingSessionRef.current = true;
+
 			// Get current settings and agent info
 			const settings = settingsAccess.getSnapshot();
 			const agentId = overrideAgentId || getDefaultAgentId();
@@ -437,6 +443,8 @@ export function useAgentSession(
 					message: errorMessage,
 					suggestion: errorSuggestion,
 				});
+			} finally {
+				isCreatingSessionRef.current = false;
 			}
 		},
 		[agentClient, settingsAccess, workingDirectory],
