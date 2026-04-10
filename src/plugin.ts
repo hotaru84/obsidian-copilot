@@ -30,7 +30,6 @@ import {
 } from "./shared/remote-sdk-artifacts";
 import { RemoteServerManager } from "./shared/remote-server-manager";
 import { getVaultBasePath } from "./shared/path-utils";
-import type { RemoteRuntimeSettings } from "./domain/models/remote-runtime-config";
 import type { IChatAgentClient } from "./domain/ports/chat-agent-client.port";
 import type { IChatViewContainer } from "./domain/ports/chat-view-container.port";
 import type { SavedSessionInfo } from "./domain/models/session-info";
@@ -106,6 +105,18 @@ export type ChatViewLocation =
  * - 'background-only': send only when Obsidian is not focused
  */
 export type WindowsNotificationMode = "disabled" | "always" | "background-only";
+
+export type RemoteServerMode = "bundled" | "external";
+
+export interface RemoteRuntimeSettings {
+	serverMode: RemoteServerMode;
+	serverUrl: string;
+	bundledServerPort: number;
+	autoStartBundledServer: boolean;
+	executablePathOverride: string;
+	startupTimeoutMs: number;
+	requestTimeoutMs: number;
+}
 
 export interface AgentClientPluginSettings {
 	remoteRuntime: RemoteRuntimeSettings;

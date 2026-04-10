@@ -135,6 +135,23 @@ export interface CurrentModeUpdate extends SessionUpdateBase {
 	currentModeId: string;
 }
 
+/**
+ * Update to current selected remote agent.
+ * Sent when the session-level remote agent binding changes.
+ */
+export interface CurrentRemoteAgentUpdate extends SessionUpdateBase {
+	type: "current_remote_agent_update";
+	currentRemoteAgentId: string | null;
+}
+
+/**
+ * Session is idle (no active generation).
+ * Used to mark turn completion in send + onEvent flow.
+ */
+export interface SessionIdleUpdate extends SessionUpdateBase {
+	type: "session_idle";
+}
+
 // ============================================================================
 // Union Type
 // ============================================================================
@@ -151,6 +168,8 @@ export interface CurrentModeUpdate extends SessionUpdateBase {
  * - plan: Agent's task plan
  * - available_commands_update: Slash commands changed
  * - current_mode_update: Mode changed
+ * - current_remote_agent_update: Remote agent selection changed
+ * - session_idle: Session became idle
  *
  * All session update types include a sessionId field to identify which
  * session the update belongs to. This enables filtering/routing of updates
@@ -164,4 +183,6 @@ export type SessionUpdate =
 	| ToolCallUpdate
 	| Plan
 	| AvailableCommandsUpdate
-	| CurrentModeUpdate;
+	| CurrentModeUpdate
+	| CurrentRemoteAgentUpdate
+	| SessionIdleUpdate;

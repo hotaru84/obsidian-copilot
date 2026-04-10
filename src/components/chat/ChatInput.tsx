@@ -872,13 +872,16 @@ export function ChatInput({
 	onRemoteAgentChangeRef.current = onRemoteAgentChange;
 
 	// Memoized current remote agent info
-	const currentRemoteAgent = useMemo(
-		() =>
-			remoteAgents?.availableAgents.find(
+	const currentRemoteAgent = useMemo(() => {
+		if (!remoteAgents?.availableAgents || !remoteAgents.currentAgentId) {
+			return null;
+		}
+		return (
+			remoteAgents.availableAgents.find(
 				(a) => a.agentId === remoteAgents.currentAgentId,
-			) ?? null,
-		[remoteAgents],
-	);
+			) ?? null
+		);
+	}, [remoteAgents]);
 
 	// Handle remote agent selector click
 	const handleRemoteAgentSelectorClick = useCallback(() => {
@@ -911,6 +914,9 @@ export function ChatInput({
 				item.setTitle(agent.name)
 					.setIcon(isActive ? "check" : "")
 					.onClick(() => {
+						console.log(
+							`[ChatInput] Agent selected: agentId='${agent.agentId}', name='${agent.name}'`,
+						);
 						if (onRemoteAgentChangeRef.current) {
 							onRemoteAgentChangeRef.current(agent.agentId);
 						}

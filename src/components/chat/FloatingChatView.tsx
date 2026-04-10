@@ -7,8 +7,8 @@ import type AgentClientPlugin from "../../plugin";
 import type {
 	IChatViewContainer,
 	ChatViewType,
+	ChatInputState,
 } from "../../domain/ports/chat-view-container.port";
-import type { ChatInputState } from "../../domain/models/chat-input-state";
 import type { IChatViewHost } from "./types";
 import type { ImagePromptContent } from "../../domain/models/prompt-content";
 

@@ -36,6 +36,7 @@ import { useSessionHistory } from "./useSessionHistory";
 import type {
 	SessionModeState,
 	SessionModelState,
+	SessionRemoteAgentState,
 } from "../domain/models/chat-session";
 import type { ImagePromptContent } from "../domain/models/prompt-content";
 
@@ -244,15 +245,22 @@ export function useChatController(
 			sessionId: string,
 			modes?: SessionModeState,
 			models?: SessionModelState,
+			remoteAgents?: SessionRemoteAgentState,
 		) => {
 			logger.log(
 				`[useChatController] Session loaded/resumed/forked: ${sessionId}`,
 				{
 					modes,
 					models,
+					remoteAgents,
 				},
 			);
-			agentSession.updateSessionFromLoad(sessionId, modes, models);
+			agentSession.updateSessionFromLoad(
+				sessionId,
+				modes,
+				models,
+				remoteAgents,
+			);
 		},
 		[logger, agentSession],
 	);
@@ -308,8 +316,8 @@ export function useChatController(
 	// Computed Values
 	// ============================================================
 	const activeAgentLabel = useMemo(() => {
-		return "GitHub Copilot";
-	}, []);
+		return session.agentDisplayName;
+	}, [session.agentDisplayName]);
 
 	const availableAgents = useMemo(() => {
 		return plugin.getAvailableAgents();
@@ -604,9 +612,18 @@ export function useChatController(
 
 	const handleSetRemoteAgent = useCallback(
 		async (agentId: string | null) => {
+			if (agentId) {
+				logger.log(
+					`[useChatController] handleSetRemoteAgent called with agentId='${agentId}'`,
+				);
+			} else {
+				logger.log(
+					`[useChatController] handleSetRemoteAgent called with agentId=null (clearing)`,
+				);
+			}
 			await agentSession.setRemoteAgent(agentId);
 		},
-		[agentSession],
+		[agentSession, logger],
 	);
 
 	// Update modal props when session history state changes
@@ -730,6 +747,10 @@ export function useChatController(
 					agentSession.updateAvailableCommands(update.commands);
 				} else if (update.type === "current_mode_update") {
 					agentSession.updateCurrentMode(update.currentModeId);
+				} else if (update.type === "current_remote_agent_update") {
+					agentSession.updateCurrentRemoteAgent(
+						update.currentRemoteAgentId,
+					);
 				}
 				// Ignore all message-related updates (history replay)
 				return;
@@ -743,6 +764,10 @@ export function useChatController(
 				agentSession.updateAvailableCommands(update.commands);
 			} else if (update.type === "current_mode_update") {
 				agentSession.updateCurrentMode(update.currentModeId);
+			} else if (update.type === "current_remote_agent_update") {
+				agentSession.updateCurrentRemoteAgent(
+					update.currentRemoteAgentId,
+				);
 			}
 		});
 	}, [
@@ -753,6 +778,7 @@ export function useChatController(
 		chat.handleSessionUpdate,
 		agentSession.updateAvailableCommands,
 		agentSession.updateCurrentMode,
+		agentSession.updateCurrentRemoteAgent,
 	]);
 
 	// Register updateMessage callback for permission UI updates

@@ -247,11 +247,6 @@ export function useChat(
 	const [isSending, setIsSending] = useState(false);
 	const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
 	const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
-	// Track last user message for dedup of user_message_chunk echo
-	const [lastUserMessageText, setLastUserMessageText] = useState<{
-		text: string;
-		timestamp: number;
-	} | null>(null);
 
 	/**
 	 * Add a new message to the chat.
@@ -327,8 +322,6 @@ export function useChat(
 	 * Used for session/load to reconstruct user messages from chunks.
 	 *
 	 * Similar to updateLastMessage but targets "user" role instead of "assistant".
-	 * Includes dedup logic to prevent echo from remote.adapter.ts user_message_chunk events.
-	 * Uses closure to access current lastUserMessageText without adding to deps.
 	 */
 	const updateUserMessage = useCallback((content: MessageContent): void => {
 		setMessages((prev) => {
@@ -341,21 +334,6 @@ export function useChat(
 					timestamp: new Date(),
 				};
 				return [...prev, newMessage];
-			}
-
-			// Dedup check: Skip if this is an echo of the optimistic message
-			// (user_message_chunk from remote.adapter returning same text)
-			// Access lastUserMessageText from closure to avoid dependency cycle
-			if (content.type === "text") {
-				const now = Date.now();
-				if (
-					lastUserMessageText &&
-					lastUserMessageText.text === content.text &&
-					now - lastUserMessageText.timestamp < 500
-				) {
-					// Skip this echo within 500ms window
-					return prev;
-				}
 			}
 
 			// Update existing last message
@@ -499,6 +477,11 @@ export function useChat(
 					break;
 
 				case "user_message_chunk":
+					// During normal send flow we already render user input optimistically.
+					// Ignore server echo chunks to avoid duplicate user messages.
+					if (isSending) {
+						break;
+					}
 					updateUserMessage({
 						type: "text",
 						text: update.text,
@@ -543,14 +526,20 @@ export function useChat(
 					});
 					break;
 
+				case "session_idle":
+					setIsSending(false);
+					setLastUserMessage(null);
+					break;
+
 				// Session-level updates are handled elsewhere (useAgentSession)
 				case "available_commands_update":
 				case "current_mode_update":
+				case "current_remote_agent_update":
 					// These are intentionally not handled here
 					break;
 			}
 		},
-		[updateLastMessage, upsertToolCall],
+		[isSending, updateLastMessage, updateUserMessage, upsertToolCall],
 	);
 
 	/**
@@ -561,7 +550,6 @@ export function useChat(
 		setLastUserMessage(null);
 		setIsSending(false);
 		setErrorInfo(null);
-		setLastUserMessageText(null);
 	}, []);
 
 	/**
@@ -686,8 +674,6 @@ export function useChat(
 			// Phase 3: Set sending state and store original message
 			setIsSending(true);
 			setLastUserMessage(content);
-			// Track this message for dedup of user_message_chunk echo
-			setLastUserMessageText({ text: content, timestamp: Date.now() });
 
 			// Phase 4: Send prepared prompt to agent using message-service
 			try {
@@ -701,9 +687,8 @@ export function useChat(
 				);
 
 				if (result.success) {
-					// Success - clear stored message
-					setIsSending(false);
-					setLastUserMessage(null);
+					// Success is determined asynchronously by session events.
+					// Keep sending=true until session_idle arrives.
 				} else {
 					// Error from message-service
 					setIsSending(false);

@@ -12,7 +12,22 @@
  * - Broadcast methods mirror ChatView's existing registerInputCallbacks interface
  */
 
-import type { ChatInputState } from "../models/chat-input-state";
+/**
+ * Attached image payload shared between chat views for broadcast operations.
+ */
+export interface AttachedImage {
+	id: string;
+	data: string;
+	mimeType: string;
+}
+
+/**
+ * Input state shared across view containers when broadcasting prompts.
+ */
+export interface ChatInputState {
+	text: string;
+	images: AttachedImage[];
+}
 
 /**
  * Type of chat view container.

@@ -10,6 +10,7 @@ import type {
 	ChatSession,
 	SessionModeState,
 	SessionModelState,
+	SessionRemoteAgentState,
 } from "../domain/models/chat-session";
 import type { ChatMessage } from "../domain/models/chat-message";
 import {
@@ -38,6 +39,7 @@ export interface SessionLoadCallback {
 		sessionId: string,
 		modes?: SessionModeState,
 		models?: SessionModelState,
+		remoteAgents?: SessionRemoteAgentState,
 	): void;
 }
 
@@ -491,6 +493,7 @@ export function useSessionHistory(
 							result.sessionId,
 							result.modes,
 							result.models,
+							result.remoteAgents,
 						);
 
 						// Restore local messages (may have already resolved)
@@ -512,6 +515,7 @@ export function useSessionHistory(
 						result.sessionId,
 						result.modes,
 						result.models,
+						result.remoteAgents,
 					);
 
 					// Resume doesn't return history, so restore from local storage
@@ -559,7 +563,12 @@ export function useSessionHistory(
 
 				// Update with new session ID and modes/models from result
 				// For fork, the new session ID is returned in result
-				onSessionLoad(result.sessionId, result.modes, result.models);
+				onSessionLoad(
+					result.sessionId,
+					result.modes,
+					result.models,
+					result.remoteAgents,
+				);
 
 				// Fork doesn't return history, so restore from original session's local storage
 				const localMessages =

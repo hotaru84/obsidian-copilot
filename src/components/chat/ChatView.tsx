@@ -2,13 +2,13 @@ import { ItemView, WorkspaceLeaf, Platform, Notice } from "obsidian";
 import type {
 	IChatViewContainer,
 	ChatViewType,
+	ChatInputState,
 } from "../../domain/ports/chat-view-container.port";
 import * as React from "react";
 const { useState, useRef, useEffect, useCallback } = React;
 import { createRoot, Root } from "react-dom/client";
 
 import type AgentClientPlugin from "../../plugin";
-import type { ChatInputState } from "../../domain/models/chat-input-state";
 
 // Component imports
 import { ChatMessages } from "./ChatMessages";

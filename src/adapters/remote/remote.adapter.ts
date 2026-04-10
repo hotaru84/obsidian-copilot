@@ -49,9 +49,11 @@ import {
 
 interface SessionState {
 	session: CopilotSession;
+	workingDirectory?: string;
 	currentModeId: string;
 	currentModelId?: string;
-	currentRemoteAgentId?: string;
+	currentRemoteAgentId: string | null;
+	remoteAgentSelectionById: Map<string, string>;
 	availableCommands: SlashCommand[];
 	availableModels: SessionModel[];
 	availableRemoteAgents: RemoteAgentInfo[];
@@ -65,7 +67,6 @@ interface PendingPermissionRequest {
 	toolCallId: string;
 	options: PermissionOption[];
 	resolve: (result: PermissionRequestResult) => void;
-	timerId: number;
 	selectedOptionId?: string;
 }
 
@@ -109,6 +110,10 @@ function safeNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value)
 		? value
 		: undefined;
+}
+
+function isNonNull<T>(value: T | null): value is T {
+	return value !== null;
 }
 
 function inferToolKind(kind: string | undefined): ToolKind {
@@ -323,6 +328,14 @@ export class RemoteAdapter implements IChatAgentClient {
 	) => void = () => {};
 
 	private sessionStates = new Map<string, SessionState>();
+	private lastSelectedRemoteAgentByWorkingDirectory = new Map<
+		string,
+		string
+	>();
+	private remoteAgentSelectionSupportByWorkingDirectory = new Map<
+		string,
+		boolean
+	>();
 
 	private pendingPermissions = new Map<string, PendingPermissionRequest>();
 	private permissionQueuesBySession = new Map<string, string[]>();
@@ -382,6 +395,134 @@ export class RemoteAdapter implements IChatAgentClient {
 		return next;
 	}
 
+	private rememberRemoteAgentSelection(
+		workingDirectory: string | undefined,
+		agentId: string | null,
+	): void {
+		if (!workingDirectory) {
+			return;
+		}
+
+		if (agentId === null) {
+			this.lastSelectedRemoteAgentByWorkingDirectory.delete(
+				workingDirectory,
+			);
+			return;
+		}
+
+		this.lastSelectedRemoteAgentByWorkingDirectory.set(
+			workingDirectory,
+			agentId,
+		);
+	}
+
+	private getRememberedRemoteAgentSelection(
+		workingDirectory: string | undefined,
+	): string | null {
+		if (!workingDirectory) {
+			return null;
+		}
+
+		return (
+			this.lastSelectedRemoteAgentByWorkingDirectory.get(
+				workingDirectory,
+			) ?? null
+		);
+	}
+
+	private async restoreSessionRemoteAgentSelection(
+		sessionId: string,
+		remoteAgents: SessionRemoteAgentState | undefined,
+	): Promise<SessionRemoteAgentState | undefined> {
+		if (!remoteAgents || remoteAgents.availableAgents.length === 0) {
+			return remoteAgents;
+		}
+
+		const state = this.getSessionState(sessionId);
+		const rememberedAgentId = this.getRememberedRemoteAgentSelection(
+			state.workingDirectory,
+		);
+
+		if (!rememberedAgentId) {
+			return remoteAgents;
+		}
+
+		const isAvailable = remoteAgents.availableAgents.some(
+			(agent) => agent.agentId === rememberedAgentId,
+		);
+
+		if (!isAvailable) {
+			this.rememberRemoteAgentSelection(state.workingDirectory, null);
+			return {
+				...remoteAgents,
+				currentAgentId: null,
+			};
+		}
+
+		try {
+			await this.setSessionAgent(sessionId, rememberedAgentId);
+			return {
+				...remoteAgents,
+				currentAgentId: rememberedAgentId,
+			};
+		} catch (error) {
+			this.logger.warn(
+				`[RemoteAdapter] Failed to restore remote agent '${rememberedAgentId}' for session '${sessionId}'`,
+				error,
+			);
+			return {
+				...remoteAgents,
+				currentAgentId: null,
+			};
+		}
+	}
+
+	private async supportsRemoteAgentSelection(
+		session: CopilotSession,
+		workingDirectory: string | undefined,
+		agents: RemoteAgentInfo[],
+	): Promise<boolean> {
+		if (agents.length === 0) {
+			return false;
+		}
+
+		const cacheKey = workingDirectory ?? "__default__";
+		const cached =
+			this.remoteAgentSelectionSupportByWorkingDirectory.get(cacheKey);
+		if (cached !== undefined) {
+			return cached;
+		}
+
+		const probeAgentId = agents[0]?.agentId;
+		if (!probeAgentId) {
+			this.remoteAgentSelectionSupportByWorkingDirectory.set(
+				cacheKey,
+				false,
+			);
+			return false;
+		}
+
+		try {
+			await session.setAgent(probeAgentId);
+			await session.clearAgent();
+			this.remoteAgentSelectionSupportByWorkingDirectory.set(
+				cacheKey,
+				true,
+			);
+			return true;
+		} catch (error) {
+			this.logger.warn(
+				`[RemoteAdapter] Runtime listed agents but selection failed for probe '${probeAgentId}'. Hiding remote agent selector for this workspace.`,
+				error,
+			);
+			this.remoteAgentSelectionSupportByWorkingDirectory.set(
+				cacheKey,
+				false,
+			);
+			return false;
+		}
+	}
+
 	private getClient(cwd?: string): CopilotClient {
 		if (this.client) {
 			return this.client;
@@ -395,6 +536,16 @@ export class RemoteAdapter implements IChatAgentClient {
 
 		this.client = new CopilotClient(clientOptions);
 		return this.client;
+	}
+
+	private async syncWorkspace(cwd?: string): Promise<void> {
+		if (!cwd) {
+			return;
+		}
+
+		const client = this.getClient(cwd);
+		this.logger.log(`[RemoteAdapter] Setting workspace to: ${cwd}`);
+		await client.setWorkspace(cwd);
 	}
 
 	private async ensureBundledServer(): Promise<void> {
@@ -470,56 +621,126 @@ export class RemoteAdapter implements IChatAgentClient {
 		};
 	}
 
-	private async buildSessionSnapshot(session: CopilotSession): Promise<{
+	private async buildSessionSnapshot(
+		session: CopilotSession,
+		workingDirectory?: string,
+	): Promise<{
 		modes: SessionModeState;
 		models?: SessionModelState;
 		commands: SlashCommand[];
 		remoteAgents?: SessionRemoteAgentState;
 	}> {
-		const client = this.getClient();
-		const [models, customCommands, prompts, agents] = await Promise.all([
+		await this.syncWorkspace(workingDirectory);
+		const client = this.getClient(workingDirectory);
+		const [models, customCommands, agents] = (await Promise.all([
 			client.listModels().catch(() => []),
 			client.listCustomCommands().catch(() => []),
-			client.listPrompts().catch(() => []),
 			client.listAgents().catch(() => []),
-		]);
+		])) as [unknown[], unknown[], unknown[]];
 
-		const availableModels: SessionModel[] = models.map((m) => ({
-			modelId: m.id,
-			name: m.name || m.id,
-			description: undefined,
-		}));
+		const availableModels: SessionModel[] = models
+			.map((model): SessionModel | null => {
+				if (!model || typeof model !== "object") {
+					return null;
+				}
+
+				const record = model as Record<string, unknown>;
+				const modelId = safeString(record.id);
+				if (!modelId) {
+					return null;
+				}
+
+				return {
+					modelId,
+					name: safeString(record.name) || modelId,
+				};
+			})
+			.filter(isNonNull);
 
 		const availableRemoteAgents: RemoteAgentInfo[] = agents
-			.filter((a) => a.enabled !== false)
-			.map((a) => ({
-				agentId: a.id,
-				name: a.name,
-				description: a.description,
-			}));
+			.map((agent): RemoteAgentInfo | null => {
+				if (!agent || typeof agent !== "object") {
+					return null;
+				}
 
-		const commandEntries: SlashCommand[] = [
-			...customCommands.map((cmd) => ({
-				name: cmd.name,
-				description: cmd.description,
-				source: "agent" as const,
-			})),
-			...prompts.map((prompt) => ({
-				name: prompt.id,
-				description: prompt.description || prompt.name,
-				hint: "prompt arguments",
-				source: "agent" as const,
-			})),
-		];
+				const record = agent as Record<string, unknown>;
+				if (record.enabled === false) {
+					return null;
+				}
+
+				const agentId = safeString(record.id);
+				const name = safeString(record.name);
+				if (!agentId || !name) {
+					return null;
+				}
+
+				const description = safeString(record.description);
+
+				return {
+					agentId,
+					name,
+					...(description ? { description } : {}),
+				};
+			})
+			.filter(isNonNull);
+
+		let selectableRemoteAgents = availableRemoteAgents;
+
+		if (availableRemoteAgents.length > 0) {
+			const canSelectAgents = await this.supportsRemoteAgentSelection(
+				session,
+				workingDirectory,
+				availableRemoteAgents,
+			);
+			if (!canSelectAgents) {
+				selectableRemoteAgents = [];
+			}
+		}
+
+		if (selectableRemoteAgents.length > 0) {
+			console.log(
+				"[RemoteAdapter] Loaded remote agents:",
+				selectableRemoteAgents.map((a) => ({
+					id: a.agentId,
+					name: a.name,
+				})),
+			);
+		}
+
+		const remoteAgentSelectionById = new Map<string, string>(
+			selectableRemoteAgents.map((agent) => [agent.agentId, agent.name]),
+		);
+
+		const commandEntries: SlashCommand[] = customCommands
+			.map((command): SlashCommand | null => {
+				if (!command || typeof command !== "object") {
+					return null;
+				}
+
+				const record = command as Record<string, unknown>;
+				const name = safeString(record.name);
+				if (!name) {
+					return null;
+				}
+
+				return {
+					name,
+					description: safeString(record.description) || name,
+					source: "agent" as const,
+				};
+			})
+			.filter(isNonNull);
 
 		const state: SessionState = {
 			session,
+			workingDirectory,
 			currentModeId: "interactive",
 			currentModelId: availableModels[0]?.modelId,
-			currentRemoteAgentId: undefined,
+			currentRemoteAgentId: null,
+			remoteAgentSelectionById,
 			availableCommands: commandEntries,
 			availableModels,
-			availableRemoteAgents,
+			availableRemoteAgents: selectableRemoteAgents,
 			messageDeltaBuffer: "",
 			thoughtDeltaBuffer: "",
 		};
@@ -547,9 +768,9 @@ export class RemoteAdapter implements IChatAgentClient {
 					: undefined,
 			commands: commandEntries,
 			remoteAgents:
-				availableRemoteAgents.length > 0
+				selectableRemoteAgents.length > 0
 					? {
-							availableAgents: availableRemoteAgents,
+							availableAgents: selectableRemoteAgents,
 							currentAgentId: null,
 						}
 					: undefined,
@@ -646,6 +867,14 @@ export class RemoteAdapter implements IChatAgentClient {
 					text,
 				});
 			}
+			return;
+		}
+
+		if (event.type === "session.idle") {
+			this.sessionUpdateCallback({
+				type: "session_idle",
+				sessionId,
+			});
 			return;
 		}
 
@@ -959,49 +1188,12 @@ export class RemoteAdapter implements IChatAgentClient {
 		}
 
 		return await new Promise<PermissionRequestResult>((resolve) => {
-			const timerId = window.setTimeout(() => {
-				const pending = this.pendingPermissions.get(requestId);
-				if (!pending) {
-					return;
-				}
-
-				this.pendingPermissions.delete(requestId);
-				if (
-					this.getActivePermissionRequestId(pending.sessionId) ===
-					requestId
-				) {
-					this.setActivePermissionRequestId(pending.sessionId, null);
-				}
-
-				if (this.sessionUpdateCallback) {
-					this.sessionUpdateCallback({
-						type: "tool_call_update",
-						sessionId: pending.sessionId,
-						toolCallId: pending.toolCallId,
-						status: "failed",
-						kind: "execute",
-						permissionRequest: {
-							requestId,
-							options: pending.options,
-							isCancelled: true,
-							isActive: false,
-						},
-					});
-				}
-
-				resolve({
-					kind: "denied-no-approval-rule-and-could-not-request-from-user",
-				});
-				this.activateNextPermission(pending.sessionId);
-			}, 30000);
-
 			this.pendingPermissions.set(requestId, {
 				requestId,
 				sessionId,
 				toolCallId,
 				options,
 				resolve,
-				timerId,
 			});
 
 			if (this.getActivePermissionRequestId(sessionId) === null) {
@@ -1014,21 +1206,30 @@ export class RemoteAdapter implements IChatAgentClient {
 
 	async newSession(workingDirectory: string): Promise<NewSessionResult> {
 		const client = this.getClient(workingDirectory);
+		await this.syncWorkspace(workingDirectory);
 
 		const created = await client.createSession({
 			streaming: true,
+			configDir: workingDirectory,
 			onPermissionRequest: (request, invocation) =>
 				this.handlePermissionRequest(invocation.sessionId, request),
 		});
 		created.on((event) => this.handleRemoteEvent(created.sessionId, event));
 
-		const snapshot = await this.buildSessionSnapshot(created);
+		const snapshot = await this.buildSessionSnapshot(
+			created,
+			workingDirectory,
+		);
+		const remoteAgents = await this.restoreSessionRemoteAgentSelection(
+			created.sessionId,
+			snapshot.remoteAgents,
+		);
 
 		return {
 			sessionId: created.sessionId,
 			modes: snapshot.modes,
 			models: snapshot.models,
-			remoteAgents: snapshot.remoteAgents,
+			remoteAgents,
 		};
 	}
 
@@ -1092,7 +1293,7 @@ export class RemoteAdapter implements IChatAgentClient {
 	): Promise<void> {
 		const state = this.getSessionState(sessionId);
 		const options = this.toMessageOptions(content);
-		await state.session.sendAndWait(options, 120000);
+		await state.session.send(options);
 	}
 
 	async cancel(sessionId: string): Promise<void> {
@@ -1102,7 +1303,6 @@ export class RemoteAdapter implements IChatAgentClient {
 
 	async disconnect(): Promise<void> {
 		for (const pending of this.pendingPermissions.values()) {
-			window.clearTimeout(pending.timerId);
 			pending.resolve({
 				kind: "denied-no-approval-rule-and-could-not-request-from-user",
 			});
@@ -1118,6 +1318,8 @@ export class RemoteAdapter implements IChatAgentClient {
 			});
 		}
 		this.sessionStates.clear();
+		this.lastSelectedRemoteAgentByWorkingDirectory.clear();
+		this.remoteAgentSelectionSupportByWorkingDirectory.clear();
 
 		if (this.client) {
 			await this.client.stop();
@@ -1142,10 +1344,10 @@ export class RemoteAdapter implements IChatAgentClient {
 	): Promise<void> {
 		const pending = this.pendingPermissions.get(requestId);
 		if (!pending) {
-			throw new Error(`Permission request not found: ${requestId}`);
+			this.logger.warn(`Permission request not found: ${requestId}`);
+			return;
 		}
 
-		window.clearTimeout(pending.timerId);
 		pending.selectedOptionId = optionId;
 		this.pendingPermissions.delete(requestId);
 
@@ -1214,12 +1416,72 @@ export class RemoteAdapter implements IChatAgentClient {
 		agentId: string | null,
 	): Promise<void> {
 		const state = this.getSessionState(sessionId);
+		await this.syncWorkspace(state.workingDirectory);
+
 		if (agentId === null) {
 			await state.session.clearAgent();
-			state.currentRemoteAgentId = undefined;
+			state.currentRemoteAgentId = null;
+			this.rememberRemoteAgentSelection(state.workingDirectory, null);
+			this.sessionUpdateCallback?.({
+				type: "current_remote_agent_update",
+				sessionId,
+				currentRemoteAgentId: null,
+			});
 		} else {
-			await state.session.setAgent(agentId);
-			state.currentRemoteAgentId = agentId;
+			const selectedFromSnapshot = state.availableRemoteAgents.find(
+				(agent) => agent.agentId === agentId || agent.name === agentId,
+			);
+			const canonicalAgentId = selectedFromSnapshot?.agentId ?? agentId;
+			let appliedAgentId = canonicalAgentId;
+
+			try {
+				await state.session.setAgent(canonicalAgentId);
+			} catch (error) {
+				const client = this.getClient(state.workingDirectory);
+				const latestAgents = (await client
+					.listAgents()
+					.catch(() => [])) as unknown[];
+
+				const latestMatch = latestAgents.find((item) => {
+					if (!item || typeof item !== "object") {
+						return false;
+					}
+					const record = item as Record<string, unknown>;
+					return (
+						safeString(record.id) === agentId ||
+						safeString(record.name) === agentId
+					);
+				});
+
+				const latestCanonicalId =
+					latestMatch && typeof latestMatch === "object"
+						? safeString(
+								(latestMatch as Record<string, unknown>).id,
+							)
+						: undefined;
+
+				if (!latestCanonicalId) {
+					throw error;
+				}
+
+				this.logger.warn(
+					`[RemoteAdapter] Failed to set remote agent by id '${canonicalAgentId}', retrying with refreshed id '${latestCanonicalId}'`,
+					error,
+				);
+				await state.session.setAgent(latestCanonicalId);
+				appliedAgentId = latestCanonicalId;
+			}
+
+			state.currentRemoteAgentId = appliedAgentId;
+			this.rememberRemoteAgentSelection(
+				state.workingDirectory,
+				appliedAgentId,
+			);
+			this.sessionUpdateCallback?.({
+				type: "current_remote_agent_update",
+				sessionId,
+				currentRemoteAgentId: appliedAgentId,
+			});
 		}
 	}
 
@@ -1266,6 +1528,7 @@ export class RemoteAdapter implements IChatAgentClient {
 			sessionId: result.sessionId,
 			modes: result.modes,
 			models: result.models,
+			remoteAgents: result.remoteAgents,
 		};
 	}
 
@@ -1274,20 +1537,27 @@ export class RemoteAdapter implements IChatAgentClient {
 		cwd: string,
 	): Promise<ResumeSessionResult> {
 		const client = this.getClient(cwd);
+		await this.syncWorkspace(cwd);
 
 		const resumed = await client.resumeSession(sessionId, {
 			streaming: true,
+			configDir: cwd,
 			onPermissionRequest: (request, invocation) =>
 				this.handlePermissionRequest(invocation.sessionId, request),
 		});
 		resumed.on((event) => this.handleRemoteEvent(resumed.sessionId, event));
 
-		const snapshot = await this.buildSessionSnapshot(resumed);
+		const snapshot = await this.buildSessionSnapshot(resumed, cwd);
+		const remoteAgents = await this.restoreSessionRemoteAgentSelection(
+			resumed.sessionId,
+			snapshot.remoteAgents,
+		);
 
 		return {
 			sessionId: resumed.sessionId,
 			modes: snapshot.modes,
 			models: snapshot.models,
+			remoteAgents,
 		};
 	}
 
@@ -1296,12 +1566,14 @@ export class RemoteAdapter implements IChatAgentClient {
 		cwd: string,
 	): Promise<ForkSessionResult> {
 		const client = this.getClient(cwd);
+		await this.syncWorkspace(cwd);
 
 		const systemMessageContent =
 			await this.buildForkSystemMessageContent(sessionId);
 
 		const forked = await client.createSession({
 			streaming: true,
+			configDir: cwd,
 			onPermissionRequest: (request, invocation) =>
 				this.handlePermissionRequest(invocation.sessionId, request),
 			systemMessage: systemMessageContent
@@ -1315,12 +1587,17 @@ export class RemoteAdapter implements IChatAgentClient {
 		});
 		forked.on((event) => this.handleRemoteEvent(forked.sessionId, event));
 
-		const snapshot = await this.buildSessionSnapshot(forked);
+		const snapshot = await this.buildSessionSnapshot(forked, cwd);
+		const remoteAgents = await this.restoreSessionRemoteAgentSelection(
+			forked.sessionId,
+			snapshot.remoteAgents,
+		);
 
 		return {
 			sessionId: forked.sessionId,
 			modes: snapshot.modes,
 			models: snapshot.models,
+			remoteAgents,
 		};
 	}
 

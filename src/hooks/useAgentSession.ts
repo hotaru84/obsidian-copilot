@@ -107,6 +107,7 @@ export interface UseAgentSessionReturn {
 		sessionId: string,
 		modes?: SessionModeState,
 		models?: SessionModelState,
+		remoteAgents?: SessionRemoteAgentState,
 	) => void;
 
 	/**
@@ -120,6 +121,12 @@ export interface UseAgentSessionReturn {
 	 * Called by AcpAdapter when agent sends current_mode_update.
 	 */
 	updateCurrentMode: (modeId: string) => void;
+
+	/**
+	 * Callback to update current remote agent.
+	 * Called by AcpAdapter when agent sends current_remote_agent_update.
+	 */
+	updateCurrentRemoteAgent: (agentId: string | null) => void;
 
 	/**
 	 * Set the session mode.
@@ -526,6 +533,7 @@ export function useAgentSession(
 					authMethods: authMethods,
 					modes: loadResult.modes,
 					models: loadResult.models,
+					remoteAgents: loadResult.remoteAgents,
 					promptCapabilities: needsInitialize
 						? promptCapabilities
 						: prev.promptCapabilities,
@@ -672,6 +680,26 @@ export function useAgentSession(
 				modes: {
 					...prev.modes,
 					currentModeId: modeId,
+				},
+			};
+		});
+	}, []);
+
+	/**
+	 * Update current remote agent.
+	 * Called by AcpAdapter when receiving current_remote_agent_update.
+	 */
+	const updateCurrentRemoteAgent = useCallback((agentId: string | null) => {
+		setSession((prev) => {
+			if (!prev.remoteAgents) {
+				return prev;
+			}
+
+			return {
+				...prev,
+				remoteAgents: {
+					...prev.remoteAgents,
+					currentAgentId: agentId,
 				},
 			};
 		});
@@ -851,11 +879,7 @@ export function useAgentSession(
 				});
 			}
 		},
-		[
-			agentClient,
-			session.sessionId,
-			session.remoteAgents?.currentAgentId,
-		],
+		[agentClient, session.sessionId, session.remoteAgents?.currentAgentId],
 	);
 
 	/**
@@ -867,6 +891,7 @@ export function useAgentSession(
 			sessionId: string,
 			modes?: SessionModeState,
 			models?: SessionModelState,
+			remoteAgents?: SessionRemoteAgentState,
 		) => {
 			setSession((prev) => ({
 				...prev,
@@ -874,6 +899,7 @@ export function useAgentSession(
 				state: "ready",
 				modes: modes ?? prev.modes,
 				models: models ?? prev.models,
+				remoteAgents: remoteAgents ?? prev.remoteAgents,
 				lastActivityAt: new Date(),
 			}));
 		},
@@ -894,6 +920,7 @@ export function useAgentSession(
 		updateSessionFromLoad,
 		updateAvailableCommands,
 		updateCurrentMode,
+		updateCurrentRemoteAgent,
 		setMode,
 		setModel,
 		setRemoteAgent,
