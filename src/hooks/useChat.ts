@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type {
 	ChatMessage,
 	MessageContent,
@@ -247,6 +247,9 @@ export function useChat(
 	const [isSending, setIsSending] = useState(false);
 	const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
 	const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
+	const isSendingRef = useRef(false);
+	const sessionUpdateQueueRef = useRef<SessionUpdate[]>([]);
+	const isProcessingSessionUpdateRef = useRef(false);
 
 	/**
 	 * Add a new message to the chat.
@@ -271,6 +274,7 @@ export function useChat(
 					role: "assistant",
 					content: [content],
 					timestamp: new Date(),
+					streamingPhase: "streaming",
 				};
 				return [...prev, newMessage];
 			}
@@ -278,6 +282,9 @@ export function useChat(
 			// Update existing last message
 			const lastMessage = prev[prev.length - 1];
 			const updatedMessage = { ...lastMessage };
+			if (updatedMessage.role === "assistant") {
+				updatedMessage.streamingPhase = "streaming";
+			}
 
 			if (content.type === "text" || content.type === "agent_thought") {
 				// Append to existing content of same type or create new content
@@ -461,85 +468,124 @@ export function useChat(
 	 */
 	const handleSessionUpdate = useCallback(
 		(update: SessionUpdate): void => {
-			switch (update.type) {
-				case "agent_message_chunk":
-					updateLastMessage({
-						type: "text",
-						text: update.text,
-					});
-					break;
-
-				case "agent_thought_chunk":
-					updateLastMessage({
-						type: "agent_thought",
-						text: update.text,
-					});
-					break;
-
-				case "user_message_chunk":
-					// During normal send flow we already render user input optimistically.
-					// Ignore server echo chunks to avoid duplicate user messages.
-					if (isSending) {
+			const processSessionUpdate = (next: SessionUpdate): void => {
+				switch (next.type) {
+					case "agent_message_chunk":
+						updateLastMessage({
+							type: "text",
+							text: next.text,
+						});
 						break;
+
+					case "agent_thought_chunk":
+						updateLastMessage({
+							type: "agent_thought",
+							text: next.text,
+						});
+						break;
+
+					case "user_message_chunk":
+						// During normal send flow we already render user input optimistically.
+						// Ignore server echo chunks to avoid duplicate user messages.
+						if (isSendingRef.current) {
+							break;
+						}
+						updateUserMessage({
+							type: "text",
+							text: next.text,
+						});
+						break;
+
+					case "tool_call":
+						upsertToolCall(next.toolCallId, {
+							type: "tool_call",
+							toolCallId: next.toolCallId,
+							title: next.title,
+							status: next.status || "pending",
+							kind: next.kind,
+							content: next.content,
+							locations: next.locations,
+							rawInput: next.rawInput,
+							permissionRequest: next.permissionRequest,
+						});
+						break;
+
+					case "tool_call_update":
+						// status may be undefined (no change intended); fall back to "pending"
+						// only as a last resort — mergeToolCallContent's forward-only guard
+						// ensures existing statuses never regress.
+						upsertToolCall(next.toolCallId, {
+							type: "tool_call",
+							toolCallId: next.toolCallId,
+							title: next.title,
+							status: next.status ?? "pending",
+							kind: next.kind,
+							content: next.content,
+							locations: next.locations,
+							rawInput: next.rawInput,
+							permissionRequest: next.permissionRequest,
+						});
+						break;
+
+					case "plan":
+						updateLastMessage({
+							type: "plan",
+							entries: next.entries,
+						});
+						break;
+
+					case "session_idle":
+						setMessages((prev) => {
+							if (prev.length === 0) {
+								return prev;
+							}
+
+							const last = prev[prev.length - 1];
+							if (last.role !== "assistant") {
+								return prev;
+							}
+
+							return [
+								...prev.slice(0, -1),
+								{
+									...last,
+									streamingPhase: "completed",
+								},
+							];
+						});
+						isSendingRef.current = false;
+						setIsSending(false);
+						setLastUserMessage(null);
+						break;
+
+					// Session-level updates are handled elsewhere (useAgentSession)
+					case "available_commands_update":
+					case "current_mode_update":
+					case "current_remote_agent_update":
+						// These are intentionally not handled here
+						break;
+				}
+			};
+
+			sessionUpdateQueueRef.current.push(update);
+			if (isProcessingSessionUpdateRef.current) {
+				return;
+			}
+
+			isProcessingSessionUpdateRef.current = true;
+			try {
+				while (sessionUpdateQueueRef.current.length > 0) {
+					const next = sessionUpdateQueueRef.current.shift();
+					if (!next) {
+						continue;
 					}
-					updateUserMessage({
-						type: "text",
-						text: update.text,
-					});
-					break;
-
-				case "tool_call":
-					upsertToolCall(update.toolCallId, {
-						type: "tool_call",
-						toolCallId: update.toolCallId,
-						title: update.title,
-						status: update.status || "pending",
-						kind: update.kind,
-						content: update.content,
-						locations: update.locations,
-						rawInput: update.rawInput,
-						permissionRequest: update.permissionRequest,
-					});
-					break;
-
-				case "tool_call_update":
-					// status may be undefined (no change intended); fall back to "pending"
-					// only as a last resort — mergeToolCallContent's forward-only guard
-					// ensures existing statuses never regress.
-					upsertToolCall(update.toolCallId, {
-						type: "tool_call",
-						toolCallId: update.toolCallId,
-						title: update.title,
-						status: update.status ?? "pending",
-						kind: update.kind,
-						content: update.content,
-						locations: update.locations,
-						rawInput: update.rawInput,
-						permissionRequest: update.permissionRequest,
-					});
-					break;
-
-				case "plan":
-					updateLastMessage({
-						type: "plan",
-						entries: update.entries,
-					});
-					break;
-
-				case "session_idle":
-					setIsSending(false);
-					setLastUserMessage(null);
-					break;
-
-				// Session-level updates are handled elsewhere (useAgentSession)
-				case "available_commands_update":
-				case "current_mode_update":
-				case "current_remote_agent_update":
-					// These are intentionally not handled here
-					break;
+					processSessionUpdate(next);
+				}
+			} finally {
+				isProcessingSessionUpdateRef.current = false;
 			}
 		},
-		[isSending, updateLastMessage, updateUserMessage, upsertToolCall],
+		[updateLastMessage, updateUserMessage, upsertToolCall],
 	);
 
 	/**
@@ -548,6 +594,7 @@ export function useChat(
 	const clearMessages = useCallback((): void => {
 		setMessages([]);
 		setLastUserMessage(null);
+		isSendingRef.current = false;
 		setIsSending(false);
 		setErrorInfo(null);
 	}, []);
@@ -573,9 +620,12 @@ export function useChat(
 					text: c.text,
 				})),
 				timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+				streamingPhase:
+					msg.role === "assistant" ? "completed" : undefined,
 			}));
 
 			setMessages(chatMessages);
+			isSendingRef.current = false;
 			setIsSending(false);
 			setErrorInfo(null);
 		},
@@ -590,6 +640,7 @@ export function useChat(
 	const setMessagesFromLocal = useCallback(
 		(localMessages: ChatMessage[]): void => {
 			setMessages(localMessages);
+			isSendingRef.current = false;
 			setIsSending(false);
 			setErrorInfo(null);
 		},
@@ -673,6 +724,7 @@ export function useChat(
 
 			// Phase 3: Set sending state and store original message
 			setIsSending(true);
+			isSendingRef.current = true;
 			setLastUserMessage(content);
 
 			// Phase 4: Send prepared prompt to agent using message-service
@@ -691,6 +743,7 @@ export function useChat(
 					// Keep sending=true until session_idle arrives.
 				} else {
 					// Error from message-service
+					isSendingRef.current = false;
 					setIsSending(false);
 					setErrorInfo(
 						result.error
@@ -707,6 +760,7 @@ export function useChat(
 				}
 			} catch (error) {
 				// Unexpected error
+				isSendingRef.current = false;
 				setIsSending(false);
 				setErrorInfo({
 					title: "Send Message Failed",

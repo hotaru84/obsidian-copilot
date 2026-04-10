@@ -13,6 +13,7 @@ interface MessageContentRendererProps {
 	plugin: AgentClientPlugin;
 	messageId?: string;
 	messageRole?: "user" | "assistant";
+	messageStreamingPhase?: "streaming" | "completed";
 	acpClient?: IChatAgentClient;
 	/** Callback to approve a permission request */
 	onApprovePermission?: (
@@ -26,6 +27,7 @@ export function MessageContentRenderer({
 	plugin,
 	messageId,
 	messageRole,
+	messageStreamingPhase,
 	acpClient,
 	onApprovePermission,
 }: MessageContentRendererProps) {
@@ -49,6 +51,9 @@ export function MessageContentRenderer({
 			);
 
 		case "agent_thought":
+			if (messageStreamingPhase !== "streaming") {
+				return null;
+			}
 			return <CollapsibleThought text={content.text} plugin={plugin} />;
 
 		case "tool_call":

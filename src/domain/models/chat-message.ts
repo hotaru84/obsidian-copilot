@@ -126,6 +126,12 @@ export interface ChatMessage {
 	role: Role;
 	content: MessageContent[];
 	timestamp: Date;
+	/**
+	 * Streaming lifecycle phase for assistant messages.
+	 * - streaming: current turn is still receiving updates
+	 * - completed: turn ended (e.g. session_idle received)
+	 */
+	streamingPhase?: "streaming" | "completed";
 }
 
 /**

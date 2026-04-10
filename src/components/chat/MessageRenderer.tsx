@@ -83,6 +83,9 @@ export function MessageRenderer({
 									plugin={plugin}
 									messageId={message.id}
 									messageRole={message.role}
+									messageStreamingPhase={
+										message.streamingPhase
+									}
 									acpClient={acpClient}
 									onApprovePermission={onApprovePermission}
 								/>
@@ -98,6 +101,7 @@ export function MessageRenderer({
 								plugin={plugin}
 								messageId={message.id}
 								messageRole={message.role}
+								messageStreamingPhase={message.streamingPhase}
 								acpClient={acpClient}
 								onApprovePermission={onApprovePermission}
 							/>
