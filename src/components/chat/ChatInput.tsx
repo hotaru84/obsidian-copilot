@@ -914,7 +914,7 @@ export function ChatInput({
 				item.setTitle(agent.name)
 					.setIcon(isActive ? "check" : "")
 					.onClick(() => {
-						console.log(
+						logger.log(
 							`[ChatInput] Agent selected: agentId='${agent.agentId}', name='${agent.name}'`,
 						);
 						if (onRemoteAgentChangeRef.current) {

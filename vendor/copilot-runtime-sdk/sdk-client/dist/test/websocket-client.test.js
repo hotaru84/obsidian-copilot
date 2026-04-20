@@ -329,6 +329,88 @@ describe("CopilotClient", () => {
         const errors = await client.stop();
         expect(errors).toHaveLength(0);
     });
+    it("serializes mcpServers and config discovery settings", async () => {
+        const requests = [];
+        const client = new CopilotClient({
+            serverUrl: "ws://example.test",
+            socketFactory: () => {
+                const socket = new FakeSocket((data) => {
+                    const request = JSON.parse(data);
+                    requests.push(request);
+                    if (request.method === "copilot.createSession") {
+                        return JSON.stringify({
+                            id: request.id,
+                            type: "response",
+                            ok: true,
+                            payload: { sessionId: "session-created" },
+                        });
+                    }
+                    if (request.method === "copilot.resumeSession") {
+                        return JSON.stringify({
+                            id: request.id,
+                            type: "response",
+                            ok: true,
+                            payload: {
+                                sessionId: request.payload?.sessionId ?? "session-resumed",
+                            },
+                        });
+                    }
+                    if (request.method === "copilot.session.disconnect") {
+                        return JSON.stringify({
+                            id: request.id,
+                            type: "response",
+                            ok: true,
+                            payload: { success: true },
+                        });
+                    }
+                    return JSON.stringify({
+                        id: request.id,
+                        type: "response",
+                        ok: true,
+                        payload: { success: true },
+                    });
+                });
+                queueMicrotask(() => {
+                    socket.dispatchEvent(new Event("open"));
+                });
+                return socket;
+            },
+        });
+        await client.start();
+        const config = {
+            enableConfigDiscovery: true,
+            mcpServers: {
+                filesystem: {
+                    type: "stdio",
+                    command: "npx",
+                    args: [
+                        "-y",
+                        "@modelcontextprotocol/server-filesystem",
+                        "C:/workspace",
+                    ],
+                },
+            },
+            onPermissionRequest: () => ({ kind: "approved" }),
+            onEvent: () => { },
+        };
+        const created = await client.createSession(config);
+        const resumed = await client.resumeSession("session-existing", config);
+        const createRequest = requests.find((request) => request.method === "copilot.createSession");
+        const resumeRequest = requests.find((request) => request.method === "copilot.resumeSession");
+        expect(createRequest?.payload?.config?.enableConfigDiscovery).toBe(true);
+        expect(createRequest?.payload?.config?.mcpServers).toEqual(config.mcpServers);
+        expect(createRequest?.payload?.config?.onPermissionRequest).toBeUndefined();
+        expect(createRequest?.payload?.config?.onEvent).toBeUndefined();
+        expect(resumeRequest?.payload?.sessionId).toBe("session-existing");
+        expect(resumeRequest?.payload?.config?.enableConfigDiscovery).toBe(true);
+        expect(resumeRequest?.payload?.config?.mcpServers).toEqual(config.mcpServers);
+        expect(resumeRequest?.payload?.config?.onPermissionRequest).toBeUndefined();
+        expect(resumeRequest?.payload?.config?.onEvent).toBeUndefined();
+        await created.disconnect();
+        await resumed.disconnect();
+        const errors = await client.stop();
+        expect(errors).toHaveLength(0);
+    });
     it("supports legacy transport wrapper", async () => {
         const client = new CopilotTransportClient("ws://example.test", () => {
             const socket = new FakeSocket((data) => {

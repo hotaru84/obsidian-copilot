@@ -45,6 +45,8 @@ import {
 	type PermissionRequestResult,
 	type MessageAttachment,
 	type SessionMode as RemoteSessionMode,
+	type SessionConfig as RemoteSessionConfig,
+	type MCPServerConfig,
 } from "../../../vendor/copilot-runtime-sdk/sdk-client/dist/src/index.js";
 
 interface SessionState {
@@ -567,6 +569,47 @@ export class RemoteAdapter implements IChatAgentClient {
 		await manager.start();
 	}
 
+	private parseMcpServersJson(): Record<string, MCPServerConfig> | undefined {
+		const raw = this.plugin.settings.remoteRuntime.mcpServersJson?.trim();
+		if (!raw) {
+			return undefined;
+		}
+
+		try {
+			const parsed: unknown = JSON.parse(raw);
+			if (
+				!parsed ||
+				typeof parsed !== "object" ||
+				Array.isArray(parsed)
+			) {
+				this.logger.warn(
+					"[RemoteAdapter] Ignoring MCP servers config because JSON root is not an object.",
+				);
+				return undefined;
+			}
+			return parsed as Record<string, MCPServerConfig>;
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : String(error);
+			this.logger.warn(
+				`[RemoteAdapter] Failed to parse MCP servers JSON: ${message}`,
+			);
+			return undefined;
+		}
+	}
+
+	private buildSessionConfig(
+		base: Omit<RemoteSessionConfig, "enableConfigDiscovery" | "mcpServers">,
+	): RemoteSessionConfig {
+		const mcpServers = this.parseMcpServersJson();
+		return {
+			...base,
+			enableConfigDiscovery:
+				this.plugin.settings.remoteRuntime.enableConfigDiscovery,
+			...(mcpServers ? { mcpServers } : {}),
+		};
+	}
+
 	async initialize(config: AgentConfig): Promise<InitializeResult> {
 		this.currentConfig = config;
 		this.autoAllowPermissions = this.plugin.settings.autoAllowPermissions;
@@ -698,7 +741,7 @@ export class RemoteAdapter implements IChatAgentClient {
 		}
 
 		if (selectableRemoteAgents.length > 0) {
-			console.log(
+			this.logger.log(
 				"[RemoteAdapter] Loaded remote agents:",
 				selectableRemoteAgents.map((a) => ({
 					id: a.agentId,
@@ -1208,12 +1251,14 @@ export class RemoteAdapter implements IChatAgentClient {
 		const client = this.getClient(workingDirectory);
 		await this.syncWorkspace(workingDirectory);
 
-		const created = await client.createSession({
-			streaming: true,
-			configDir: workingDirectory,
-			onPermissionRequest: (request, invocation) =>
-				this.handlePermissionRequest(invocation.sessionId, request),
-		});
+		const created = await client.createSession(
+			this.buildSessionConfig({
+				streaming: true,
+				configDir: workingDirectory,
+				onPermissionRequest: (request, invocation) =>
+					this.handlePermissionRequest(invocation.sessionId, request),
+			}),
+		);
 		created.on((event) => this.handleRemoteEvent(created.sessionId, event));
 
 		const snapshot = await this.buildSessionSnapshot(
@@ -1539,12 +1584,15 @@ export class RemoteAdapter implements IChatAgentClient {
 		const client = this.getClient(cwd);
 		await this.syncWorkspace(cwd);
 
-		const resumed = await client.resumeSession(sessionId, {
-			streaming: true,
-			configDir: cwd,
-			onPermissionRequest: (request, invocation) =>
-				this.handlePermissionRequest(invocation.sessionId, request),
-		});
+		const resumed = await client.resumeSession(
+			sessionId,
+			this.buildSessionConfig({
+				streaming: true,
+				configDir: cwd,
+				onPermissionRequest: (request, invocation) =>
+					this.handlePermissionRequest(invocation.sessionId, request),
+			}),
+		);
 		resumed.on((event) => this.handleRemoteEvent(resumed.sessionId, event));
 
 		const snapshot = await this.buildSessionSnapshot(resumed, cwd);
@@ -1571,20 +1619,22 @@ export class RemoteAdapter implements IChatAgentClient {
 		const systemMessageContent =
 			await this.buildForkSystemMessageContent(sessionId);
 
-		const forked = await client.createSession({
-			streaming: true,
-			configDir: cwd,
-			onPermissionRequest: (request, invocation) =>
-				this.handlePermissionRequest(invocation.sessionId, request),
-			systemMessage: systemMessageContent
-				? {
-						mode: "append",
-						content:
-							"Forked session context from previous conversation:\n\n" +
-							systemMessageContent,
-					}
-				: undefined,
-		});
+		const forked = await client.createSession(
+			this.buildSessionConfig({
+				streaming: true,
+				configDir: cwd,
+				onPermissionRequest: (request, invocation) =>
+					this.handlePermissionRequest(invocation.sessionId, request),
+				systemMessage: systemMessageContent
+					? {
+							mode: "append",
+							content:
+								"Forked session context from previous conversation:\n\n" +
+								systemMessageContent,
+						}
+					: undefined,
+			}),
+		);
 		forked.on((event) => this.handleRemoteEvent(forked.sessionId, event));
 
 		const snapshot = await this.buildSessionSnapshot(forked, cwd);

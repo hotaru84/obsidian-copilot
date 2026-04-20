@@ -185,6 +185,44 @@ export class AgentClientSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		/* eslint-disable obsidianmd/ui/sentence-case */
+		new Setting(containerEl)
+			.setName("Enable MCP config discovery")
+			.setDesc(
+				"When enabled, runtime discovers MCP config files from the session config directory in addition to explicit servers below.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(
+						this.plugin.settings.remoteRuntime
+							.enableConfigDiscovery,
+					)
+					.onChange(async (value) => {
+						this.plugin.settings.remoteRuntime.enableConfigDiscovery =
+							value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("MCP servers JSON")
+			.setDesc(
+				"JSON object for MCP servers. Applied from the next new, resume, or fork session.",
+			)
+			.addTextArea((textArea) =>
+				textArea
+					.setPlaceholder(
+						'{"example":{"type":"http","url":"https://example.com/mcp"}}',
+					)
+					.setValue(this.plugin.settings.remoteRuntime.mcpServersJson)
+					.onChange(async (value) => {
+						this.plugin.settings.remoteRuntime.mcpServersJson =
+							value;
+						await this.plugin.saveSettings();
+					}),
+			);
+		/* eslint-enable obsidianmd/ui/sentence-case */
 	}
 
 	private renderCoreSection(containerEl: HTMLElement): void {

@@ -53,8 +53,9 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 
 1. Open **Settings → Copilot for Obsidian → Runtime**.
 2. Choose **Bundled server** (recommended) or **External server**.
-3. If needed, adjust port/URL and startup timeout.
-4. Start chatting from the ribbon icon.
+3. If needed, adjust port/URL and timeout settings.
+4. Optional: configure **Enable MCP config discovery** and **MCP servers JSON**.
+5. Start chatting from the ribbon icon.
 
 **[Full Documentation](https://github.com/hotaru84/obsidian-copilot/wiki)**
 

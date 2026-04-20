@@ -116,6 +116,8 @@ export interface RemoteRuntimeSettings {
 	executablePathOverride: string;
 	startupTimeoutMs: number;
 	requestTimeoutMs: number;
+	enableConfigDiscovery: boolean;
+	mcpServersJson: string;
 }
 
 export interface AgentClientPluginSettings {
@@ -175,6 +177,8 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 		executablePathOverride: "",
 		startupTimeoutMs: 15000,
 		requestTimeoutMs: 10000,
+		enableConfigDiscovery: true,
+		mcpServersJson: "{}",
 	},
 	autoAllowPermissions: false,
 	autoMentionActiveNote: true,
@@ -1461,6 +1465,15 @@ export default class AgentClientPlugin extends Plugin {
 								? Math.floor(rawRemote.requestTimeoutMs)
 								: DEFAULT_SETTINGS.remoteRuntime
 										.requestTimeoutMs,
+						enableConfigDiscovery:
+							typeof rawRemote.enableConfigDiscovery === "boolean"
+								? rawRemote.enableConfigDiscovery
+								: DEFAULT_SETTINGS.remoteRuntime
+										.enableConfigDiscovery,
+						mcpServersJson:
+							typeof rawRemote.mcpServersJson === "string"
+								? rawRemote.mcpServersJson
+								: DEFAULT_SETTINGS.remoteRuntime.mcpServersJson,
 					};
 				}
 

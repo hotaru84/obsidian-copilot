@@ -140,6 +140,24 @@ export interface SerializableToolDefinition {
     parameters?: Record<string, unknown>;
     skipPermission?: boolean;
 }
+export interface MCPServerBaseConfig {
+    tools?: string[];
+    timeout?: number;
+    [key: string]: unknown;
+}
+export interface MCPLocalServerConfig extends MCPServerBaseConfig {
+    type?: "local" | "stdio";
+    command: string;
+    args: string[];
+    env?: Record<string, string>;
+    cwd?: string;
+}
+export interface MCPRemoteServerConfig extends MCPServerBaseConfig {
+    type: "http" | "sse";
+    url: string;
+    headers?: Record<string, string>;
+}
+export type MCPServerConfig = MCPLocalServerConfig | MCPRemoteServerConfig;
 export interface SessionConfig {
     model?: string;
     streaming?: boolean;
@@ -150,6 +168,8 @@ export interface SessionConfig {
     availableTools?: string[];
     excludedTools?: string[];
     configDir?: string;
+    enableConfigDiscovery?: boolean;
+    mcpServers?: Record<string, MCPServerConfig>;
 }
 export interface ResumeSessionConfig extends SessionConfig {
 }

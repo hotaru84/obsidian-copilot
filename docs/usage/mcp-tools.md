@@ -10,6 +10,31 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is an open 
 MCP support and configuration depend on the agent. Refer to your agent's documentation for details.
 :::
 
+## Configure MCP Servers
+
+You can configure runtime MCP servers from **Settings → Copilot for Obsidian → Runtime**.
+
+- **Enable MCP config discovery**: Allows runtime to discover MCP config files from `configDir`.
+- **MCP servers JSON**: Sets `SessionConfig.mcpServers` directly as a JSON object.
+
+Configuration is applied from the next `newSession`, `resumeSession`, or `forkSession` call.
+
+Example:
+
+```json
+{
+  "filesystem": {
+    "type": "local",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+  },
+  "my-http-mcp": {
+    "type": "http",
+    "url": "https://example.com/mcp"
+  }
+}
+```
+
 ## How MCP Works
 
 When an agent uses an MCP tool:

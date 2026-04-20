@@ -54,7 +54,8 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 1. **設定 → Copilot for Obsidian → Runtime** を開く
 2. **Bundled server**（推奨）または **External server** を選ぶ
 3. 必要に応じてポート/URL・タイムアウトを調整
-4. リボンのロボットアイコンからチャット開始
+4. 必要に応じて **Enable MCP config discovery** と **MCP servers JSON** を設定
+5. リボンのロボットアイコンからチャット開始
 
 ## 変更履歴
 
