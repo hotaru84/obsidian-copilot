@@ -184,6 +184,19 @@ If your plugin does not need CSS, delete this file.
 	color: var(--interactive-accent);
 }
 
+.agent-client-header-button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.agent-client-header-button:disabled:hover {
+	background-color: transparent !important;
+}
+
+.agent-client-header-button:disabled:hover svg {
+	color: var(--text-muted);
+}
+
 /* ===== Message Content Components ===== */
 
 /* Tool Call */
@@ -459,6 +472,20 @@ If your plugin does not need CSS, delete this file.
 	gap: 4px;
 	justify-content: flex-end;
 	flex-shrink: 0;
+}
+
+.agent-client-inline-header-floating {
+	padding: 6px 8px;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.agent-client-inline-header-floating .agent-client-inline-header-main {
+	min-width: 0;
+}
+
+.agent-client-inline-header-floating .agent-client-inline-header-actions {
+	flex-wrap: wrap;
 }
 
 /* Messages container */

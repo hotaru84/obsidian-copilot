@@ -15,6 +15,7 @@ import type { ImagePromptContent } from "../../domain/models/prompt-content";
 // Component imports
 import { ChatMessages } from "./ChatMessages";
 import { ChatInput } from "./ChatInput";
+import { InlineHeader } from "./InlineHeader";
 
 // Hooks imports
 import { useChatController } from "../../hooks/useChatController";
@@ -847,6 +848,22 @@ function FloatingChatComponent({
 			/>
 
 			<div className="agent-client-floating-content">
+				<InlineHeader
+					variant="floating"
+					agentLabel={activeAgentLabel}
+					availableAgents={availableAgents}
+					currentAgentId={session.agentId}
+					hasMessages={messages.length > 0}
+					showHistoryButton={sessionHistory.canShowSessionHistory}
+					isHistoryEnabled={isSessionReady}
+					onAgentChange={(agentId) => void handleSwitchAgent(agentId)}
+					onNewSession={() => void handleNewChat()}
+					onOpenHistory={() => void handleOpenHistory()}
+					onExportChat={() => void handleExportChat()}
+					onRestartAgent={() => void handleRestartAgent()}
+					onOpenNewWindow={handleOpenNewFloatingChat}
+					onClose={handleCloseWindow}
+				/>
 				<div className="agent-client-floating-messages-container">
 					<ChatMessages
 						messages={messages}

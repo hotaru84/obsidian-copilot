@@ -31,6 +31,10 @@ export interface InlineHeaderProps {
 	onExportChat: () => void;
 	/** Callback to restart agent */
 	onRestartAgent: () => void;
+	/** Whether session history button should be shown */
+	showHistoryButton?: boolean;
+	/** Whether session history button is enabled */
+	isHistoryEnabled?: boolean;
 	/** View variant (TODO(code-block): "codeblock" for future code block chat view) */
 	variant: "floating" | "codeblock";
 	/** Callback to open new window (floating only) */
@@ -58,6 +62,8 @@ export function InlineHeader({
 	onOpenHistory,
 	onExportChat,
 	onRestartAgent,
+	showHistoryButton = true,
+	isHistoryEnabled = true,
 	variant,
 	onOpenNewWindow,
 	onClose,
@@ -130,15 +136,19 @@ export function InlineHeader({
 					tooltip="New session"
 					onClick={onNewSession}
 				/>
-				<HeaderButton
-					iconName="history"
-					tooltip="Session history"
-					onClick={onOpenHistory}
-				/>
+				{showHistoryButton && (
+					<HeaderButton
+						iconName="history"
+						tooltip="Session history"
+						onClick={onOpenHistory}
+						disabled={!isHistoryEnabled}
+					/>
+				)}
 				<HeaderButton
 					iconName="save"
 					tooltip="Export chat to Markdown"
 					onClick={onExportChat}
+					disabled={!hasMessages}
 				/>
 				{/* <HeaderButton
 					iconName="rotate-cw"
