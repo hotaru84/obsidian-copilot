@@ -601,7 +601,10 @@ export class RemoteAdapter implements IChatAgentClient {
 	}
 
 	private buildSessionConfig(
-		base: Omit<RemoteSessionConfig, "enableConfigDiscovery" | "mcpServers">,
+		base: Omit<
+			RemoteSessionConfig,
+			"enableConfigDiscovery" | "mcpServers" | "configDir"
+		>,
 	): RemoteSessionConfig {
 		const mcpServers = this.parseMcpServersJson();
 		return {
@@ -675,7 +678,7 @@ export class RemoteAdapter implements IChatAgentClient {
 		commands: SlashCommand[];
 		remoteAgents?: SessionRemoteAgentState;
 	}> {
-		await this.syncWorkspace(workingDirectory);
+		// Use the existing shared client for snapshot operations
 		const client = this.getClient(workingDirectory);
 		const [models, customCommands, agents] = (await Promise.all([
 			client.listModels().catch(() => []),
@@ -1250,13 +1253,17 @@ export class RemoteAdapter implements IChatAgentClient {
 	}
 
 	async newSession(workingDirectory: string): Promise<NewSessionResult> {
-		const client = this.getClient(workingDirectory);
-		await this.syncWorkspace(workingDirectory);
+		// Create a new client instance with the working directory
+		// This ensures SetWorkspace API changes are applied for session creation
+		const clientOptions: CopilotClientOptionsWithCwd = {
+			serverUrl: this.plugin.getRemoteServerUrl(),
+			cwd: workingDirectory,
+		};
+		const client = new CopilotClient(clientOptions);
 
 		const created = await client.createSession(
 			this.buildSessionConfig({
 				streaming: true,
-				configDir: workingDirectory,
 				onPermissionRequest: (request, invocation) =>
 					this.handlePermissionRequest(invocation.sessionId, request),
 			}),
@@ -1583,14 +1590,18 @@ export class RemoteAdapter implements IChatAgentClient {
 		sessionId: string,
 		cwd: string,
 	): Promise<ResumeSessionResult> {
-		const client = this.getClient(cwd);
-		await this.syncWorkspace(cwd);
+		// Create a new client instance with the working directory
+		// This ensures SetWorkspace API changes are applied for session resumption
+		const clientOptions: CopilotClientOptionsWithCwd = {
+			serverUrl: this.plugin.getRemoteServerUrl(),
+			cwd: cwd,
+		};
+		const client = new CopilotClient(clientOptions);
 
 		const resumed = await client.resumeSession(
 			sessionId,
 			this.buildSessionConfig({
 				streaming: true,
-				configDir: cwd,
 				onPermissionRequest: (request, invocation) =>
 					this.handlePermissionRequest(invocation.sessionId, request),
 			}),
@@ -1615,8 +1626,13 @@ export class RemoteAdapter implements IChatAgentClient {
 		sessionId: string,
 		cwd: string,
 	): Promise<ForkSessionResult> {
-		const client = this.getClient(cwd);
-		await this.syncWorkspace(cwd);
+		// Create a new client instance with the working directory
+		// This ensures SetWorkspace API changes are applied for session forking
+		const clientOptions: CopilotClientOptionsWithCwd = {
+			serverUrl: this.plugin.getRemoteServerUrl(),
+			cwd: cwd,
+		};
+		const client = new CopilotClient(clientOptions);
 
 		const systemMessageContent =
 			await this.buildForkSystemMessageContent(sessionId);
@@ -1624,7 +1640,6 @@ export class RemoteAdapter implements IChatAgentClient {
 		const forked = await client.createSession(
 			this.buildSessionConfig({
 				streaming: true,
-				configDir: cwd,
 				onPermissionRequest: (request, invocation) =>
 					this.handlePermissionRequest(invocation.sessionId, request),
 				systemMessage: systemMessageContent
