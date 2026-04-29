@@ -199,6 +199,29 @@ export interface SessionModelState {
 	currentModelId: string;
 }
 
+/**
+ * Prompt template metadata available from the runtime.
+ */
+export interface PromptTemplateInfo {
+	promptId: string;
+	name: string;
+	description?: string;
+	prompt?: string;
+}
+
+/**
+ * Usage metrics reported by the runtime for a session.
+ */
+export interface SessionUsageMetrics {
+	totalUserRequests: number;
+	totalPremiumRequestCost: number;
+	totalApiDurationMs: number;
+	lastCallInputTokens: number;
+	lastCallOutputTokens: number;
+	sessionStartTime: number;
+	currentModel?: string;
+}
+
 // ============================================================================
 // Chat Session
 // ============================================================================
@@ -313,4 +336,7 @@ export interface ChatSession {
 
 	/** Working directory for agent file operations */
 	workingDirectory: string;
+
+	/** Optional runtime usage metrics for this session. */
+	usageMetrics?: SessionUsageMetrics;
 }

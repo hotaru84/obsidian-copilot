@@ -105,6 +105,46 @@ export function MessageContentRenderer({
 				/>
 			);
 
+		case "elicitation": {
+			const propertyEntries = Object.entries(
+				content.requestedSchema.properties,
+			);
+			return (
+				<div className="agent-client-message-elicitation">
+					<div className="agent-client-message-elicitation-title">
+						Additional input required
+					</div>
+					<div className="agent-client-message-elicitation-message">
+						{content.message}
+					</div>
+					{propertyEntries.length > 0 && (
+						<div className="agent-client-message-elicitation-fields">
+							{propertyEntries.map(([fieldName, field]) => (
+								<div
+									key={fieldName}
+									className="agent-client-message-elicitation-field"
+								>
+									<strong>{field.title || fieldName}</strong>
+									<span>{` (${field.type})`}</span>
+									{field.description && (
+										<div>{field.description}</div>
+									)}
+								</div>
+							))}
+						</div>
+					)}
+					<div className="agent-client-message-elicitation-status">
+						Status: {content.status}
+					</div>
+					{content.error && (
+						<div className="agent-client-message-elicitation-error">
+							{content.error}
+						</div>
+					)}
+				</div>
+			);
+		}
+
 		case "image":
 			return (
 				<div className="agent-client-message-image">

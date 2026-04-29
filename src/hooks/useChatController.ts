@@ -5,6 +5,7 @@ import type AgentClientPlugin from "../plugin";
 import type { AttachedImage } from "../components/chat/ImagePreviewStrip";
 import { SessionHistoryModal } from "../components/chat/SessionHistoryModal";
 import { ConfirmDeleteModal } from "../components/chat/ConfirmDeleteModal";
+import { ElicitationModal } from "../components/chat/ElicitationModal";
 
 // Service imports
 import { NoteMentionService } from "../adapters/obsidian/mention-service";
@@ -34,11 +35,18 @@ import { useSessionHistory } from "./useSessionHistory";
 
 // Domain model imports
 import type {
+	PromptTemplateInfo,
+	SlashCommand,
 	SessionModeState,
 	SessionModelState,
 	SessionRemoteAgentState,
 } from "../domain/models/chat-session";
 import type { ImagePromptContent } from "../domain/models/prompt-content";
+import type {
+	ChatMessage,
+	ElicitationResponse,
+	MessageContent,
+} from "../domain/models/chat-message";
 
 // Agent info for display (from plugin.getAvailableAgents())
 interface AgentInfo {
@@ -74,6 +82,29 @@ function hasAssistantResponseInLatestTurn(
 	}
 
 	return false;
+}
+
+function findActiveElicitation(
+	messages: ChatMessage[],
+): Extract<MessageContent, { type: "elicitation" }> | null {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+		for (
+			let contentIndex = message.content.length - 1;
+			contentIndex >= 0;
+			contentIndex -= 1
+		) {
+			const content = message.content[contentIndex];
+			if (
+				content.type === "elicitation" &&
+				content.status === "pending"
+			) {
+				return content;
+			}
+		}
+	}
+
+	return null;
 }
 
 export interface UseChatControllerOptions {
@@ -137,6 +168,10 @@ export interface UseChatControllerReturn {
 	handleSetMode: (modeId: string) => Promise<void>;
 	handleSetModel: (modelId: string) => Promise<void>;
 	handleSetRemoteAgent: (agentId: string | null) => Promise<void>;
+	handleCompactHistory: () => Promise<void>;
+	handleTruncateHistory: () => Promise<void>;
+	activeElicitation: Extract<MessageContent, { type: "elicitation" }> | null;
+	handleSubmitElicitation: (response: ElicitationResponse) => Promise<void>;
 
 	// Input state (for broadcast commands - sidebar only)
 	inputValue: string;
@@ -229,13 +264,68 @@ export function useChatController(
 	const { messages, isSending } = chat;
 
 	const permission = usePermission(acpAdapter, messages);
+	const [promptTemplates, setPromptTemplates] = useState<
+		PromptTemplateInfo[]
+	>([]);
+
+	const promptCommands = useMemo(() => {
+		return promptTemplates.map((prompt) => ({
+			name: prompt.promptId,
+			description: prompt.description || prompt.name,
+			hint: prompt.name,
+			source: "agent" as const,
+		}));
+	}, [promptTemplates]);
+
+	const mergedSlashCommands = useMemo(() => {
+		const byName = new Map<string, SlashCommand>();
+		for (const command of session.availableCommands || []) {
+			byName.set(command.name, command);
+		}
+		for (const command of promptCommands) {
+			if (!byName.has(command.name)) {
+				byName.set(command.name, command);
+			}
+		}
+		return Array.from(byName.values());
+	}, [promptCommands, session.availableCommands]);
 
 	const mentions = useMentions(vaultAccessAdapter, plugin);
 	const autoMention = useAutoMention(vaultAccessAdapter);
 	const slashCommands = useSlashCommands(
-		session.availableCommands || [],
+		mergedSlashCommands,
 		autoMention.toggle,
 	);
+
+	useEffect(() => {
+		let isDisposed = false;
+
+		if (!session.sessionId || !isSessionReady) {
+			setPromptTemplates([]);
+			return;
+		}
+
+		void acpAdapter
+			.listPrompts()
+			.then((prompts) => {
+				if (!isDisposed) {
+					setPromptTemplates(prompts);
+				}
+			})
+			.catch((error) => {
+				logger.warn(
+					"[useChatController] Failed to load runtime prompt templates",
+					error,
+				);
+				if (!isDisposed) {
+					setPromptTemplates([]);
+				}
+			});
+
+		return () => {
+			isDisposed = true;
+		};
+	}, [acpAdapter, isSessionReady, logger, session.sessionId]);
 
 	const autoExport = useAutoExport(plugin);
 
@@ -289,6 +379,7 @@ export function useChatController(
 		settingsAccess: plugin.settingsStore,
 		cwd: vaultPath,
 		onSessionLoad: handleSessionLoad,
+		agentRestoreSession: agentSession.restoreSession,
 		onMessagesRestore: chat.setMessagesFromLocal,
 		onLoadStart: handleLoadStart,
 		onLoadEnd: handleLoadEnd,
@@ -311,6 +402,7 @@ export function useChatController(
 	// Refs
 	// ============================================================
 	const historyModalRef = useRef<SessionHistoryModal | null>(null);
+	const elicitationModalRef = useRef<ElicitationModal | null>(null);
 
 	// ============================================================
 	// Computed Values
@@ -323,12 +415,43 @@ export function useChatController(
 		return plugin.getAvailableAgents();
 	}, [plugin]);
 
+	const activeElicitation = useMemo(
+		() => findActiveElicitation(messages),
+		[messages],
+	);
+
 	// ============================================================
 	// Callbacks
 	// ============================================================
 	const handleSendMessage = useCallback(
 		async (content: string, images?: ImagePromptContent[]) => {
 			const isFirstMessage = messages.length === 0;
+			// Match slash commands like /explain or /explain arg1 arg2
+			const promptMatch = content.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
+			const matchedPrompt = promptMatch
+				? promptTemplates.find(
+						(prompt) => prompt.promptId === promptMatch[1],
+					)
+				: undefined;
+
+			if (matchedPrompt && (!images || images.length === 0)) {
+				// Execute as a prompt template
+				// Arguments are everything after the slash command
+				const args = promptMatch?.[2]?.trim();
+				await chat.executePromptTemplate(
+					matchedPrompt.promptId,
+					content,
+					args,
+				);
+
+				if (isFirstMessage && session.sessionId) {
+					await sessionHistory.saveSessionLocally(
+						session.sessionId,
+						content,
+					);
+				}
+				return;
+			}
 
 			await chat.sendMessage(content, {
 				activeNote: settings.autoMentionActiveNote
@@ -353,6 +476,7 @@ export function useChatController(
 		[
 			chat,
 			autoMention,
+			promptTemplates,
 			plugin,
 			messages.length,
 			session.sessionId,
@@ -626,6 +750,108 @@ export function useChatController(
 		[agentSession, logger],
 	);
 
+	const handleCompactHistory = useCallback(async () => {
+		if (!session.sessionId) {
+			new Notice("[Agent Client] no active session");
+			return;
+		}
+
+		const confirm = window.confirm(
+			"Are you sure you want to compact session context? This will summarize or remove older messages to save tokens.",
+		);
+		if (!confirm) return;
+
+		try {
+			const result = await acpAdapter.compactHistory(session.sessionId);
+			const removed = result.messagesRemoved ?? 0;
+			new Notice(
+				`[Agent Client] context compacted${removed > 0 ? ` (${removed} messages removed)` : ""}`,
+			);
+		} catch (error) {
+			new Notice("[Agent Client] failed to compact history");
+			logger.error("History compact error:", error);
+		}
+	}, [acpAdapter, logger, session.sessionId]);
+
+	const handleTruncateHistory = useCallback(async () => {
+		if (!session.sessionId || messages.length === 0) {
+			new Notice("[Agent Client] no active session or messages");
+			return;
+		}
+
+		const indexStr = window.prompt(
+			`Enter message index to truncate AFTER (0 to ${messages.length - 1}):`,
+			(messages.length - 1).toString(),
+		);
+		if (indexStr === null) return;
+
+		const index = parseInt(indexStr, 10);
+		if (isNaN(index) || index < 0 || index >= messages.length) {
+			new Notice("[Agent Client] invalid message index");
+			return;
+		}
+
+		const targetMessage = messages[index];
+		const eventId = targetMessage.eventId;
+
+		if (!eventId) {
+			new Notice(
+				"[Agent Client] cannot truncate: message has no protocol event ID",
+			);
+			return;
+		}
+
+		const confirm = window.confirm(
+			`Are you sure you want to truncate history after message ${index}? All subsequent messages will be permanently removed from the session.`,
+		);
+		if (!confirm) return;
+
+		try {
+			await acpAdapter.truncateHistory(session.sessionId, eventId);
+			chat.truncateMessages(eventId);
+			new Notice("[Agent Client] history truncated");
+		} catch (error) {
+			new Notice("[Agent Client] failed to truncate history");
+			logger.error("History truncate error:", error);
+		}
+	}, [acpAdapter, chat, logger, messages, session.sessionId]);
+
+	const handleSubmitElicitation = useCallback(
+		async (response: ElicitationResponse) => {
+			if (!session.sessionId || !activeElicitation) {
+				return;
+			}
+
+			try {
+				await acpAdapter.handlePendingElicitation(
+					session.sessionId,
+					activeElicitation.requestId,
+					response,
+				);
+				chat.handleSessionUpdate({
+					type: "elicitation_complete",
+					sessionId: session.sessionId,
+					requestId: activeElicitation.requestId,
+					response,
+					success: true,
+				});
+			} catch (error) {
+				logger.error("Elicitation submit error:", error);
+				chat.handleSessionUpdate({
+					type: "elicitation_complete",
+					sessionId: session.sessionId,
+					requestId: activeElicitation.requestId,
+					response,
+					success: false,
+					error:
+						error instanceof Error ? error.message : String(error),
+				});
+				new Notice("[Agent Client] failed to submit requested input");
+			}
+		},
+		[acpAdapter, activeElicitation, chat, logger, session.sessionId],
+	);
+
 	// Update modal props when session history state changes
 	useEffect(() => {
 		if (historyModalRef.current) {
@@ -667,6 +893,31 @@ export function useChatController(
 		handleLoadMore,
 		handleFetchSessions,
 	]);
+
+	useEffect(() => {
+		if (!activeElicitation) {
+			elicitationModalRef.current?.close();
+			elicitationModalRef.current = null;
+			return;
+		}
+
+		const props = {
+			message: activeElicitation.message,
+			requestedSchema: activeElicitation.requestedSchema,
+			onSubmit: handleSubmitElicitation,
+		};
+
+		if (!elicitationModalRef.current) {
+			elicitationModalRef.current = new ElicitationModal(
+				plugin.app,
+				props,
+			);
+			elicitationModalRef.current.open();
+			return;
+		}
+
+		elicitationModalRef.current.updateProps(props);
+	}, [activeElicitation, handleSubmitElicitation, plugin.app]);
 
 	// ============================================================
 	// Effects - Session Lifecycle
@@ -720,6 +971,7 @@ export function useChatController(
 	// Cleanup on unmount only - auto-export and close session
 	useEffect(() => {
 		return () => {
+			elicitationModalRef.current?.close();
 			logger.log(
 				"[useChatController] Cleanup: auto-export and close session",
 			);
@@ -937,6 +1189,10 @@ export function useChatController(
 		handleSetMode,
 		handleSetModel,
 		handleSetRemoteAgent,
+		handleCompactHistory,
+		handleTruncateHistory,
+		activeElicitation,
+		handleSubmitElicitation,
 
 		// Input state
 		inputValue,

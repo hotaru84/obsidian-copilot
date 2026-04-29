@@ -20,6 +20,10 @@ import { preparePrompt, sendPreparedPrompt } from "../shared/message-service";
 
 /** Tool call content type extracted for type safety */
 type ToolCallMessageContent = Extract<MessageContent, { type: "tool_call" }>;
+type ElicitationMessageContent = Extract<
+	MessageContent,
+	{ type: "elicitation" }
+>;
 
 /**
  * Options for sending a message.
@@ -56,6 +60,16 @@ export interface UseChatReturn {
 	sendMessage: (
 		content: string,
 		options: SendMessageOptions,
+	) => Promise<void>;
+
+	/**
+	 * Execute a runtime prompt template within the current session.
+	 * Adds the slash command as a user message and waits for session updates.
+	 */
+	executePromptTemplate: (
+		promptId: string,
+		commandText: string,
+		args?: string,
 	) => Promise<void>;
 
 	/**
@@ -121,6 +135,12 @@ export interface UseChatReturn {
 	 * Should be registered with agentClient.onSessionUpdate().
 	 */
 	handleSessionUpdate: (update: SessionUpdate) => void;
+
+	/**
+	 * Truncate local messages after a specific event ID.
+	 * Used after session history truncation to keep UI in sync.
+	 */
+	truncateMessages: (eventId: string) => void;
 }
 
 /**
@@ -210,6 +230,20 @@ function mergeToolCallContent(
 			update.permissionRequest !== undefined
 				? update.permissionRequest
 				: existing.permissionRequest,
+	};
+}
+
+function mergeElicitationContent(
+	existing: ElicitationMessageContent,
+	update: ElicitationMessageContent,
+): ElicitationMessageContent {
+	return {
+		...existing,
+		message: update.message || existing.message,
+		requestedSchema: update.requestedSchema || existing.requestedSchema,
+		status: update.status,
+		response: update.response ?? existing.response,
+		error: update.error ?? existing.error,
 	};
 }
 
@@ -458,6 +492,42 @@ export function useChat(
 		[],
 	);
 
+	const upsertElicitation = useCallback(
+		(requestId: string, content: ElicitationMessageContent): void => {
+			setMessages((prev) => {
+				let found = false;
+				const updated = prev.map((message) => ({
+					...message,
+					content: message.content.map((entry) => {
+						if (
+							entry.type === "elicitation" &&
+							entry.requestId === requestId
+						) {
+							found = true;
+							return mergeElicitationContent(entry, content);
+						}
+						return entry;
+					}),
+				}));
+
+				if (found) {
+					return updated;
+				}
+
+				return [
+					...prev,
+					{
+						id: crypto.randomUUID(),
+						role: "assistant" as const,
+						content: [content],
+						timestamp: new Date(),
+					},
+				];
+			});
+		},
+		[],
+	);
+
 	/**
 	 * Handle a session update from the agent.
 	 * This is the unified handler for all session update events.
@@ -475,12 +545,40 @@ export function useChat(
 							type: "text",
 							text: next.text,
 						});
+						// Update last message eventId
+						setMessages((prev) => {
+							if (prev.length === 0) return prev;
+							const last = prev[prev.length - 1];
+							if (
+								last.role === "assistant" &&
+								next.eventId &&
+								last.eventId !== next.eventId
+							) {
+								const updated = { ...last, eventId: next.eventId };
+								return [...prev.slice(0, -1), updated];
+							}
+							return prev;
+						});
 						break;
 
 					case "agent_thought_chunk":
 						updateLastMessage({
 							type: "agent_thought",
 							text: next.text,
+						});
+						// Update last message eventId
+						setMessages((prev) => {
+							if (prev.length === 0) return prev;
+							const last = prev[prev.length - 1];
+							if (
+								last.role === "assistant" &&
+								next.eventId &&
+								last.eventId !== next.eventId
+							) {
+								const updated = { ...last, eventId: next.eventId };
+								return [...prev.slice(0, -1), updated];
+							}
+							return prev;
 						});
 						break;
 
@@ -493,6 +591,20 @@ export function useChat(
 						updateUserMessage({
 							type: "text",
 							text: next.text,
+						});
+						// Update last message eventId
+						setMessages((prev) => {
+							if (prev.length === 0) return prev;
+							const last = prev[prev.length - 1];
+							if (
+								last.role === "user" &&
+								next.eventId &&
+								last.eventId !== next.eventId
+							) {
+								const updated = { ...last, eventId: next.eventId };
+								return [...prev.slice(0, -1), updated];
+							}
+							return prev;
 						});
 						break;
 
@@ -508,6 +620,22 @@ export function useChat(
 							rawInput: next.rawInput,
 							permissionRequest: next.permissionRequest,
 						});
+						// Update eventId for the tool call message
+						if (next.eventId) {
+							setMessages((prev) =>
+								prev.map((msg) => {
+									const hasToolCall = msg.content.some(
+										(c) =>
+											c.type === "tool_call" &&
+											c.toolCallId === next.toolCallId,
+									);
+									if (hasToolCall && msg.eventId !== next.eventId) {
+										return { ...msg, eventId: next.eventId };
+									}
+									return msg;
+								}),
+							);
+						}
 						break;
 
 					case "tool_call_update":
@@ -525,6 +653,22 @@ export function useChat(
 							rawInput: next.rawInput,
 							permissionRequest: next.permissionRequest,
 						});
+						// Update eventId for the tool call message
+						if (next.eventId) {
+							setMessages((prev) =>
+								prev.map((msg) => {
+									const hasToolCall = msg.content.some(
+										(c) =>
+											c.type === "tool_call" &&
+											c.toolCallId === next.toolCallId,
+									);
+									if (hasToolCall && msg.eventId !== next.eventId) {
+										return { ...msg, eventId: next.eventId };
+									}
+									return msg;
+								}),
+							);
+						}
 						break;
 
 					case "plan":
@@ -550,12 +694,76 @@ export function useChat(
 								{
 									...last,
 									streamingPhase: "completed",
+									eventId: next.eventId || last.eventId,
 								},
 							];
 						});
 						isSendingRef.current = false;
 						setIsSending(false);
 						setLastUserMessage(null);
+						break;
+
+					case "elicitation_request":
+						upsertElicitation(next.requestId, {
+							type: "elicitation",
+							requestId: next.requestId,
+							message: next.message,
+							requestedSchema: next.requestedSchema,
+							status: "pending",
+						});
+						// Update eventId for elicitation message
+						if (next.eventId) {
+							setMessages((prev) =>
+								prev.map((msg) => {
+									const hasElicitation = msg.content.some(
+										(c) =>
+											c.type === "elicitation" &&
+											c.requestId === next.requestId,
+									);
+									if (hasElicitation && msg.eventId !== next.eventId) {
+										return { ...msg, eventId: next.eventId };
+									}
+									return msg;
+								}),
+							);
+						}
+						break;
+
+					case "elicitation_complete":
+						upsertElicitation(next.requestId, {
+							type: "elicitation",
+							requestId: next.requestId,
+							message: "",
+							requestedSchema: {
+								type: "object",
+								properties: {},
+							},
+							status: next.error
+								? "failed"
+								: next.response?.action === "decline"
+									? "declined"
+									: next.response?.action === "cancel"
+										? "cancelled"
+										: "completed",
+							response: next.response,
+							error: next.error,
+						});
+						// Update eventId
+						if (next.eventId) {
+							setMessages((prev) =>
+								prev.map((msg) => {
+									const hasElicitation = msg.content.some(
+										(c) =>
+											c.type === "elicitation" &&
+											c.requestId === next.requestId,
+									);
+									if (hasElicitation && msg.eventId !== next.eventId) {
+										return { ...msg, eventId: next.eventId };
+									}
+									return msg;
+								}),
+							);
+						}
 						break;
 
 					// Session-level updates are handled elsewhere (useAgentSession)
@@ -585,7 +793,12 @@ export function useChat(
 				isProcessingSessionUpdateRef.current = false;
 			}
 		},
-		[updateLastMessage, updateUserMessage, upsertToolCall],
+		[
+			updateLastMessage,
+			updateUserMessage,
+			upsertToolCall,
+			upsertElicitation,
+		],
 	);
 
 	/**
@@ -779,6 +992,66 @@ export function useChat(
 		],
 	);
 
+	const executePromptTemplate = useCallback(
+		async (
+			promptId: string,
+			commandText: string,
+			args?: string,
+		): Promise<void> => {
+			if (!sessionContext.sessionId) {
+				setErrorInfo({
+					title: "Cannot Execute Prompt",
+					message: "No active session. Please wait for connection.",
+				});
+				return;
+			}
+
+			addMessage({
+				id: crypto.randomUUID(),
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text: commandText,
+					},
+				],
+				timestamp: new Date(),
+			});
+
+			setIsSending(true);
+			isSendingRef.current = true;
+			setLastUserMessage(commandText);
+
+			try {
+				await agentClient.executePrompt(
+					sessionContext.sessionId,
+					promptId,
+					args,
+				);
+			} catch (error) {
+				isSendingRef.current = false;
+				setIsSending(false);
+				setErrorInfo({
+					title: "Prompt Execution Failed",
+					message:
+						error instanceof Error ? error.message : String(error),
+				});
+			}
+		},
+		[addMessage, agentClient, sessionContext.sessionId],
+	);
+
+	/**
+	 * Truncate local messages after a specific event ID.
+	 */
+	const truncateMessages = useCallback((eventId: string): void => {
+		setMessages((prev) => {
+			const index = prev.findIndex((m) => m.eventId === eventId);
+			if (index === -1) return prev;
+			return prev.slice(0, index + 1);
+		});
+	}, []);
+
 	return {
 		messages,
 		isSending,
@@ -789,10 +1062,12 @@ export function useChat(
 		setInitialMessages,
 		setMessagesFromLocal,
 		clearError,
+		executePromptTemplate,
 		addMessage,
 		updateLastMessage,
 		updateMessage,
 		upsertToolCall,
 		handleSessionUpdate,
+		truncateMessages,
 	};
 }

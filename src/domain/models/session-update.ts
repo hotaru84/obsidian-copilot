@@ -10,6 +10,8 @@
  */
 
 import type {
+	ElicitationResponse,
+	ElicitationSchema,
 	PlanEntry,
 	ToolCallContent,
 	ToolCallLocation,
@@ -30,6 +32,12 @@ import type { SlashCommand } from "./chat-session";
 interface SessionUpdateBase {
 	/** The session ID this update belongs to */
 	sessionId: string;
+
+	/**
+	 * Unique identifier for the protocol event that triggered this update.
+	 * Used for session history operations like truncation.
+	 */
+	eventId?: string;
 }
 
 // ============================================================================
@@ -152,6 +160,28 @@ export interface SessionIdleUpdate extends SessionUpdateBase {
 	type: "session_idle";
 }
 
+/**
+ * Runtime UI elicitation request.
+ * Prompts the UI to collect structured input from the user.
+ */
+export interface ElicitationRequestUpdate extends SessionUpdateBase {
+	type: "elicitation_request";
+	requestId: string;
+	message: string;
+	requestedSchema: ElicitationSchema;
+}
+
+/**
+ * Completion event for a previously requested UI elicitation.
+ */
+export interface ElicitationCompleteUpdate extends SessionUpdateBase {
+	type: "elicitation_complete";
+	requestId: string;
+	response?: ElicitationResponse;
+	success?: boolean;
+	error?: string;
+}
+
 // ============================================================================
 // Union Type
 // ============================================================================
@@ -185,4 +215,6 @@ export type SessionUpdate =
 	| AvailableCommandsUpdate
 	| CurrentModeUpdate
 	| CurrentRemoteAgentUpdate
-	| SessionIdleUpdate;
+	| SessionIdleUpdate
+	| ElicitationRequestUpdate
+	| ElicitationCompleteUpdate;

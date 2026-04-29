@@ -97,6 +97,8 @@ function ChatComponent({
 		handleSetMode,
 		handleSetModel,
 		handleSetRemoteAgent,
+		handleCompactHistory,
+		handleTruncateHistory,
 		inputValue,
 		setInputValue,
 		attachedImages,
@@ -584,6 +586,8 @@ function ChatComponent({
 					)
 				}
 				onOpenHistory={handleOpenHistory}
+				onCompactHistory={() => void handleCompactHistory()}
+				onTruncateHistory={() => void handleTruncateHistory()}
 				onExportChat={() => void handleExportChat()}
 				onSwitchAgent={(agentId) =>
 					void handleNewChatWithPersist(agentId)

@@ -130,6 +130,10 @@ export interface ChatInputProps {
 	onNewChatInNewTab?: () => void;
 	/** Callback for opening session history */
 	onOpenHistory?: () => void;
+	/** Callback for compacting session history */
+	onCompactHistory?: () => void;
+	/** Callback for truncating session history */
+	onTruncateHistory?: () => void;
 	/** Callback for exporting chat */
 	onExportChat?: () => void;
 	/** Callback for switching agent */
@@ -185,6 +189,8 @@ export function ChatInput({
 	onNewChat,
 	onNewChatInNewTab,
 	onOpenHistory,
+	onCompactHistory,
+	onTruncateHistory,
 	onExportChat,
 	onSwitchAgent,
 	onRestartAgent,
@@ -942,6 +948,10 @@ export function ChatInput({
 	onOpenHistoryRef.current = onOpenHistory;
 	const onExportChatRef = useRef(onExportChat);
 	onExportChatRef.current = onExportChat;
+	const onCompactHistoryRef = useRef(onCompactHistory);
+	onCompactHistoryRef.current = onCompactHistory;
+	const onTruncateHistoryRef = useRef(onTruncateHistory);
+	onTruncateHistoryRef.current = onTruncateHistory;
 	const onSwitchAgentRef = useRef(onSwitchAgent);
 	onSwitchAgentRef.current = onSwitchAgent;
 	const onRestartAgentRef = useRef(onRestartAgent);
@@ -987,6 +997,26 @@ export function ChatInput({
 						.onClick(() => {
 							if (onOpenHistoryRef.current) {
 								onOpenHistoryRef.current();
+							}
+						});
+				});
+
+				menu.addItem((item) => {
+					item.setTitle("Compact session context")
+						.setIcon("minimize-2")
+						.onClick(() => {
+							if (onCompactHistoryRef.current) {
+								onCompactHistoryRef.current();
+							}
+						});
+				});
+
+				menu.addItem((item) => {
+					item.setTitle("Truncate history...")
+						.setIcon("scissors")
+						.onClick(() => {
+							if (onTruncateHistoryRef.current) {
+								onTruncateHistoryRef.current();
 							}
 						});
 				});

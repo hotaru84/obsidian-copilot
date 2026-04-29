@@ -68,6 +68,14 @@ export interface UseSessionHistoryOptions {
 	cwd: string;
 	/** Callback invoked when a session is loaded/resumed/forked */
 	onSessionLoad: SessionLoadCallback;
+	/** Unified session restoration from useAgentSession */
+	agentRestoreSession: (sessionId: string) => Promise<{
+		sessionId: string;
+		modes?: SessionModeState;
+		models?: SessionModelState;
+		remoteAgents?: SessionRemoteAgentState;
+		isResumed: boolean;
+	}>;
 	/** Callback invoked when messages should be restored from local storage */
 	onMessagesRestore?: MessagesRestoreCallback;
 	/** Callback invoked when session/load starts (to start ignoring history replay) */
@@ -238,6 +246,7 @@ export function useSessionHistory(
 		settingsAccess,
 		cwd,
 		onSessionLoad,
+		agentRestoreSession,
 		onMessagesRestore,
 		onLoadStart,
 		onLoadEnd,
@@ -463,84 +472,45 @@ export function useSessionHistory(
 
 	/**
 	 * Restore a specific session by ID.
-	 * Uses load if available (with history replay), otherwise resume (without history replay).
+	 * Delegates to agentRestoreSession for initialization and connection.
 	 */
 	const restoreSession = useCallback(
-		async (sessionId: string, cwd: string) => {
+		async (sessionId: string, _cwd: string) => {
 			setLoading(true);
 			setError(null);
 
 			try {
-				// IMPORTANT: Update session.sessionId BEFORE calling restore
-				// so that session/update notifications are not ignored
-				onSessionLoad(sessionId, undefined, undefined);
+				// 1. Prepare for potential history replay (if agentRestoreSession falls back to load)
+				onLoadStart?.();
 
-				if (capabilities.canLoad) {
-					// Notify that load is starting (to ignore history replay)
-					onLoadStart?.();
+				try {
+					// 2. Start loading local messages in parallel
+					const localMessagesPromise =
+						settingsAccess.loadSessionMessages(sessionId);
 
-					try {
-						// Start loading local messages in parallel with agent load
-						const localMessagesPromise =
-							settingsAccess.loadSessionMessages(sessionId);
+					// 3. Use the unified restoration logic from useAgentSession
+					await agentRestoreSession(sessionId);
 
-						// Use load (agent will replay history via session/update, but we ignore it)
-						const result = await agentClient.loadSession(
-							sessionId,
-							cwd,
-						);
-						onSessionLoad(
-							result.sessionId,
-							result.modes,
-							result.models,
-							result.remoteAgents,
-						);
-
-						// Restore local messages (may have already resolved)
-						const localMessages = await localMessagesPromise;
-						if (localMessages && onMessagesRestore) {
-							onMessagesRestore(localMessages);
-						}
-					} finally {
-						// Notify that load is complete (stop ignoring)
-						onLoadEnd?.();
-					}
-				} else if (capabilities.canResume) {
-					// Use resume (without history replay, restore from local storage)
-					const result = await agentClient.resumeSession(
-						sessionId,
-						cwd,
-					);
-					onSessionLoad(
-						result.sessionId,
-						result.modes,
-						result.models,
-						result.remoteAgents,
-					);
-
-					// Resume doesn't return history, so restore from local storage
-					const localMessages =
-						await settingsAccess.loadSessionMessages(sessionId);
+					// 4. Restore local messages
+					const localMessages = await localMessagesPromise;
 					if (localMessages && onMessagesRestore) {
 						onMessagesRestore(localMessages);
 					}
-				} else {
-					throw new Error("Session restoration is not supported");
+				} finally {
+					// 5. Normal processing resume
+					onLoadEnd?.();
 				}
 			} catch (err) {
 				const errorMessage =
 					err instanceof Error ? err.message : String(err);
 				setError(`Failed to restore session: ${errorMessage}`);
-				throw err; // Re-throw to allow caller to handle
+				throw err;
 			} finally {
 				setLoading(false);
 			}
 		},
 		[
-			agentClient,
-			capabilities.canLoad,
-			capabilities.canResume,
-			onSessionLoad,
+			agentRestoreSession,
 			settingsAccess,
 			onMessagesRestore,
 			onLoadStart,

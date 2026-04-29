@@ -27,6 +27,10 @@ export interface InlineHeaderProps {
 	onNewSession: () => void;
 	/** Callback to open session history */
 	onOpenHistory: () => void;
+	/** Callback to compact session context */
+	onCompactHistory?: () => void;
+	/** Callback to truncate session history */
+	onTruncateHistory?: () => void;
 	/** Callback to export the chat */
 	onExportChat: () => void;
 	/** Callback to restart agent */
@@ -60,6 +64,8 @@ export function InlineHeader({
 	onAgentChange,
 	onNewSession,
 	onOpenHistory,
+	onCompactHistory,
+	onTruncateHistory,
 	onExportChat,
 	onRestartAgent,
 	showHistoryButton = true,
@@ -141,6 +147,22 @@ export function InlineHeader({
 						iconName="history"
 						tooltip="Session history"
 						onClick={onOpenHistory}
+						disabled={!isHistoryEnabled}
+					/>
+				)}
+				{onCompactHistory && (
+					<HeaderButton
+						iconName="minimize-2"
+						tooltip="Compact session context"
+						onClick={onCompactHistory}
+						disabled={!isHistoryEnabled}
+					/>
+				)}
+				{onTruncateHistory && (
+					<HeaderButton
+						iconName="scissors"
+						tooltip="Truncate history..."
+						onClick={onTruncateHistory}
 						disabled={!isHistoryEnabled}
 					/>
 				)}

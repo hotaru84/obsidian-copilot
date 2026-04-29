@@ -66,6 +66,36 @@ export interface TerminalContent {
 	terminalId: string;
 }
 
+/**
+ * JSON schema property supported by the runtime's UI elicitation API.
+ */
+export interface ElicitationSchemaProperty {
+	type: "string" | "number" | "integer" | "boolean";
+	title?: string;
+	description?: string;
+	enum?: string[];
+	minimum?: number;
+	maximum?: number;
+	default?: unknown;
+}
+
+/**
+ * JSON schema payload used for collecting structured user input at runtime.
+ */
+export interface ElicitationSchema {
+	type: "object";
+	properties: Record<string, ElicitationSchemaProperty>;
+	required?: string[];
+}
+
+/**
+ * User response returned to the runtime for a pending elicitation request.
+ */
+export interface ElicitationResponse {
+	action: "accept" | "decline" | "cancel";
+	content?: Record<string, unknown>;
+}
+
 // ============================================================================
 // Supporting Types
 // ============================================================================
@@ -123,6 +153,11 @@ export interface ToolCallInfo {
  */
 export interface ChatMessage {
 	id: string;
+	/**
+	 * Identifier of the protocol event that created or last updated this message.
+	 * Used for operations like history truncation that target specific events.
+	 */
+	eventId?: string;
 	role: Role;
 	content: MessageContent[];
 	timestamp: Date;
@@ -206,4 +241,19 @@ export type MessageContent =
 	| {
 			type: "terminal";
 			terminalId: string;
+	  }
+	| {
+			type: "elicitation";
+			requestId: string;
+			message: string;
+			requestedSchema: ElicitationSchema;
+			status:
+				| "pending"
+				| "submitted"
+				| "completed"
+				| "declined"
+				| "cancelled"
+				| "failed";
+			response?: ElicitationResponse;
+			error?: string;
 	  };

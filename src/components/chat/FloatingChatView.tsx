@@ -257,6 +257,8 @@ function FloatingChatComponent({
 		handleSetMode,
 		handleSetModel,
 		handleSetRemoteAgent,
+		handleCompactHistory,
+		handleTruncateHistory,
 		inputValue,
 		setInputValue,
 		attachedImages,
@@ -859,6 +861,8 @@ function FloatingChatComponent({
 					onAgentChange={(agentId) => void handleSwitchAgent(agentId)}
 					onNewSession={() => void handleNewChat()}
 					onOpenHistory={() => void handleOpenHistory()}
+					onCompactHistory={() => void handleCompactHistory()}
+					onTruncateHistory={() => void handleTruncateHistory()}
 					onExportChat={() => void handleExportChat()}
 					onRestartAgent={() => void handleRestartAgent()}
 					onOpenNewWindow={handleOpenNewFloatingChat}
@@ -918,6 +922,8 @@ function FloatingChatComponent({
 					onNewChat={() => void handleNewChat()}
 					onNewChatInNewTab={handleOpenNewFloatingChat}
 					onOpenHistory={() => void handleOpenHistory()}
+					onCompactHistory={() => void handleCompactHistory()}
+					onTruncateHistory={() => void handleTruncateHistory()}
 					onExportChat={() => void handleExportChat()}
 					onSwitchAgent={(agentId) => void handleSwitchAgent(agentId)}
 					onRestartAgent={() => void handleRestartAgent()}

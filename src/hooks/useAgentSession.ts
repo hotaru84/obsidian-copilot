@@ -54,15 +54,21 @@ export interface UseAgentSessionReturn {
 	createSession: (overrideAgentId?: string) => Promise<void>;
 
 	/**
-	 * Load a previous session by ID.
-	 * Restores conversation context via session/load.
+	 * Restore a previous session by ID.
+	 * Prefers resume (without history replay) and falls back to load when needed.
 	 *
-	 * Note: Conversation history is received via session/update notifications
-	 * (user_message_chunk, agent_message_chunk, etc.), not returned from this function.
+	 * Note: If load is used, conversation history is received via session/update notifications
+	 * (user_message_chunk, agent_message_chunk, etc.).
 	 *
 	 * @param sessionId - ID of the session to load
 	 */
-	loadSession: (sessionId: string) => Promise<void>;
+	restoreSession: (sessionId: string) => Promise<{
+		sessionId: string;
+		modes?: SessionModeState;
+		models?: SessionModelState;
+		remoteAgents?: SessionRemoteAgentState;
+		isResumed: boolean;
+	}>;
 
 	/**
 	 * Restart the current session.
@@ -451,15 +457,12 @@ export function useAgentSession(
 	);
 
 	/**
-	 * Load a previous session by ID.
-	 * Restores conversation history and creates a new session for future prompts.
+	 * Restore a previous session by ID.
+	 * Prefers resume (without history replay) and falls back to load when needed.
 	 *
-	 * Note: Conversation history is received via session/update notifications
-	 * (user_message_chunk, agent_message_chunk, etc.), not returned from this function.
-	 *
-	 * @param sessionId - ID of the session to load
+	 * @param sessionId - ID of the session to restore
 	 */
-	const loadSession = useCallback(
+	const restoreSession = useCallback(
 		async (sessionId: string) => {
 			const defaultAgentId = getDefaultAgentId();
 			const currentAgent = getCurrentAgent();
@@ -475,6 +478,7 @@ export function useAgentSession(
 				availableCommands: undefined,
 				modes: undefined,
 				models: undefined,
+				remoteAgents: undefined,
 				promptCapabilities: prev.promptCapabilities,
 				createdAt: new Date(),
 				lastActivityAt: new Date(),
@@ -526,22 +530,33 @@ export function useAgentSession(
 					agentCapabilities = initResult.agentCapabilities;
 				}
 
-				// Load the session
-				// Conversation history is received via session/update notifications
-				const loadResult = await agentClient.loadSession(
-					sessionId,
-					workingDirectory,
-				);
+				// Check capabilities for resume vs load
+				const canResume =
+					agentCapabilities?.sessionCapabilities?.resume !==
+					undefined;
 
-				// Success - update to ready state with session ID
+				let restoreResult;
+				if (canResume) {
+					restoreResult = await agentClient.resumeSession(
+						sessionId,
+						workingDirectory,
+					);
+				} else {
+					restoreResult = await agentClient.loadSession(
+						sessionId,
+						workingDirectory,
+					);
+				}
+
+				// Success - update to ready state
 				setSession((prev) => ({
 					...prev,
-					sessionId: loadResult.sessionId,
+					sessionId: restoreResult.sessionId,
 					state: "ready",
 					authMethods: authMethods,
-					modes: loadResult.modes,
-					models: loadResult.models,
-					remoteAgents: loadResult.remoteAgents,
+					modes: restoreResult.modes,
+					models: restoreResult.models,
+					remoteAgents: restoreResult.remoteAgents,
 					promptCapabilities: needsInitialize
 						? promptCapabilities
 						: prev.promptCapabilities,
@@ -550,17 +565,26 @@ export function useAgentSession(
 						: prev.agentCapabilities,
 					lastActivityAt: new Date(),
 				}));
+
+				return {
+					sessionId: restoreResult.sessionId,
+					modes: restoreResult.modes,
+					models: restoreResult.models,
+					remoteAgents: restoreResult.remoteAgents,
+					isResumed: canResume,
+				};
 			} catch (error) {
 				// Error - update to error state
 				setSession((prev) => ({ ...prev, state: "error" }));
 				setErrorInfo({
-					title: "Session Loading Failed",
-					message: `Failed to load session: ${error instanceof Error ? error.message : String(error)}`,
+					title: "Session Restoration Failed",
+					message: `Failed to restore session: ${error instanceof Error ? error.message : String(error)}`,
 					suggestion: "Please try again or create a new session.",
 				});
+				throw error;
 			}
 		},
-		[agentClient, settingsAccess, workingDirectory],
+		[agentClient, workingDirectory],
 	);
 
 	/**
@@ -919,7 +943,7 @@ export function useAgentSession(
 		isReady,
 		errorInfo,
 		createSession,
-		loadSession,
+		restoreSession,
 		restartSession,
 		closeSession,
 		forceRestartAgent,

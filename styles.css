@@ -313,6 +313,113 @@ If your plugin does not need CSS, delete this file.
 	font-weight: bold;
 }
 
+/* Elicitation */
+.agent-client-message-elicitation {
+	padding: 10px;
+	margin-top: 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-secondary);
+	font-size: 13px;
+}
+
+.agent-client-message-elicitation-title {
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+.agent-client-message-elicitation-message {
+	margin-bottom: 8px;
+	white-space: pre-wrap;
+}
+
+.agent-client-message-elicitation-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 8px;
+	color: var(--text-muted);
+}
+
+.agent-client-message-elicitation-field {
+	padding: 6px 8px;
+	border-radius: 4px;
+	background: var(--background-primary);
+}
+
+.agent-client-message-elicitation-status {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.agent-client-message-elicitation-error {
+	margin-top: 6px;
+	color: var(--text-error);
+}
+
+.agent-client-elicitation-modal {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.agent-client-elicitation-modal-message {
+	margin: 0;
+	white-space: pre-wrap;
+}
+
+.agent-client-elicitation-modal-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.agent-client-elicitation-modal-field-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.agent-client-elicitation-modal-label {
+	font-weight: 600;
+}
+
+.agent-client-elicitation-modal-required {
+	color: var(--text-error);
+	margin-left: 4px;
+}
+
+.agent-client-elicitation-modal-description {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.agent-client-elicitation-modal-input {
+	width: 100%;
+	padding: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+}
+
+.agent-client-elicitation-modal-checkbox-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.agent-client-elicitation-modal-error {
+	font-size: 12px;
+	color: var(--text-error);
+}
+
+.agent-client-elicitation-modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
 /* Permission Request */
 .agent-client-message-permission-request {
 	padding: 6px 0px;

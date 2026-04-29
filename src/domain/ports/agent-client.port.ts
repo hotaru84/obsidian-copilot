@@ -5,12 +5,17 @@
  * from transport details (WebSocket, process bridge, etc.).
  */
 
-import type { PermissionOption } from "../models/chat-message";
+import type {
+	ElicitationResponse,
+	PermissionOption,
+} from "../models/chat-message";
 import type {
 	AuthenticationMethod,
+	PromptTemplateInfo,
 	SessionModeState,
 	SessionModelState,
 	SessionRemoteAgentState,
+	SessionUsageMetrics,
 } from "../models/chat-session";
 import type { SessionUpdate } from "../models/session-update";
 import type { ProcessError } from "../models/agent-error";
@@ -217,6 +222,22 @@ export interface NewSessionResult {
 	 */
 	remoteAgents?: SessionRemoteAgentState;
 }
+
+export interface HistoryCompactionResult {
+	success: boolean;
+	messagesRemoved?: number;
+	tokensRemoved?: number;
+}
+
+export interface HistoryTruncationResult {
+	eventsRemoved: number;
+}
+
+export interface ElicitationResult {
+	success: boolean;
+}
+
+export type AgentConnectionState = "connected" | "connecting" | "disconnected";
 
 /**
  * Interface for communicating with runtime adapters.
@@ -432,4 +453,50 @@ export interface IAgentClient {
 	 * @returns Promise resolving to session result with new sessionId
 	 */
 	forkSession(sessionId: string, cwd: string): Promise<ForkSessionResult>;
+
+	/**
+	 * List prompt templates available from the runtime.
+	 */
+	listPrompts(): Promise<PromptTemplateInfo[]>;
+
+	/**
+	 * Execute a prompt template in the current session.
+	 */
+	executePrompt(
+		sessionId: string,
+		promptId: string,
+		args?: string,
+	): Promise<void>;
+
+	/**
+	 * Compact session history to reduce context size.
+	 */
+	compactHistory(sessionId: string): Promise<HistoryCompactionResult>;
+
+	/**
+	 * Truncate session history after the given event identifier.
+	 */
+	truncateHistory(
+		sessionId: string,
+		eventId: string,
+	): Promise<HistoryTruncationResult>;
+
+	/**
+	 * Retrieve usage metrics for the current session.
+	 */
+	getUsageMetrics(sessionId: string): Promise<SessionUsageMetrics | null>;
+
+	/**
+	 * Submit a result for a pending UI elicitation request.
+	 */
+	handlePendingElicitation(
+		sessionId: string,
+		requestId: string,
+		response: ElicitationResponse,
+	): Promise<ElicitationResult>;
+
+	/**
+	 * Get current transport connection state.
+	 */
+	getConnectionState(): AgentConnectionState;
 }
