@@ -390,7 +390,7 @@ describe("CopilotClient", () => {
                     ],
                 },
             },
-            onPermissionRequest: () => ({ kind: "approved" }),
+            onPermissionRequest: () => ({ kind: "approve-once" }),
             onEvent: () => { },
         };
         const created = await client.createSession(config);

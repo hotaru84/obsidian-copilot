@@ -45,11 +45,27 @@ export interface PromptInfo {
     prompt?: string;
 }
 export interface PermissionRequest {
-    kind: "shell" | "write" | "mcp" | "read" | "url" | "custom-tool";
+    kind: "shell" | "write" | "mcp" | "read" | "url" | "custom-tool" | "memory" | "hook";
     toolCallId?: string;
     [key: string]: unknown;
 }
 export type PermissionRequestResult = {
+    kind: "approve-once";
+    rules?: unknown[];
+} | {
+    kind: "approve-for-session";
+    rules: unknown[];
+} | {
+    kind: "approve-for-location";
+    rules: unknown[];
+} | {
+    kind: "reject";
+    feedback?: string;
+} | {
+    kind: "user-not-available";
+} | {
+    kind: "no-result";
+} | {
     kind: "approved";
 } | {
     kind: "denied-by-rules";
@@ -67,8 +83,6 @@ export type PermissionRequestResult = {
     kind: "denied-by-permission-request-hook";
     message?: string;
     interrupt?: boolean;
-} | {
-    kind: "no-result";
 };
 export type PermissionHandler = (request: PermissionRequest, invocation: {
     sessionId: string;

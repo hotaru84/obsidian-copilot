@@ -254,7 +254,7 @@ export class CopilotClient {
         }
         catch {
             result = {
-                kind: "denied-no-approval-rule-and-could-not-request-from-user",
+                kind: "user-not-available",
             };
         }
         await this.sendRequest(COPILOT_PERMISSION_RESPOND_METHOD, {
@@ -354,5 +354,5 @@ function stripCallbacks(config) {
     const { onPermissionRequest: _onPermissionRequest, onEvent: _onEvent, ...rest } = config;
     return rest;
 }
-export const approveAll = () => ({ kind: "approved" });
+export const approveAll = () => ({ kind: "approve-once" });
 //# sourceMappingURL=websocket-client.js.map

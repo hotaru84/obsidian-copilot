@@ -127,6 +127,8 @@ function inferToolKind(kind: string | undefined): ToolKind {
 	if (kind.includes("shell") || kind.includes("command")) return "execute";
 	if (kind.includes("fetch") || kind.includes("url")) return "fetch";
 	if (kind.includes("mode")) return "switch_mode";
+	if (kind === "memory") return "read";
+	if (kind === "hook") return "execute";
 	return "other";
 }
 

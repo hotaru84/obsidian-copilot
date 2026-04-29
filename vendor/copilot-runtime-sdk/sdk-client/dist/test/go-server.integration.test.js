@@ -116,7 +116,7 @@ describe("CopilotClient + Go server", () => {
         const session = await client.createSession({
             onPermissionRequest: async (request) => {
                 permissionSeen = request.kind === "shell";
-                return { kind: "approved" };
+                return { kind: "approve-once" };
             },
         });
         const event = await session.sendAndWait({
