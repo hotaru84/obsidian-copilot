@@ -10,31 +10,31 @@ import type { PromptFileMeta } from "../../domain/models/scheduled-prompt";
 import type { ScheduledPromptRunner } from "../../shared/scheduled-prompt-runner";
 
 export class RunPromptModal extends FuzzySuggestModal<PromptFileMeta> {
-private prompts: PromptFileMeta[];
-private runner: ScheduledPromptRunner;
+	private prompts: PromptFileMeta[];
+	private runner: ScheduledPromptRunner;
 
-constructor(
-app: App,
-prompts: PromptFileMeta[],
-runner: ScheduledPromptRunner,
-) {
-super(app);
-this.prompts = prompts;
-this.runner = runner;
-this.setPlaceholder("Select a prompt to run now\u2026");
-}
+	constructor(
+		app: App,
+		prompts: PromptFileMeta[],
+		runner: ScheduledPromptRunner,
+	) {
+		super(app);
+		this.prompts = prompts;
+		this.runner = runner;
+		this.setPlaceholder("Select a prompt to run now\u2026");
+	}
 
-getItems(): PromptFileMeta[] {
-return this.prompts;
-}
+	getItems(): PromptFileMeta[] {
+		return this.prompts;
+	}
 
-getItemText(item: PromptFileMeta): string {
-return item.description
-? `${item.title} \u2014 ${item.description}`
-: item.title;
-}
+	getItemText(item: PromptFileMeta): string {
+		return item.description
+			? `${item.title} \u2014 ${item.description}`
+			: item.title;
+	}
 
-onChooseItem(item: PromptFileMeta): void {
-void this.runner.runNow(item.filePath);
-}
+	onChooseItem(item: PromptFileMeta): void {
+		void this.runner.runNow(item.filePath);
+	}
 }

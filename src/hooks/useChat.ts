@@ -554,7 +554,10 @@ export function useChat(
 								next.eventId &&
 								last.eventId !== next.eventId
 							) {
-								const updated = { ...last, eventId: next.eventId };
+								const updated = {
+									...last,
+									eventId: next.eventId,
+								};
 								return [...prev.slice(0, -1), updated];
 							}
 							return prev;
@@ -575,7 +578,10 @@ export function useChat(
 								next.eventId &&
 								last.eventId !== next.eventId
 							) {
-								const updated = { ...last, eventId: next.eventId };
+								const updated = {
+									...last,
+									eventId: next.eventId,
+								};
 								return [...prev.slice(0, -1), updated];
 							}
 							return prev;
@@ -601,7 +607,10 @@ export function useChat(
 								next.eventId &&
 								last.eventId !== next.eventId
 							) {
-								const updated = { ...last, eventId: next.eventId };
+								const updated = {
+									...last,
+									eventId: next.eventId,
+								};
 								return [...prev.slice(0, -1), updated];
 							}
 							return prev;
@@ -629,8 +638,14 @@ export function useChat(
 											c.type === "tool_call" &&
 											c.toolCallId === next.toolCallId,
 									);
-									if (hasToolCall && msg.eventId !== next.eventId) {
-										return { ...msg, eventId: next.eventId };
+									if (
+										hasToolCall &&
+										msg.eventId !== next.eventId
+									) {
+										return {
+											...msg,
+											eventId: next.eventId,
+										};
 									}
 									return msg;
 								}),
@@ -662,8 +677,14 @@ export function useChat(
 											c.type === "tool_call" &&
 											c.toolCallId === next.toolCallId,
 									);
-									if (hasToolCall && msg.eventId !== next.eventId) {
-										return { ...msg, eventId: next.eventId };
+									if (
+										hasToolCall &&
+										msg.eventId !== next.eventId
+									) {
+										return {
+											...msg,
+											eventId: next.eventId,
+										};
 									}
 									return msg;
 								}),
@@ -720,8 +741,14 @@ export function useChat(
 											c.type === "elicitation" &&
 											c.requestId === next.requestId,
 									);
-									if (hasElicitation && msg.eventId !== next.eventId) {
-										return { ...msg, eventId: next.eventId };
+									if (
+										hasElicitation &&
+										msg.eventId !== next.eventId
+									) {
+										return {
+											...msg,
+											eventId: next.eventId,
+										};
 									}
 									return msg;
 								}),
@@ -757,8 +784,14 @@ export function useChat(
 											c.type === "elicitation" &&
 											c.requestId === next.requestId,
 									);
-									if (hasElicitation && msg.eventId !== next.eventId) {
-										return { ...msg, eventId: next.eventId };
+									if (
+										hasElicitation &&
+										msg.eventId !== next.eventId
+									) {
+										return {
+											...msg,
+											eventId: next.eventId,
+										};
 									}
 									return msg;
 								}),

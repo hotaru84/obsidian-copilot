@@ -1475,10 +1475,15 @@ export class RemoteAdapter implements IChatAgentClient {
 				this.buildSessionConfig({
 					streaming: true,
 					onPermissionRequest: (request, invocation) =>
-						this.handlePermissionRequest(invocation.sessionId, request),
+						this.handlePermissionRequest(
+							invocation.sessionId,
+							request,
+						),
 				}),
 			);
-			created.on((event) => this.handleRemoteEvent(created.sessionId, event));
+			created.on((event) =>
+				this.handleRemoteEvent(created.sessionId, event),
+			);
 
 			const snapshot = await this.buildSessionSnapshot(
 				created,
@@ -1836,10 +1841,15 @@ export class RemoteAdapter implements IChatAgentClient {
 				this.buildSessionConfig({
 					streaming: true,
 					onPermissionRequest: (request, invocation) =>
-						this.handlePermissionRequest(invocation.sessionId, request),
+						this.handlePermissionRequest(
+							invocation.sessionId,
+							request,
+						),
 				}),
 			);
-			resumed.on((event) => this.handleRemoteEvent(resumed.sessionId, event));
+			resumed.on((event) =>
+				this.handleRemoteEvent(resumed.sessionId, event),
+			);
 
 			const snapshot = await this.buildSessionSnapshot(resumed, cwd);
 			const remoteAgents = await this.restoreSessionRemoteAgentSelection(
@@ -1873,7 +1883,10 @@ export class RemoteAdapter implements IChatAgentClient {
 				this.buildSessionConfig({
 					streaming: true,
 					onPermissionRequest: (request, invocation) =>
-						this.handlePermissionRequest(invocation.sessionId, request),
+						this.handlePermissionRequest(
+							invocation.sessionId,
+							request,
+						),
 					systemMessage: systemMessageContent
 						? {
 								mode: "append",
@@ -1884,7 +1897,9 @@ export class RemoteAdapter implements IChatAgentClient {
 						: undefined,
 				}),
 			);
-			forked.on((event) => this.handleRemoteEvent(forked.sessionId, event));
+			forked.on((event) =>
+				this.handleRemoteEvent(forked.sessionId, event),
+			);
 
 			const snapshot = await this.buildSessionSnapshot(forked, cwd);
 			const remoteAgents = await this.restoreSessionRemoteAgentSelection(

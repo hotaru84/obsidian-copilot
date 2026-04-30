@@ -110,7 +110,7 @@ function validateValues(
 			property.enum &&
 			value !== undefined &&
 			value !== "" &&
-			!property.enum.includes(String(value))
+			!property.enum.includes(String(value as string | number | boolean))
 		) {
 			errors[key] = "Select a valid option.";
 		}
@@ -237,7 +237,12 @@ function ElicitationForm({
 										value={
 											value !== null &&
 											value !== undefined
-												? String(value)
+												? String(
+														value as
+															| string
+															| number
+															| boolean,
+													)
 												: ""
 										}
 										onChange={(event) =>
@@ -249,10 +254,25 @@ function ElicitationForm({
 									>
 										{property.enum.map((option) => (
 											<option
-												key={String(option)}
-												value={String(option)}
+												key={String(
+													option as
+														| string
+														| number
+														| boolean,
+												)}
+												value={String(
+													option as
+														| string
+														| number
+														| boolean,
+												)}
 											>
-												{String(option)}
+												{String(
+													option as
+														| string
+														| number
+														| boolean,
+												)}
 											</option>
 										))}
 									</select>
@@ -284,7 +304,12 @@ function ElicitationForm({
 										value={
 											value !== null &&
 											value !== undefined
-												? String(value)
+												? String(
+														value as
+															| string
+															| number
+															| boolean,
+													)
 												: ""
 										}
 										min={property.minimum}

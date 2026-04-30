@@ -24,38 +24,42 @@ export function getFullWindowsPath(): string | null {
 		return cachedFullPath;
 	}
 
-	try {
-		// Get system PATH from registry
-		const systemPath = execSync(
-			'reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v Path',
-			{ encoding: "utf8", windowsHide: true },
-		);
+	const paths: string[] = [];
 
-		// Get user PATH from registry
+	// Get user PATH from registry
+	try {
 		const userPath = execSync('reg query "HKCU\\Environment" /v Path', {
 			encoding: "utf8",
 			windowsHide: true,
 		});
-
-		// Parse the registry output to extract PATH values
-		const systemPathValue = parseRegQueryOutput(systemPath);
 		const userPathValue = parseRegQueryOutput(userPath);
-
-		// Combine system and user PATH (user PATH typically comes first)
-		const paths: string[] = [];
 		if (userPathValue) {
 			paths.push(userPathValue);
 		}
+	} catch {
+		// User path might not be set
+	}
+
+	// Get system PATH from registry
+	try {
+		const systemPath = execSync(
+			'reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" /v Path',
+			{ encoding: "utf8", windowsHide: true },
+		);
+		const systemPathValue = parseRegQueryOutput(systemPath);
 		if (systemPathValue) {
 			paths.push(systemPathValue);
 		}
-
-		cachedFullPath = paths.join(";");
-		return cachedFullPath;
 	} catch {
-		// If registry query fails, return null
+		// System path is usually available, but we continue to user path if it fails
+	}
+
+	if (paths.length === 0) {
 		return null;
 	}
+
+	cachedFullPath = paths.join(";");
+	return cachedFullPath;
 }
 
 /**
