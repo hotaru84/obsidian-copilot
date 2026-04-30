@@ -756,6 +756,7 @@ export function useChatController(
 			return;
 		}
 
+		// eslint-disable-next-line no-alert
 		const confirm = window.confirm(
 			"Are you sure you want to compact session context? This will summarize or remove older messages to save tokens.",
 		);
@@ -779,6 +780,7 @@ export function useChatController(
 			return;
 		}
 
+		// eslint-disable-next-line no-alert
 		const indexStr = window.prompt(
 			`Enter message index to truncate AFTER (0 to ${messages.length - 1}):`,
 			(messages.length - 1).toString(),
@@ -801,6 +803,7 @@ export function useChatController(
 			return;
 		}
 
+		// eslint-disable-next-line no-alert
 		const confirm = window.confirm(
 			`Are you sure you want to truncate history after message ${index}? All subsequent messages will be permanently removed from the session.`,
 		);

@@ -234,7 +234,12 @@ function ElicitationForm({
 									<select
 										id={fieldId}
 										className="agent-client-elicitation-modal-input"
-										value={String(value ?? "")}
+										value={
+											value !== null &&
+											value !== undefined
+												? String(value)
+												: ""
+										}
 										onChange={(event) =>
 											handleFieldChange(
 												name,
@@ -243,8 +248,11 @@ function ElicitationForm({
 										}
 									>
 										{property.enum.map((option) => (
-											<option key={option} value={option}>
-												{option}
+											<option
+												key={String(option)}
+												value={String(option)}
+											>
+												{String(option)}
 											</option>
 										))}
 									</select>
@@ -273,7 +281,12 @@ function ElicitationForm({
 												: "text"
 										}
 										className="agent-client-elicitation-modal-input"
-										value={String(value ?? "")}
+										value={
+											value !== null &&
+											value !== undefined
+												? String(value)
+												: ""
+										}
 										min={property.minimum}
 										max={property.maximum}
 										step={
