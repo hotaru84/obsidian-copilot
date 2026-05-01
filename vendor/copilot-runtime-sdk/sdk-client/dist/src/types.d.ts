@@ -262,10 +262,20 @@ export type InstructionsSource = Record<string, unknown> & {
 export interface InstructionsGetSourcesResult {
     sources: InstructionsSource[];
 }
+export interface ElicitationContext {
+    sessionId: string;
+    message: string;
+    requestedSchema: UIElicitationSchema;
+    mode?: string;
+    elicitationSource?: string;
+    url?: string;
+}
+export type ElicitationHandler = (context: ElicitationContext) => Promise<UIElicitationResponse>;
 export interface SessionConfig {
     model?: string;
     streaming?: boolean;
     onPermissionRequest?: PermissionHandler;
+    onElicitationRequest?: ElicitationHandler;
     onEvent?: (event: SessionEvent) => void;
     systemMessage?: SystemMessageConfig;
     tools?: SerializableToolDefinition[];
@@ -285,14 +295,21 @@ export interface SessionConfig {
 export interface ResumeSessionConfig extends SessionConfig {
 }
 export interface CreateSessionPayload {
-    config: Omit<SessionConfig, "onPermissionRequest" | "onEvent">;
+    config: Omit<SessionConfig, "onPermissionRequest" | "onElicitationRequest" | "onEvent">;
     callbackId: string;
+    requestElicitation?: boolean;
 }
 export interface ResumeSessionPayload extends CreateSessionPayload {
     sessionId: string;
 }
+export interface SessionCapabilities {
+    ui?: {
+        elicitation?: boolean;
+    };
+}
 export interface CreateSessionResult {
     sessionId: string;
+    capabilities?: SessionCapabilities;
 }
 export interface SessionSendPayload {
     sessionId: string;

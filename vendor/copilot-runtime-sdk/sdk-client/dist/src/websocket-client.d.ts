@@ -70,6 +70,7 @@ export declare class CopilotClient implements CopilotClientSessionBridge {
     private state;
     private readonly pendingRequests;
     private readonly permissionCallbacks;
+    private readonly elicitationCallbacks;
     private readonly sessions;
     private readonly serverUrl;
     private readonly socketFactory;
@@ -163,6 +164,7 @@ export declare class CopilotClient implements CopilotClientSessionBridge {
     private sendRequest;
     private handleMessage;
     private handlePermissionEvent;
+    private handleElicitationEvent;
     private rejectAllPending;
 }
 /**

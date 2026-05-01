@@ -1,4 +1,4 @@
-import type { ActionResult, AssistantMessageEvent, ExtensionListResult, HistoryCompactResult, HistoryTruncateResult, InstructionsGetSourcesResult, MessageOptions, PluginListResult, SessionFleetStartResult, SessionMCPOAuthLoginOptions, SessionMCPOAuthLoginResult, SessionMCPServerList, SessionModeGetResult, SessionModelGetCurrentResult, SessionModelSwitchToResult, SessionMode, SessionPlanReadResult, SessionRpcAgentGetCurrentResult, SessionRpcAgentList, SessionShellExecResult, SessionShellKillResult, SessionCommandsHandlePendingResult, SessionToolsHandlePendingResult, SessionWorkspacesGetResult, SessionWorkspacesListFilesResult, SessionWorkspacesReadFileResult, SerializableToolDefinition, SessionEvent, SkillListResult, UIElicitationResponse, UIElicitationResult, UIElicitationSchema, UsageGetMetricsResult } from "./types.js";
+import type { ActionResult, AssistantMessageEvent, ExtensionListResult, HistoryCompactResult, HistoryTruncateResult, InstructionsGetSourcesResult, MessageOptions, PluginListResult, SessionFleetStartResult, SessionMCPOAuthLoginOptions, SessionMCPOAuthLoginResult, SessionMCPServerList, SessionModeGetResult, SessionModelGetCurrentResult, SessionModelSwitchToResult, SessionMode, SessionPlanReadResult, SessionRpcAgentGetCurrentResult, SessionRpcAgentList, SessionShellExecResult, SessionShellKillResult, SessionCommandsHandlePendingResult, SessionToolsHandlePendingResult, SessionWorkspacesGetResult, SessionWorkspacesListFilesResult, SessionWorkspacesReadFileResult, SerializableToolDefinition, SessionCapabilities, SessionEvent, SkillListResult, UIElicitationResponse, UIElicitationResult, UIElicitationSchema, UsageGetMetricsResult } from "./types.js";
 export interface CopilotClientSessionBridge {
     _sessionSend(sessionId: string, options: MessageOptions): Promise<string>;
     _sessionSendAndWait(sessionId: string, options: MessageOptions, timeout?: number): Promise<AssistantMessageEvent | undefined>;
@@ -162,6 +162,7 @@ export declare class CopilotSession {
     private readonly client;
     private readonly eventHandlers;
     private toolDefinitions;
+    private _capabilities;
     readonly rpc: CopilotSessionRpc;
     constructor(sessionId: string, client: CopilotClientSessionBridge, onEvent?: (event: SessionEvent) => void);
     send(options: MessageOptions): Promise<string>;
@@ -183,6 +184,8 @@ export declare class CopilotSession {
         level?: "info" | "warning" | "error";
         ephemeral?: boolean;
     }): Promise<void>;
+    get capabilities(): SessionCapabilities;
+    setCapabilities(capabilities: SessionCapabilities | undefined): void;
     _dispatchEvent(event: SessionEvent): void;
 }
 //# sourceMappingURL=session.d.ts.map

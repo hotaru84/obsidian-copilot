@@ -3,6 +3,7 @@ export class CopilotSession {
     client;
     eventHandlers = new Set();
     toolDefinitions = [];
+    _capabilities = {};
     rpc;
     constructor(sessionId, client, onEvent) {
         this.sessionId = sessionId;
@@ -138,6 +139,14 @@ export class CopilotSession {
     }
     async log(message, options) {
         await this.client._sessionLog(this.sessionId, message, options);
+    }
+    get capabilities() {
+        return this._capabilities;
+    }
+    setCapabilities(capabilities) {
+        if (capabilities) {
+            this._capabilities = capabilities;
+        }
     }
     _dispatchEvent(event) {
         for (const handler of this.eventHandlers) {

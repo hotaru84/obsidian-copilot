@@ -49,6 +49,8 @@ export const COPILOT_SKILLS_CONFIG_SET_DISABLED_METHOD = "copilot.skills.config.
 export const COPILOT_SET_WORKSPACE_METHOD = "copilot.setWorkspace";
 export const COPILOT_PERMISSION_RESPOND_METHOD = "copilot.permission.respond";
 export const COPILOT_PERMISSION_REQUEST_EVENT = "copilot.permission.request";
+export const COPILOT_ELICITATION_RESPOND_METHOD = "copilot.elicitation.respond";
+export const COPILOT_ELICITATION_REQUEST_EVENT = "copilot.elicitation.request";
 export const COPILOT_SESSION_EVENT = "copilot.session.event";
 // session.rpc.model
 export const COPILOT_SESSION_MODEL_GET_CURRENT_METHOD = "copilot.session.model.getCurrent";

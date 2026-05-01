@@ -15,6 +15,7 @@ import type {
 } from "../../domain/models/session-info";
 import type {
 	ElicitationResponse,
+	ElicitationSchema,
 	PermissionOption,
 	MessageContent,
 	ToolCallContent,
@@ -79,6 +80,20 @@ interface PendingPermissionRequest {
 	selectedOptionId?: string;
 }
 
+interface PendingElicitationRequest {
+	requestId: string;
+	sessionId: string;
+	message: string;
+	requestedSchema: ElicitationSchema;
+	resolve: (response: ElicitationResponse) => void;
+}
+
+type ElicitationRequestContext = {
+	sessionId: string;
+	message: string;
+	requestedSchema: unknown;
+};
+
 interface TerminalSnapshot {
 	output: string;
 	truncated: boolean;
@@ -107,8 +122,6 @@ const COPILOT_SESSION_HISTORY_TRUNCATE_METHOD =
 	"copilot.session.history.truncate";
 const COPILOT_SESSION_USAGE_GET_METRICS_METHOD =
 	"copilot.session.usage.getMetrics";
-const COPILOT_SESSION_UI_HANDLE_PENDING_ELICITATION_METHOD =
-	"copilot.session.ui.handlePendingElicitation";
 const CONNECTION_RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
 
 type RawCopilotClient = {
@@ -374,6 +387,12 @@ export class RemoteAdapter implements IChatAgentClient {
 	private pendingPermissions = new Map<string, PendingPermissionRequest>();
 	private permissionQueuesBySession = new Map<string, string[]>();
 	private activePermissionRequestBySession = new Map<string, string | null>();
+	private pendingElicitations = new Map<string, PendingElicitationRequest>();
+	private elicitationQueuesBySession = new Map<string, string[]>();
+	private activeElicitationRequestBySession = new Map<
+		string,
+		string | null
+	>();
 	private terminalSnapshots = new Map<string, TerminalSnapshot>();
 	private autoAllowPermissions = false;
 	private autoAllowPermissionsOverride: boolean | null = null;
@@ -427,6 +446,131 @@ export class RemoteAdapter implements IChatAgentClient {
 		}
 
 		return next;
+	}
+
+	private getActiveElicitationRequestId(sessionId: string): string | null {
+		return this.activeElicitationRequestBySession.get(sessionId) ?? null;
+	}
+
+	private setActiveElicitationRequestId(
+		sessionId: string,
+		requestId: string | null,
+	): void {
+		if (requestId === null) {
+			this.activeElicitationRequestBySession.delete(sessionId);
+			return;
+		}
+		this.activeElicitationRequestBySession.set(sessionId, requestId);
+	}
+
+	private enqueueElicitation(sessionId: string, requestId: string): void {
+		const queue = this.elicitationQueuesBySession.get(sessionId) ?? [];
+		queue.push(requestId);
+		this.elicitationQueuesBySession.set(sessionId, queue);
+	}
+
+	private dequeueElicitation(sessionId: string): string | undefined {
+		const queue = this.elicitationQueuesBySession.get(sessionId);
+		if (!queue || queue.length === 0) {
+			return undefined;
+		}
+
+		const next = queue.shift();
+		if (queue.length === 0) {
+			this.elicitationQueuesBySession.delete(sessionId);
+		} else {
+			this.elicitationQueuesBySession.set(sessionId, queue);
+		}
+
+		return next;
+	}
+
+	private normalizeElicitationSchema(
+		value: unknown,
+	): ElicitationSchema | null {
+		if (!value || typeof value !== "object") {
+			return null;
+		}
+
+		const record = value as Record<string, unknown>;
+		if (record.type !== "object") {
+			return null;
+		}
+
+		const properties = record.properties;
+		if (!properties || typeof properties !== "object") {
+			return null;
+		}
+
+		const required = Array.isArray(record.required)
+			? record.required.filter(
+					(item): item is string => typeof item === "string",
+				)
+			: undefined;
+
+		return {
+			type: "object",
+			properties: properties as ElicitationSchema["properties"],
+			...(required ? { required } : {}),
+		};
+	}
+
+	private processNextElicitation(sessionId: string): void {
+		if (!this.sessionUpdateCallback) {
+			return;
+		}
+
+		if (this.getActiveElicitationRequestId(sessionId)) {
+			return;
+		}
+
+		const nextRequestId = this.dequeueElicitation(sessionId);
+		if (!nextRequestId) {
+			return;
+		}
+
+		const nextRequest = this.pendingElicitations.get(nextRequestId);
+		if (!nextRequest) {
+			return;
+		}
+
+		this.setActiveElicitationRequestId(sessionId, nextRequestId);
+		this.sessionUpdateCallback({
+			type: "elicitation_request",
+			sessionId,
+			requestId: nextRequest.requestId,
+			message: nextRequest.message,
+			requestedSchema: nextRequest.requestedSchema,
+		});
+	}
+
+	private async handleElicitationRequest(
+		context: ElicitationRequestContext,
+	): Promise<ElicitationResponse> {
+		const requestedSchema = this.normalizeElicitationSchema(
+			context.requestedSchema,
+		);
+		if (!requestedSchema) {
+			this.logger.warn(
+				"[RemoteAdapter] Invalid elicitation schema from runtime, returning cancel.",
+			);
+			return { action: "cancel" };
+		}
+
+		const requestId = crypto.randomUUID();
+
+		return await new Promise<ElicitationResponse>((resolve) => {
+			this.pendingElicitations.set(requestId, {
+				requestId,
+				sessionId: context.sessionId,
+				message: context.message,
+				requestedSchema,
+				resolve,
+			});
+
+			this.enqueueElicitation(context.sessionId, requestId);
+			this.processNextElicitation(context.sessionId);
+		});
 	}
 
 	private rememberRemoteAgentSelection(
@@ -1139,59 +1283,6 @@ export class RemoteAdapter implements IChatAgentClient {
 			return;
 		}
 
-		if (event.type === "elicitation.requested") {
-			const requestId =
-				safeString(event.data?.requestId) ||
-				safeString(event.data?.request_id);
-			const message = safeString(event.data?.message);
-			const requestedSchema =
-				event.data?.requestedSchema &&
-				typeof event.data.requestedSchema === "object"
-					? event.data.requestedSchema
-					: event.data?.schema &&
-						  typeof event.data.schema === "object"
-						? event.data.schema
-						: undefined;
-
-			if (requestId && message && requestedSchema) {
-				this.sessionUpdateCallback({
-					type: "elicitation_request",
-					sessionId,
-					eventId,
-					requestId,
-					message,
-					requestedSchema:
-						requestedSchema as import("../../domain/models/chat-message").ElicitationSchema,
-				});
-			}
-			return;
-		}
-
-		if (event.type === "elicitation.completed") {
-			const requestId =
-				safeString(event.data?.requestId) ||
-				safeString(event.data?.request_id);
-			if (!requestId) {
-				return;
-			}
-
-			this.sessionUpdateCallback({
-				type: "elicitation_complete",
-				sessionId,
-				eventId,
-				requestId,
-				response:
-					event.data?.result && typeof event.data.result === "object"
-						? (event.data.result as ElicitationResponse)
-						: undefined,
-				success:
-					typeof event.data?.success === "boolean"
-						? event.data.success
-						: undefined,
-				error: safeString(event.data?.error),
-			});
-		}
-
 		if (
 			event.type === "tool.execution_start" ||
 			event.type === "tool.execution_complete" ||
@@ -1479,6 +1570,8 @@ export class RemoteAdapter implements IChatAgentClient {
 							invocation.sessionId,
 							request,
 						),
+					onElicitationRequest: (context) =>
+						this.handleElicitationRequest(context),
 				}),
 			);
 			created.on((event) =>
@@ -1585,6 +1678,14 @@ export class RemoteAdapter implements IChatAgentClient {
 		this.pendingPermissions.clear();
 		this.permissionQueuesBySession.clear();
 		this.activePermissionRequestBySession.clear();
+
+		for (const pending of this.pendingElicitations.values()) {
+			pending.resolve({ action: "cancel" });
+		}
+		this.pendingElicitations.clear();
+		this.elicitationQueuesBySession.clear();
+		this.activeElicitationRequestBySession.clear();
+
 		this.terminalSnapshots.clear();
 
 		for (const state of this.sessionStates.values()) {
@@ -1845,6 +1946,8 @@ export class RemoteAdapter implements IChatAgentClient {
 							invocation.sessionId,
 							request,
 						),
+					onElicitationRequest: (context) =>
+						this.handleElicitationRequest(context),
 				}),
 			);
 			resumed.on((event) =>
@@ -1887,6 +1990,8 @@ export class RemoteAdapter implements IChatAgentClient {
 							invocation.sessionId,
 							request,
 						),
+					onElicitationRequest: (context) =>
+						this.handleElicitationRequest(context),
 					systemMessage: systemMessageContent
 						? {
 								mode: "append",
@@ -2000,13 +2105,32 @@ export class RemoteAdapter implements IChatAgentClient {
 		requestId: string,
 		response: ElicitationResponse,
 	): Promise<ElicitationResult> {
-		const state = this.getSessionState(sessionId);
-		const client = this.getClient(state.workingDirectory);
-		return this.sendRawClientRequest<ElicitationResult>(
-			client,
-			COPILOT_SESSION_UI_HANDLE_PENDING_ELICITATION_METHOD,
-			{ sessionId, requestId, result: response },
-		);
+		const pending = this.pendingElicitations.get(requestId);
+		if (!pending || pending.sessionId !== sessionId) {
+			this.logger.warn(
+				`[RemoteAdapter] Elicitation request not found or stale: ${requestId}`,
+			);
+			return { success: false };
+		}
+
+		this.pendingElicitations.delete(requestId);
+
+		if (this.getActiveElicitationRequestId(sessionId) === requestId) {
+			this.setActiveElicitationRequestId(sessionId, null);
+		}
+
+		pending.resolve(response);
+
+		this.sessionUpdateCallback?.({
+			type: "elicitation_complete",
+			sessionId,
+			requestId,
+			response,
+			success: true,
+		});
+
+		this.processNextElicitation(sessionId);
+		return { success: true };
 	}
 
 	getConnectionState(): AgentConnectionState {
