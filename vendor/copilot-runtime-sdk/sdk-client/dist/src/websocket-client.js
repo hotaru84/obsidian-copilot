@@ -1,4 +1,4 @@
-import { COPILOT_CREATE_SESSION_METHOD, COPILOT_GET_AUTH_STATUS_METHOD, COPILOT_LIST_AGENTS_METHOD, COPILOT_LIST_PROMPTS_METHOD, COPILOT_LIST_CUSTOM_COMMANDS_METHOD, COPILOT_SET_WORKSPACE_METHOD, COPILOT_LIST_MODELS_METHOD, COPILOT_PERMISSION_REQUEST_EVENT, COPILOT_PERMISSION_RESPOND_METHOD, COPILOT_RESUME_SESSION_METHOD, COPILOT_SESSION_ABORT_METHOD, COPILOT_SESSION_DISCONNECT_METHOD, COPILOT_SESSION_EVENT, COPILOT_SESSION_GET_MESSAGES_METHOD, COPILOT_SESSION_LOG_METHOD, COPILOT_SESSION_SEND_AND_WAIT_METHOD, COPILOT_SESSION_SEND_METHOD, COPILOT_SESSION_EXECUTE_PROMPT_METHOD, COPILOT_SESSION_SET_AGENT_METHOD, COPILOT_SESSION_CLEAR_AGENT_METHOD, COPILOT_SESSION_SET_MODE_METHOD, COPILOT_SESSION_SET_MODEL_METHOD, RESTART_SERVER_METHOD, HEALTH_METHOD, PING_METHOD, PROTOCOL_VERSION, createRequest, } from "./protocol.js";
+import { COPILOT_MCP_CONFIG_DISABLE_METHOD, COPILOT_MCP_CONFIG_ENABLE_METHOD, COPILOT_MCP_CONFIG_LIST_METHOD, COPILOT_MCP_DISCOVER_METHOD, COPILOT_CREATE_SESSION_METHOD, COPILOT_GET_AUTH_STATUS_METHOD, COPILOT_LIST_AGENTS_METHOD, COPILOT_LIST_PROMPTS_METHOD, COPILOT_LIST_CUSTOM_COMMANDS_METHOD, COPILOT_SET_WORKSPACE_METHOD, COPILOT_LIST_MODELS_METHOD, COPILOT_PERMISSION_REQUEST_EVENT, COPILOT_PERMISSION_RESPOND_METHOD, COPILOT_RESUME_SESSION_METHOD, COPILOT_SESSION_ABORT_METHOD, COPILOT_SESSION_AGENT_DESELECT_METHOD, COPILOT_SESSION_AGENT_GET_CURRENT_METHOD, COPILOT_SESSION_AGENT_LIST_METHOD, COPILOT_SESSION_AGENT_RELOAD_METHOD, COPILOT_SESSION_AGENT_SELECT_METHOD, COPILOT_SESSION_COMMANDS_HANDLE_PENDING_METHOD, COPILOT_SESSION_DISCONNECT_METHOD, COPILOT_SESSION_EVENT, COPILOT_SESSION_EXTENSIONS_DISABLE_METHOD, COPILOT_SESSION_EXTENSIONS_ENABLE_METHOD, COPILOT_SESSION_EXTENSIONS_LIST_METHOD, COPILOT_SESSION_EXTENSIONS_RELOAD_METHOD, COPILOT_SESSION_FLEET_START_METHOD, COPILOT_SESSION_GET_MESSAGES_METHOD, COPILOT_SESSION_HISTORY_COMPACT_METHOD, COPILOT_SESSION_HISTORY_TRUNCATE_METHOD, COPILOT_SESSION_INSTRUCTIONS_GET_SOURCES_METHOD, COPILOT_SESSION_LOG_METHOD, COPILOT_SESSION_MCP_DISABLE_METHOD, COPILOT_SESSION_MCP_ENABLE_METHOD, COPILOT_SESSION_MCP_LIST_METHOD, COPILOT_SESSION_MCP_OAUTH_LOGIN_METHOD, COPILOT_SESSION_PLAN_DELETE_METHOD, COPILOT_SESSION_PLAN_READ_METHOD, COPILOT_SESSION_PLAN_UPDATE_METHOD, COPILOT_SESSION_MCP_RELOAD_METHOD, COPILOT_SESSION_MODEL_GET_CURRENT_METHOD, COPILOT_SESSION_MODEL_SWITCH_TO_METHOD, COPILOT_SESSION_MODE_GET_METHOD, COPILOT_SESSION_MODE_SET_METHOD, COPILOT_SESSION_PERMISSIONS_RESET_APPROVALS_METHOD, COPILOT_SESSION_PERMISSIONS_SET_APPROVE_ALL_METHOD, COPILOT_SESSION_PLUGINS_LIST_METHOD, COPILOT_SESSION_SEND_AND_WAIT_METHOD, COPILOT_SESSION_SEND_METHOD, COPILOT_SESSION_EXECUTE_PROMPT_METHOD, COPILOT_SESSION_SET_AGENT_METHOD, COPILOT_SESSION_CLEAR_AGENT_METHOD, COPILOT_SESSION_SET_MODE_METHOD, COPILOT_SESSION_SET_MODEL_METHOD, COPILOT_SESSION_SHELL_EXEC_METHOD, COPILOT_SESSION_SHELL_KILL_METHOD, COPILOT_SESSION_SKILLS_DISABLE_METHOD, COPILOT_SESSION_SKILLS_ENABLE_METHOD, COPILOT_SESSION_SKILLS_LIST_METHOD, COPILOT_SESSION_SKILLS_RELOAD_METHOD, COPILOT_SESSION_TOOLS_HANDLE_PENDING_METHOD, COPILOT_SESSION_UI_ELICITATION_METHOD, COPILOT_SESSION_UI_HANDLE_PENDING_ELICITATION_METHOD, COPILOT_SESSION_USAGE_GET_METRICS_METHOD, COPILOT_SESSION_WORKSPACES_CREATE_FILE_METHOD, COPILOT_SESSION_WORKSPACES_GET_WORKSPACE_METHOD, COPILOT_SESSION_WORKSPACES_LIST_FILES_METHOD, COPILOT_SESSION_WORKSPACES_READ_FILE_METHOD, COPILOT_SKILLS_CONFIG_SET_DISABLED_METHOD, COPILOT_SKILLS_DISCOVER_METHOD, COPILOT_MODELS_LIST_METHOD, COPILOT_TOOLS_LIST_METHOD, COPILOT_ACCOUNT_GET_QUOTA_METHOD, COPILOT_SESSION_FS_SET_PROVIDER_METHOD, COPILOT_SESSIONS_FORK_METHOD, RESTART_SERVER_METHOD, HEALTH_METHOD, PING_METHOD, PROTOCOL_VERSION, createRequest, } from "./protocol.js";
 import { CopilotSession } from "./session.js";
 export class CopilotClient {
     socket = null;
@@ -10,11 +10,64 @@ export class CopilotClient {
     serverUrl;
     socketFactory;
     configuredWorkspaceCwd;
+    rpc;
     constructor(options = {}) {
         this.serverUrl =
             options.serverUrl ?? options.cliUrl ?? "ws://127.0.0.1:39453";
         this.socketFactory = options.socketFactory ?? ((url) => new WebSocket(url));
         this.configuredWorkspaceCwd = options.cwd;
+        this.rpc = {
+            mcp: {
+                discover: (workingDirectory) => this.sendRequest(COPILOT_MCP_DISCOVER_METHOD, {
+                    workingDirectory,
+                }),
+                config: {
+                    list: () => this.sendRequest(COPILOT_MCP_CONFIG_LIST_METHOD, {}),
+                    enable: async (names) => {
+                        await this.sendRequest(COPILOT_MCP_CONFIG_ENABLE_METHOD, {
+                            names,
+                        });
+                    },
+                    disable: async (names) => {
+                        await this.sendRequest(COPILOT_MCP_CONFIG_DISABLE_METHOD, {
+                            names,
+                        });
+                    },
+                },
+            },
+            skills: {
+                discover: (options = {}) => this.sendRequest(COPILOT_SKILLS_DISCOVER_METHOD, options),
+                config: {
+                    setDisabledSkills: async (disabledSkills) => {
+                        await this.sendRequest(COPILOT_SKILLS_CONFIG_SET_DISABLED_METHOD, {
+                            disabledSkills,
+                        });
+                    },
+                },
+            },
+            models: {
+                list: (options = {}) => this.sendRequest(COPILOT_MODELS_LIST_METHOD, options),
+            },
+            tools: {
+                list: (options = {}) => this.sendRequest(COPILOT_TOOLS_LIST_METHOD, options),
+            },
+            account: {
+                getQuota: (options = {}) => this.sendRequest(COPILOT_ACCOUNT_GET_QUOTA_METHOD, options),
+            },
+            sessionFs: {
+                setProvider: (conventions, initialCwd, sessionStatePath) => this.sendRequest(COPILOT_SESSION_FS_SET_PROVIDER_METHOD, {
+                    conventions,
+                    initialCwd,
+                    sessionStatePath,
+                }),
+            },
+            sessions: {
+                fork: (sessionId, toEventId) => this.sendRequest(COPILOT_SESSIONS_FORK_METHOD, {
+                    sessionId,
+                    toEventId,
+                }),
+            },
+        };
     }
     getState() {
         return this.state;
@@ -188,6 +241,180 @@ export class CopilotClient {
             promptId,
             args,
         });
+    }
+    async _sessionAgentList(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_AGENT_LIST_METHOD, {
+            sessionId,
+        });
+    }
+    async _sessionAgentGetCurrent(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_AGENT_GET_CURRENT_METHOD, { sessionId });
+    }
+    async _sessionAgentSelect(sessionId, name) {
+        await this.sendRequest(COPILOT_SESSION_AGENT_SELECT_METHOD, {
+            sessionId,
+            name,
+        });
+    }
+    async _sessionAgentDeselect(sessionId) {
+        await this.sendRequest(COPILOT_SESSION_AGENT_DESELECT_METHOD, {
+            sessionId,
+        });
+    }
+    async _sessionAgentReload(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_AGENT_RELOAD_METHOD, { sessionId });
+    }
+    async _sessionPlanRead(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_PLAN_READ_METHOD, {
+            sessionId,
+        });
+    }
+    async _sessionPlanUpdate(sessionId, content) {
+        await this.sendRequest(COPILOT_SESSION_PLAN_UPDATE_METHOD, {
+            sessionId,
+            content,
+        });
+    }
+    async _sessionPlanDelete(sessionId) {
+        await this.sendRequest(COPILOT_SESSION_PLAN_DELETE_METHOD, { sessionId });
+    }
+    async _sessionPermissionsSetApproveAll(sessionId, enabled) {
+        return this.sendRequest(COPILOT_SESSION_PERMISSIONS_SET_APPROVE_ALL_METHOD, { sessionId, enabled });
+    }
+    async _sessionPermissionsResetSessionApprovals(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_PERMISSIONS_RESET_APPROVALS_METHOD, { sessionId });
+    }
+    async _sessionMCPList(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_MCP_LIST_METHOD, { sessionId });
+    }
+    async _sessionMCPEnable(sessionId, serverName) {
+        await this.sendRequest(COPILOT_SESSION_MCP_ENABLE_METHOD, {
+            sessionId,
+            serverName,
+        });
+    }
+    async _sessionMCPDisable(sessionId, serverName) {
+        await this.sendRequest(COPILOT_SESSION_MCP_DISABLE_METHOD, {
+            sessionId,
+            serverName,
+        });
+    }
+    async _sessionMCPReload(sessionId) {
+        await this.sendRequest(COPILOT_SESSION_MCP_RELOAD_METHOD, { sessionId });
+    }
+    async _sessionMCPOAuthLogin(sessionId, serverName, options) {
+        return this.sendRequest(COPILOT_SESSION_MCP_OAUTH_LOGIN_METHOD, {
+            sessionId,
+            serverName,
+            callbackSuccessMessage: options?.callbackSuccessMessage,
+            clientName: options?.clientName,
+            forceReauth: options?.forceReauth,
+        });
+    }
+    async _sessionSkillsList(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_SKILLS_LIST_METHOD, { sessionId });
+    }
+    async _sessionSkillsEnable(sessionId, name) {
+        await this.sendRequest(COPILOT_SESSION_SKILLS_ENABLE_METHOD, {
+            sessionId,
+            name,
+        });
+    }
+    async _sessionSkillsDisable(sessionId, name) {
+        await this.sendRequest(COPILOT_SESSION_SKILLS_DISABLE_METHOD, {
+            sessionId,
+            name,
+        });
+    }
+    async _sessionSkillsReload(sessionId) {
+        await this.sendRequest(COPILOT_SESSION_SKILLS_RELOAD_METHOD, { sessionId });
+    }
+    async _sessionInstructionsGetSources(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_INSTRUCTIONS_GET_SOURCES_METHOD, { sessionId });
+    }
+    async _sessionModelGetCurrent(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_MODEL_GET_CURRENT_METHOD, { sessionId });
+    }
+    async _sessionModelSwitchTo(sessionId, modelId, options) {
+        return this.sendRequest(COPILOT_SESSION_MODEL_SWITCH_TO_METHOD, { sessionId, modelId, reasoningEffort: options?.reasoningEffort });
+    }
+    async _sessionModeGet(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_MODE_GET_METHOD, { sessionId });
+    }
+    async _sessionModeSet(sessionId, mode) {
+        await this.sendRequest(COPILOT_SESSION_MODE_SET_METHOD, {
+            sessionId,
+            mode,
+        });
+    }
+    async _sessionWorkspacesGetWorkspace(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_WORKSPACES_GET_WORKSPACE_METHOD, { sessionId });
+    }
+    async _sessionWorkspacesListFiles(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_WORKSPACES_LIST_FILES_METHOD, { sessionId });
+    }
+    async _sessionWorkspacesReadFile(sessionId, path) {
+        return this.sendRequest(COPILOT_SESSION_WORKSPACES_READ_FILE_METHOD, { sessionId, path });
+    }
+    async _sessionWorkspacesCreateFile(sessionId, path, content) {
+        await this.sendRequest(COPILOT_SESSION_WORKSPACES_CREATE_FILE_METHOD, {
+            sessionId,
+            path,
+            content,
+        });
+    }
+    async _sessionFleetStart(sessionId, prompt) {
+        return this.sendRequest(COPILOT_SESSION_FLEET_START_METHOD, { sessionId, prompt });
+    }
+    async _sessionPluginsList(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_PLUGINS_LIST_METHOD, { sessionId });
+    }
+    async _sessionExtensionsList(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_EXTENSIONS_LIST_METHOD, { sessionId });
+    }
+    async _sessionExtensionsEnable(sessionId, id) {
+        await this.sendRequest(COPILOT_SESSION_EXTENSIONS_ENABLE_METHOD, {
+            sessionId,
+            id,
+        });
+    }
+    async _sessionExtensionsDisable(sessionId, id) {
+        await this.sendRequest(COPILOT_SESSION_EXTENSIONS_DISABLE_METHOD, {
+            sessionId,
+            id,
+        });
+    }
+    async _sessionExtensionsReload(sessionId) {
+        await this.sendRequest(COPILOT_SESSION_EXTENSIONS_RELOAD_METHOD, {
+            sessionId,
+        });
+    }
+    async _sessionToolsHandlePendingToolCall(sessionId, requestId, result, error) {
+        return this.sendRequest(COPILOT_SESSION_TOOLS_HANDLE_PENDING_METHOD, { sessionId, requestId, result, error });
+    }
+    async _sessionCommandsHandlePendingCommand(sessionId, requestId, error) {
+        return this.sendRequest(COPILOT_SESSION_COMMANDS_HANDLE_PENDING_METHOD, { sessionId, requestId, error });
+    }
+    async _sessionUIElicitation(sessionId, message, requestedSchema) {
+        return this.sendRequest(COPILOT_SESSION_UI_ELICITATION_METHOD, { sessionId, message, requestedSchema });
+    }
+    async _sessionUIHandlePendingElicitation(sessionId, requestId, result) {
+        return this.sendRequest(COPILOT_SESSION_UI_HANDLE_PENDING_ELICITATION_METHOD, { sessionId, requestId, result });
+    }
+    async _sessionShellExec(sessionId, command, options) {
+        return this.sendRequest(COPILOT_SESSION_SHELL_EXEC_METHOD, { sessionId, command, cwd: options?.cwd, timeout: options?.timeout }, (options?.timeout ?? 30000) + 1000);
+    }
+    async _sessionShellKill(sessionId, processId, signal) {
+        return this.sendRequest(COPILOT_SESSION_SHELL_KILL_METHOD, { sessionId, processId, signal });
+    }
+    async _sessionHistoryCompact(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_HISTORY_COMPACT_METHOD, { sessionId }, 30000);
+    }
+    async _sessionHistoryTruncate(sessionId, eventId) {
+        return this.sendRequest(COPILOT_SESSION_HISTORY_TRUNCATE_METHOD, { sessionId, eventId });
+    }
+    async _sessionUsageGetMetrics(sessionId) {
+        return this.sendRequest(COPILOT_SESSION_USAGE_GET_METRICS_METHOD, { sessionId });
     }
     async sendRequest(method, payload, timeoutMs = 5000) {
         await this.start();

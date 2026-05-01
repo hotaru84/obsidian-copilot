@@ -20,10 +20,81 @@ export const COPILOT_SESSION_SET_AGENT_METHOD = "copilot.session.setAgent";
 export const COPILOT_SESSION_CLEAR_AGENT_METHOD = "copilot.session.clearAgent";
 export const COPILOT_SESSION_SET_MODE_METHOD = "copilot.session.setMode";
 export const COPILOT_SESSION_EXECUTE_PROMPT_METHOD = "copilot.session.executePrompt";
+export const COPILOT_SESSION_AGENT_LIST_METHOD = "copilot.session.agent.list";
+export const COPILOT_SESSION_AGENT_GET_CURRENT_METHOD = "copilot.session.agent.getCurrent";
+export const COPILOT_SESSION_AGENT_SELECT_METHOD = "copilot.session.agent.select";
+export const COPILOT_SESSION_AGENT_DESELECT_METHOD = "copilot.session.agent.deselect";
+export const COPILOT_SESSION_AGENT_RELOAD_METHOD = "copilot.session.agent.reload";
+export const COPILOT_SESSION_PLAN_READ_METHOD = "copilot.session.plan.read";
+export const COPILOT_SESSION_PLAN_UPDATE_METHOD = "copilot.session.plan.update";
+export const COPILOT_SESSION_PLAN_DELETE_METHOD = "copilot.session.plan.delete";
+export const COPILOT_SESSION_PERMISSIONS_SET_APPROVE_ALL_METHOD = "copilot.session.permissions.setApproveAll";
+export const COPILOT_SESSION_PERMISSIONS_RESET_APPROVALS_METHOD = "copilot.session.permissions.resetSessionApprovals";
+export const COPILOT_SESSION_MCP_LIST_METHOD = "copilot.session.mcp.list";
+export const COPILOT_SESSION_MCP_ENABLE_METHOD = "copilot.session.mcp.enable";
+export const COPILOT_SESSION_MCP_DISABLE_METHOD = "copilot.session.mcp.disable";
+export const COPILOT_SESSION_MCP_RELOAD_METHOD = "copilot.session.mcp.reload";
+export const COPILOT_SESSION_MCP_OAUTH_LOGIN_METHOD = "copilot.session.mcp.oauth.login";
+export const COPILOT_SESSION_SKILLS_LIST_METHOD = "copilot.session.skills.list";
+export const COPILOT_SESSION_SKILLS_ENABLE_METHOD = "copilot.session.skills.enable";
+export const COPILOT_SESSION_SKILLS_DISABLE_METHOD = "copilot.session.skills.disable";
+export const COPILOT_SESSION_SKILLS_RELOAD_METHOD = "copilot.session.skills.reload";
+export const COPILOT_SESSION_INSTRUCTIONS_GET_SOURCES_METHOD = "copilot.session.instructions.getSources";
+export const COPILOT_MCP_DISCOVER_METHOD = "copilot.mcp.discover";
+export const COPILOT_MCP_CONFIG_LIST_METHOD = "copilot.mcp.config.list";
+export const COPILOT_MCP_CONFIG_ENABLE_METHOD = "copilot.mcp.config.enable";
+export const COPILOT_MCP_CONFIG_DISABLE_METHOD = "copilot.mcp.config.disable";
+export const COPILOT_SKILLS_DISCOVER_METHOD = "copilot.skills.discover";
+export const COPILOT_SKILLS_CONFIG_SET_DISABLED_METHOD = "copilot.skills.config.setDisabledSkills";
 export const COPILOT_SET_WORKSPACE_METHOD = "copilot.setWorkspace";
 export const COPILOT_PERMISSION_RESPOND_METHOD = "copilot.permission.respond";
 export const COPILOT_PERMISSION_REQUEST_EVENT = "copilot.permission.request";
 export const COPILOT_SESSION_EVENT = "copilot.session.event";
+// session.rpc.model
+export const COPILOT_SESSION_MODEL_GET_CURRENT_METHOD = "copilot.session.model.getCurrent";
+export const COPILOT_SESSION_MODEL_SWITCH_TO_METHOD = "copilot.session.model.switchTo";
+// session.rpc.mode
+export const COPILOT_SESSION_MODE_GET_METHOD = "copilot.session.mode.get";
+export const COPILOT_SESSION_MODE_SET_METHOD = "copilot.session.mode.set";
+// session.rpc.workspaces
+export const COPILOT_SESSION_WORKSPACES_GET_WORKSPACE_METHOD = "copilot.session.workspaces.getWorkspace";
+export const COPILOT_SESSION_WORKSPACES_LIST_FILES_METHOD = "copilot.session.workspaces.listFiles";
+export const COPILOT_SESSION_WORKSPACES_READ_FILE_METHOD = "copilot.session.workspaces.readFile";
+export const COPILOT_SESSION_WORKSPACES_CREATE_FILE_METHOD = "copilot.session.workspaces.createFile";
+// session.rpc.fleet  (experimental)
+export const COPILOT_SESSION_FLEET_START_METHOD = "copilot.session.fleet.start";
+// session.rpc.plugins  (experimental)
+export const COPILOT_SESSION_PLUGINS_LIST_METHOD = "copilot.session.plugins.list";
+// session.rpc.extensions  (experimental)
+export const COPILOT_SESSION_EXTENSIONS_LIST_METHOD = "copilot.session.extensions.list";
+export const COPILOT_SESSION_EXTENSIONS_ENABLE_METHOD = "copilot.session.extensions.enable";
+export const COPILOT_SESSION_EXTENSIONS_DISABLE_METHOD = "copilot.session.extensions.disable";
+export const COPILOT_SESSION_EXTENSIONS_RELOAD_METHOD = "copilot.session.extensions.reload";
+// session.rpc.tools
+export const COPILOT_SESSION_TOOLS_HANDLE_PENDING_METHOD = "copilot.session.tools.handlePendingToolCall";
+// session.rpc.commands
+export const COPILOT_SESSION_COMMANDS_HANDLE_PENDING_METHOD = "copilot.session.commands.handlePendingCommand";
+// session.rpc.ui
+export const COPILOT_SESSION_UI_ELICITATION_METHOD = "copilot.session.ui.elicitation";
+export const COPILOT_SESSION_UI_HANDLE_PENDING_ELICITATION_METHOD = "copilot.session.ui.handlePendingElicitation";
+// session.rpc.shell
+export const COPILOT_SESSION_SHELL_EXEC_METHOD = "copilot.session.shell.exec";
+export const COPILOT_SESSION_SHELL_KILL_METHOD = "copilot.session.shell.kill";
+// session.rpc.history  (experimental)
+export const COPILOT_SESSION_HISTORY_COMPACT_METHOD = "copilot.session.history.compact";
+export const COPILOT_SESSION_HISTORY_TRUNCATE_METHOD = "copilot.session.history.truncate";
+// session.rpc.usage  (experimental)
+export const COPILOT_SESSION_USAGE_GET_METRICS_METHOD = "copilot.session.usage.getMetrics";
+// client.rpc.models
+export const COPILOT_MODELS_LIST_METHOD = "copilot.models.list";
+// client.rpc.tools
+export const COPILOT_TOOLS_LIST_METHOD = "copilot.tools.list";
+// client.rpc.account
+export const COPILOT_ACCOUNT_GET_QUOTA_METHOD = "copilot.account.getQuota";
+// client.rpc.sessionFs
+export const COPILOT_SESSION_FS_SET_PROVIDER_METHOD = "copilot.sessionFs.setProvider";
+// client.rpc.sessions  (experimental)
+export const COPILOT_SESSIONS_FORK_METHOD = "copilot.sessions.fork";
 export function createRequest(id, method, payload) {
     return {
         id,

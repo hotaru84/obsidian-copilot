@@ -114,11 +114,42 @@ describe("CopilotClient + Go server", () => {
         const models = await client.listModels();
         let permissionSeen = false;
         const session = await client.createSession({
+            includeSubAgentStreamingEvents: false,
+            customAgents: [
+                {
+                    name: "skill-agent",
+                    skills: ["test-skill"],
+                },
+            ],
+            defaultAgent: {
+                excludedTools: ["run_in_terminal"],
+            },
+            agent: "skill-agent",
+            skillDirectories: ["C:/workspace/.skills"],
+            disabledSkills: ["disabled-skill"],
             onPermissionRequest: async (request) => {
                 permissionSeen = request.kind === "shell";
                 return { kind: "approve-once" };
             },
         });
+        const agentList = await session.rpc.agent.list();
+        const currentAgent = await session.rpc.agent.getCurrent();
+        await session.rpc.agent.select("explore");
+        await session.rpc.agent.deselect();
+        const reloadedAgents = await session.rpc.agent.reload();
+        const plan = await session.rpc.plan.read();
+        await session.rpc.plan.update("# Test Plan\n\n- item");
+        await session.rpc.plan.delete();
+        const approveAll = await session.rpc.permissions.setApproveAll(true);
+        const resetApprovals = await session.rpc.permissions.resetSessionApprovals();
+        const sessionMcp = await session.rpc.mcp.list();
+        await session.rpc.mcp.reload();
+        const sessionSkills = await session.rpc.skills.list();
+        const instructionSources = await session.rpc.instructions.getSources();
+        const discoveredMcp = await client.rpc.mcp.discover();
+        const mcpConfig = await client.rpc.mcp.config.list();
+        const discoveredSkills = await client.rpc.skills.discover();
+        await client.rpc.skills.config.setDisabledSkills(["disabled-skill"]);
         const event = await session.sendAndWait({
             prompt: "run echo done",
         });
@@ -127,10 +158,22 @@ describe("CopilotClient + Go server", () => {
         expect(auth.isAuthenticated).toBe(true);
         expect(models.some((model) => model.id === "mock-copilot")).toBe(true);
         expect(permissionSeen).toBe(true);
+        expect(agentList.agents.length).toBeGreaterThan(0);
+        expect(currentAgent.agent).toBeNull();
+        expect(reloadedAgents.agents.length).toBeGreaterThan(0);
+        expect(plan.exists).toBe(false);
+        expect(approveAll.success).toBe(true);
+        expect(resetApprovals.success).toBe(true);
+        expect(sessionMcp.servers).toEqual([]);
+        expect(sessionSkills.skills).toEqual([]);
+        expect(instructionSources.sources).toEqual([]);
+        expect(discoveredMcp.servers).toEqual([]);
+        expect(mcpConfig.servers).toEqual({});
+        expect(discoveredSkills.skills).toEqual([]);
         expect(event?.type).toBe("assistant.message");
         expect(event?.data.content).toContain("done");
         await session.disconnect();
         await client.stop();
-    });
+    }, 20000);
 });
 //# sourceMappingURL=go-server.integration.test.js.map

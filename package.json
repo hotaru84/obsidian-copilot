@@ -20,7 +20,7 @@
 	"author": "",
 	"license": "Apache-2.0",
 	"devDependencies": {
-		"@types/node": "^16.11.6",
+		"@types/node": "^16.18.126",
 		"@types/react": "^19.1.13",
 		"@types/react-dom": "^19.1.9",
 		"@types/semver": "^7.7.1",

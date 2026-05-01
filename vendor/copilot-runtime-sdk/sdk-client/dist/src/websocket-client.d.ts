@@ -1,4 +1,4 @@
-import type { AssistantMessageEvent, AgentInfo, CustomCommandInfo, GetAuthStatusResponse, GetStatusResponse, MessageOptions, ModelInfo, PromptInfo, PermissionHandler, ResumeSessionConfig, SetWorkspaceResult, RestartServerResult, SessionConfig, SessionEvent, SessionMode } from "./types.js";
+import type { AccountGetQuotaPayload, AccountGetQuotaResult, ActionResult, AssistantMessageEvent, AgentInfo, CustomCommandInfo, DiscoveredMCPServerList, ExtensionListResult, GetAuthStatusResponse, GetStatusResponse, HistoryCompactResult, HistoryTruncateResult, InstructionsGetSourcesResult, MCPConfigListResult, MessageOptions, PluginListResult, ModelInfo, PromptInfo, PermissionHandler, ResumeSessionConfig, ServerModelListResult, ServerModelsListPayload, ServerToolListResult, ServerToolsListPayload, SessionFleetStartResult, SessionFsConventions, SessionFsSetProviderResult, SessionModelGetCurrentResult, SessionModelSwitchToResult, SessionModeGetResult, SessionMode, SessionsForkResult, SessionShellExecResult, SessionShellKillResult, SessionCommandsHandlePendingResult, SessionToolsHandlePendingResult, SessionWorkspacesGetResult, SessionWorkspacesListFilesResult, SessionWorkspacesReadFileResult, SetWorkspaceResult, RestartServerResult, SessionMCPOAuthLoginOptions, SessionMCPOAuthLoginResult, SessionMCPServerList, SessionConfig, SessionEvent, SessionPlanReadResult, SessionRpcAgentGetCurrentResult, SessionRpcAgentList, SkillsDiscoverPayload, SkillListResult, UIElicitationResponse, UIElicitationResult, UIElicitationSchema, UsageGetMetricsResult } from "./types.js";
 import { CopilotSession, type CopilotClientSessionBridge } from "./session.js";
 export interface WebSocketFactory {
     (url: string): WebSocket;
@@ -33,6 +33,37 @@ export interface TransportSession {
     sessionId: string;
     model: string;
 }
+export interface CopilotClientRpc {
+    mcp: {
+        discover(workingDirectory?: string): Promise<DiscoveredMCPServerList>;
+        config: {
+            list(): Promise<MCPConfigListResult>;
+            enable(names: string[]): Promise<void>;
+            disable(names: string[]): Promise<void>;
+        };
+    };
+    skills: {
+        discover(options?: SkillsDiscoverPayload): Promise<SkillListResult>;
+        config: {
+            setDisabledSkills(disabledSkills: string[]): Promise<void>;
+        };
+    };
+    models: {
+        list(options?: ServerModelsListPayload): Promise<ServerModelListResult>;
+    };
+    tools: {
+        list(options?: ServerToolsListPayload): Promise<ServerToolListResult>;
+    };
+    account: {
+        getQuota(options?: AccountGetQuotaPayload): Promise<AccountGetQuotaResult>;
+    };
+    sessionFs: {
+        setProvider(conventions: SessionFsConventions, initialCwd: string, sessionStatePath: string): Promise<SessionFsSetProviderResult>;
+    };
+    sessions: {
+        fork(sessionId: string, toEventId?: string): Promise<SessionsForkResult>;
+    };
+}
 export declare class CopilotClient implements CopilotClientSessionBridge {
     private socket;
     private requestCounter;
@@ -43,6 +74,7 @@ export declare class CopilotClient implements CopilotClientSessionBridge {
     private readonly serverUrl;
     private readonly socketFactory;
     private configuredWorkspaceCwd;
+    readonly rpc: CopilotClientRpc;
     constructor(options?: CopilotClientOptions);
     getState(): ConnectionState;
     start(): Promise<void>;
@@ -78,6 +110,56 @@ export declare class CopilotClient implements CopilotClientSessionBridge {
     _sessionClearAgent(sessionId: string): Promise<void>;
     _sessionSetMode(sessionId: string, mode: SessionMode): Promise<void>;
     _sessionExecutePrompt(sessionId: string, promptId: string, args?: string): Promise<AssistantMessageEvent | undefined>;
+    _sessionAgentList(sessionId: string): Promise<SessionRpcAgentList>;
+    _sessionAgentGetCurrent(sessionId: string): Promise<SessionRpcAgentGetCurrentResult>;
+    _sessionAgentSelect(sessionId: string, name: string): Promise<void>;
+    _sessionAgentDeselect(sessionId: string): Promise<void>;
+    _sessionAgentReload(sessionId: string): Promise<SessionRpcAgentList>;
+    _sessionPlanRead(sessionId: string): Promise<SessionPlanReadResult>;
+    _sessionPlanUpdate(sessionId: string, content: string): Promise<void>;
+    _sessionPlanDelete(sessionId: string): Promise<void>;
+    _sessionPermissionsSetApproveAll(sessionId: string, enabled: boolean): Promise<ActionResult>;
+    _sessionPermissionsResetSessionApprovals(sessionId: string): Promise<ActionResult>;
+    _sessionMCPList(sessionId: string): Promise<SessionMCPServerList>;
+    _sessionMCPEnable(sessionId: string, serverName: string): Promise<void>;
+    _sessionMCPDisable(sessionId: string, serverName: string): Promise<void>;
+    _sessionMCPReload(sessionId: string): Promise<void>;
+    _sessionMCPOAuthLogin(sessionId: string, serverName: string, options?: SessionMCPOAuthLoginOptions): Promise<SessionMCPOAuthLoginResult>;
+    _sessionSkillsList(sessionId: string): Promise<SkillListResult>;
+    _sessionSkillsEnable(sessionId: string, name: string): Promise<void>;
+    _sessionSkillsDisable(sessionId: string, name: string): Promise<void>;
+    _sessionSkillsReload(sessionId: string): Promise<void>;
+    _sessionInstructionsGetSources(sessionId: string): Promise<InstructionsGetSourcesResult>;
+    _sessionModelGetCurrent(sessionId: string): Promise<SessionModelGetCurrentResult>;
+    _sessionModelSwitchTo(sessionId: string, modelId: string, options?: {
+        reasoningEffort?: string;
+    }): Promise<SessionModelSwitchToResult>;
+    _sessionModeGet(sessionId: string): Promise<SessionModeGetResult>;
+    _sessionModeSet(sessionId: string, mode: SessionMode): Promise<void>;
+    _sessionWorkspacesGetWorkspace(sessionId: string): Promise<SessionWorkspacesGetResult>;
+    _sessionWorkspacesListFiles(sessionId: string): Promise<SessionWorkspacesListFilesResult>;
+    _sessionWorkspacesReadFile(sessionId: string, path: string): Promise<SessionWorkspacesReadFileResult>;
+    _sessionWorkspacesCreateFile(sessionId: string, path: string, content: string): Promise<void>;
+    _sessionFleetStart(sessionId: string, prompt?: string): Promise<SessionFleetStartResult>;
+    _sessionPluginsList(sessionId: string): Promise<PluginListResult>;
+    _sessionExtensionsList(sessionId: string): Promise<ExtensionListResult>;
+    _sessionExtensionsEnable(sessionId: string, id: string): Promise<void>;
+    _sessionExtensionsDisable(sessionId: string, id: string): Promise<void>;
+    _sessionExtensionsReload(sessionId: string): Promise<void>;
+    _sessionToolsHandlePendingToolCall(sessionId: string, requestId: string, result: string | {
+        content: unknown[];
+    }, error?: string): Promise<SessionToolsHandlePendingResult>;
+    _sessionCommandsHandlePendingCommand(sessionId: string, requestId: string, error?: string): Promise<SessionCommandsHandlePendingResult>;
+    _sessionUIElicitation(sessionId: string, message: string, requestedSchema: UIElicitationSchema): Promise<UIElicitationResponse>;
+    _sessionUIHandlePendingElicitation(sessionId: string, requestId: string, result: UIElicitationResponse): Promise<UIElicitationResult>;
+    _sessionShellExec(sessionId: string, command: string, options?: {
+        cwd?: string;
+        timeout?: number;
+    }): Promise<SessionShellExecResult>;
+    _sessionShellKill(sessionId: string, processId: string, signal?: string): Promise<SessionShellKillResult>;
+    _sessionHistoryCompact(sessionId: string): Promise<HistoryCompactResult>;
+    _sessionHistoryTruncate(sessionId: string, eventId: string): Promise<HistoryTruncateResult>;
+    _sessionUsageGetMetrics(sessionId: string): Promise<UsageGetMetricsResult>;
     private sendRequest;
     private handleMessage;
     private handlePermissionEvent;
