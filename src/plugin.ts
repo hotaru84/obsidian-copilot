@@ -218,7 +218,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 };
 
 export default class AgentClientPlugin extends Plugin {
-	settings: AgentClientPluginSettings;
+	settings!: AgentClientPluginSettings;
 	settingsStore!: SettingsStore;
 
 	/** Registry for all chat view containers (sidebar + floating) */
