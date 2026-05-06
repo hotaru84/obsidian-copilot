@@ -1146,7 +1146,7 @@ export function ChatInput({
 	const placeholder = `Message ${agentLabel} - @ to mention notes${availableCommands.length > 0 ? ", / for commands" : ""}`;
 
 	return (
-		<div className="agent-client-chat-input-container">
+		<div className="agent-client-chat-input-container agent-client-tool-ui-chat-input">
 			{/* Error Overlay - displayed above input */}
 			{errorInfo && (
 				<ErrorOverlay
@@ -1185,7 +1185,7 @@ export function ChatInput({
 
 			{/* Input Box - flexbox container with border */}
 			<div
-				className={`agent-client-chat-input-box ${isDraggingOver ? "agent-client-dragging-over" : ""}`}
+				className={`agent-client-chat-input-box ${isDraggingOver ? "agent-client-dragging-over" : ""} agent-client-tool-ui-chat-input-box`}
 				onDragOver={handleDragOver}
 				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
@@ -1246,7 +1246,7 @@ export function ChatInput({
 						onKeyDown={handleKeyDown}
 						onPaste={(e) => void handlePaste(e)}
 						placeholder={placeholder}
-						className={`agent-client-chat-input-textarea ${autoMentionEnabled && autoMention.activeNote ? "has-auto-mention" : ""}`}
+						className={`agent-client-chat-input-textarea ${autoMentionEnabled && autoMention.activeNote ? "has-auto-mention" : ""} agent-client-tool-ui-chat-input-textarea`}
 						rows={1}
 						spellCheck={obsidianSpellcheck}
 					/>
@@ -1274,13 +1274,13 @@ export function ChatInput({
 				)}
 
 				{/* Input Actions (Mode Selector + Model Selector + Send Button) */}
-				<div className="agent-client-chat-input-actions">
+				<div className="agent-client-chat-input-actions agent-client-tool-ui-chat-input-actions">
 					{/* Remote Agent Selector */}
 					{remoteAgents &&
 						remoteAgents.availableAgents.length > 0 && (
 							<div
 								ref={remoteAgentButtonRef}
-								className="agent-client-remote-agent-selector"
+								className="agent-client-remote-agent-selector agent-client-tool-ui-selector-chip"
 								onClick={handleRemoteAgentSelectorClick}
 								role="button"
 								tabIndex={0}
@@ -1311,7 +1311,7 @@ export function ChatInput({
 					{modes && modes.availableModes.length > 1 && (
 						<div
 							ref={modeButtonRef}
-							className="agent-client-mode-selector"
+							className="agent-client-mode-selector agent-client-tool-ui-selector-chip"
 							onClick={handleModeSelectorClick}
 							role="button"
 							tabIndex={0}
@@ -1345,7 +1345,7 @@ export function ChatInput({
 					{models && models.availableModels.length > 1 && (
 						<div
 							ref={modelButtonRef}
-							className="agent-client-model-selector"
+							className="agent-client-model-selector agent-client-tool-ui-selector-chip"
 							onClick={handleModelSelectorClick}
 							role="button"
 							tabIndex={0}
@@ -1378,7 +1378,7 @@ export function ChatInput({
 					{/* Tool Menu Button */}
 					<button
 						ref={toolMenuButtonRef}
-						className="agent-client-tool-menu-button"
+						className="agent-client-tool-menu-button agent-client-tool-ui-input-icon-button"
 						onClick={handleToolMenuClick}
 						title="Tools and actions"
 					></button>
@@ -1388,7 +1388,7 @@ export function ChatInput({
 						ref={sendButtonRef}
 						onClick={() => void handleSendOrStop()}
 						disabled={isButtonDisabled}
-						className={`agent-client-chat-send-button ${isSending ? "sending" : ""} ${isButtonDisabled ? "agent-client-disabled" : ""}`}
+						className={`agent-client-chat-send-button ${isSending ? "sending" : ""} ${isButtonDisabled ? "agent-client-disabled" : ""} agent-client-tool-ui-input-send-button`}
 						title={
 							!isSessionReady
 								? "Connecting..."

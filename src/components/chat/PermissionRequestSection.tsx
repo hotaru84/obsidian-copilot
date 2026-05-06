@@ -1,6 +1,6 @@
 import type AgentClientPlugin from "../../plugin";
-import { getLogger } from "../../shared/logger";
 import type { PermissionOption } from "../../domain/models/chat-message";
+import { ToolUiApprovalCard } from "./tool-ui/ToolUiApprovalCard";
 
 interface PermissionRequestSectionProps {
 	permissionRequest: {
@@ -27,59 +27,22 @@ export function PermissionRequestSection({
 	onApprovePermission,
 	onOptionSelected,
 }: PermissionRequestSectionProps) {
-	const logger = getLogger();
 	const showEmojis = plugin.settings.displaySettings.showEmojis;
 
-	const isSelected = permissionRequest.selectedOptionId !== undefined;
 	const isCancelled = permissionRequest.isCancelled === true;
 	const isActive = permissionRequest.isActive !== false;
-	const selectedOption = permissionRequest.options.find(
-		(opt) => opt.optionId === permissionRequest.selectedOptionId,
-	);
 
 	return (
-		<div className="agent-client-message-permission-request">
-			{isActive && !isSelected && !isCancelled && (
-				<div className="agent-client-message-permission-request-options">
-					{permissionRequest.options.map((option) => (
-						<button
-							key={option.optionId}
-							className={`agent-client-permission-option ${option.kind ? `agent-client-permission-kind-${option.kind}` : ""}`}
-							onClick={() => {
-								// Update local UI state immediately for feedback
-								if (onOptionSelected) {
-									onOptionSelected(option.optionId);
-								}
-
-								if (onApprovePermission) {
-									// Send response to agent via callback
-									void onApprovePermission(
-										permissionRequest.requestId,
-										option.optionId,
-									);
-								} else {
-									logger.warn(
-										"Cannot handle permission response: missing onApprovePermission callback",
-									);
-								}
-							}}
-						>
-							{option.name}
-						</button>
-					))}
-				</div>
-			)}
-			{isSelected && selectedOption && (
-				<div className="agent-client-message-permission-request-result agent-client-selected">
-					{showEmojis && "✓ "}Selected: {selectedOption.name}
-				</div>
-			)}
-			{isCancelled && (
-				<div className="agent-client-message-permission-request-result agent-client-cancelled">
-					{showEmojis && "⚠ "}Cancelled: Permission request was
-					cancelled
-				</div>
-			)}
-		</div>
+		<ToolUiApprovalCard
+			requestId={permissionRequest.requestId}
+			toolCallId={toolCallId}
+			options={permissionRequest.options}
+			selectedOptionId={permissionRequest.selectedOptionId}
+			isCancelled={isCancelled}
+			isActive={isActive}
+			showEmojis={showEmojis}
+			onApprovePermission={onApprovePermission}
+			onOptionSelected={onOptionSelected}
+		/>
 	);
 }

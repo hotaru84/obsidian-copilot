@@ -59,7 +59,10 @@ export function ErrorOverlay({
 	}, [onClose, view]);
 
 	return (
-		<div ref={overlayRef} className="agent-client-error-overlay">
+		<div
+			ref={overlayRef}
+			className="agent-client-error-overlay agent-client-tool-ui-error-overlay"
+		>
 			<div className="agent-client-error-overlay-header">
 				<h4 className="agent-client-error-overlay-title">
 					{errorInfo.title}

@@ -161,7 +161,10 @@ export function SuggestionDropdown({
 	};
 
 	return (
-		<div ref={dropdownRef} className="agent-client-mention-dropdown">
+		<div
+			ref={dropdownRef}
+			className="agent-client-mention-dropdown agent-client-tool-ui-suggestion-dropdown"
+		>
 			{items.map((item, index) => renderItem(item, index))}
 		</div>
 	);

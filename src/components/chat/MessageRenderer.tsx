@@ -63,10 +63,14 @@ export function MessageRenderer({
 	onApprovePermission,
 }: MessageRendererProps) {
 	const groups = groupContent(message.content);
+	const roleClass =
+		message.role === "user"
+			? "agent-client-message-user"
+			: "agent-client-message-assistant";
 
 	return (
 		<div
-			className={`agent-client-message-renderer ${message.role === "user" ? "agent-client-message-user" : "agent-client-message-assistant"}`}
+			className={`agent-client-message-renderer ${roleClass} agent-client-tool-ui-message`}
 		>
 			{groups.map((group, idx) => {
 				if (group.type === "images") {

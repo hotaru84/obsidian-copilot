@@ -3,6 +3,7 @@ const { useState, useRef, useEffect } = React;
 import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import { getLogger } from "../../shared/logger";
 import type AgentClientPlugin from "../../plugin";
+import { ToolUiTerminalCard } from "./tool-ui/ToolUiTerminalCard";
 
 interface TerminalRendererProps {
 	terminalId: string;
@@ -105,36 +106,13 @@ export function TerminalRenderer({
 	const showEmojis = plugin.settings.displaySettings.showEmojis;
 
 	return (
-		<div className="agent-client-terminal-renderer">
-			<div className="agent-client-terminal-renderer-header">
-				{showEmojis && "🖥️ "}Terminal {terminalId.slice(0, 8)}
-				{isRunning ? (
-					<span className="agent-client-terminal-status agent-client-running">
-						● RUNNING
-					</span>
-				) : isCancelled ? (
-					<span className="agent-client-terminal-status agent-client-cancelled">
-						● CANCELLED
-					</span>
-				) : (
-					<span className="agent-client-terminal-status agent-client-finished">
-						● FINISHED
-					</span>
-				)}
-			</div>
-
-			<div className="agent-client-terminal-renderer-output">
-				{output || (isRunning ? "Waiting for output..." : "No output")}
-			</div>
-
-			{exitStatus && (
-				<div
-					className={`agent-client-terminal-renderer-exit ${exitStatus.exitCode === 0 ? "agent-client-success" : "agent-client-error"}`}
-				>
-					Exit Code: {exitStatus.exitCode}
-					{exitStatus.signal && ` | Signal: ${exitStatus.signal}`}
-				</div>
-			)}
-		</div>
+		<ToolUiTerminalCard
+			terminalId={terminalId}
+			isRunning={isRunning}
+			isCancelled={isCancelled}
+			output={output}
+			exitStatus={exitStatus}
+			showEmojis={showEmojis}
+		/>
 	);
 }

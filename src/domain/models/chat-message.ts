@@ -114,7 +114,12 @@ export interface ToolCallLocation {
 export interface PermissionOption {
 	optionId: string;
 	name: string;
-	kind: "allow_once" | "allow_always" | "reject_once" | "reject_always";
+	kind:
+		| "allow_once"
+		| "allow_session"
+		| "allow_always"
+		| "reject_once"
+		| "reject_always";
 }
 
 /**

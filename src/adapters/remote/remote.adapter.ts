@@ -1463,8 +1463,13 @@ export class RemoteAdapter implements IChatAgentClient {
 				kind: "allow_once",
 			},
 			{
+				optionId: "allow_session",
+				name: "Allow for Session",
+				kind: "allow_session",
+			},
+			{
 				optionId: "reject_once",
-				name: "Reject Once",
+				name: "Reject",
 				kind: "reject_once",
 			},
 		];
@@ -1734,14 +1739,23 @@ export class RemoteAdapter implements IChatAgentClient {
 		}
 
 		const approved = optionId.startsWith("allow");
-		pending.resolve(
-			approved
-				? { kind: "approved" }
-				: {
-						kind: "denied-interactively-by-user",
-						feedback: "Denied from Obsidian UI",
-					},
-		);
+		let result: PermissionRequestResult;
+		switch (optionId) {
+			case "allow_once":
+				result = { kind: "approve-once" };
+				break;
+			case "allow_session":
+				result = { kind: "approve-for-session", rules: [] };
+				break;
+			case "reject_once":
+			default:
+				result = {
+					kind: "denied-interactively-by-user",
+					feedback: "Denied from Obsidian UI",
+				};
+				break;
+		}
+		pending.resolve(result);
 
 		if (this.sessionUpdateCallback) {
 			this.sessionUpdateCallback({

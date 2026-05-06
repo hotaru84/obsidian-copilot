@@ -109,7 +109,10 @@ export function ChatMessages({
 	}, [view, checkIfAtBottom]);
 
 	return (
-		<div ref={containerRef} className="agent-client-chat-view-messages">
+		<div
+			ref={containerRef}
+			className="agent-client-chat-view-messages agent-client-tool-ui-chat-messages"
+		>
 			{messages.length === 0 ? (
 				<div className="agent-client-chat-empty-state">
 					{isRestoringSession

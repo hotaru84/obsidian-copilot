@@ -69,7 +69,7 @@ export function MessageContentRenderer({
 		case "plan": {
 			const showEmojis = plugin.settings.displaySettings.showEmojis;
 			return (
-				<div className="agent-client-message-plan">
+				<div className="agent-client-message-plan agent-client-tool-ui-plan">
 					<div className="agent-client-message-plan-title">
 						{showEmojis && "📋 "}Plan
 					</div>
@@ -110,7 +110,7 @@ export function MessageContentRenderer({
 				content.requestedSchema.properties,
 			);
 			return (
-				<div className="agent-client-message-elicitation">
+				<div className="agent-client-message-elicitation agent-client-tool-ui-elicitation">
 					<div className="agent-client-message-elicitation-title">
 						Additional input required
 					</div>
