@@ -75,6 +75,7 @@ interface PendingPermissionRequest {
 	requestId: string;
 	sessionId: string;
 	toolCallId: string;
+	permissionKind: string;
 	options: PermissionOption[];
 	resolve: (result: PermissionRequestResult) => void;
 	selectedOptionId?: string;
@@ -387,6 +388,8 @@ export class RemoteAdapter implements IChatAgentClient {
 	private pendingPermissions = new Map<string, PendingPermissionRequest>();
 	private permissionQueuesBySession = new Map<string, string[]>();
 	private activePermissionRequestBySession = new Map<string, string | null>();
+	/** Tracks permission kinds approved for-session per sessionId */
+	private sessionApprovedKinds = new Map<string, Set<string>>();
 	private pendingElicitations = new Map<string, PendingElicitationRequest>();
 	private elicitationQueuesBySession = new Map<string, string[]>();
 	private activeElicitationRequestBySession = new Map<
@@ -1474,8 +1477,15 @@ export class RemoteAdapter implements IChatAgentClient {
 			},
 		];
 
+		// Check if this kind was previously approved for the session
+		const sessionApproved = this.sessionApprovedKinds
+			.get(sessionId)
+			?.has(request.kind);
+
 		if (
-			(this.autoAllowPermissionsOverride ?? this.autoAllowPermissions) &&
+			(sessionApproved ||
+				(this.autoAllowPermissionsOverride ??
+					this.autoAllowPermissions)) &&
 			this.sessionUpdateCallback
 		) {
 			this.sessionUpdateCallback({
@@ -1488,11 +1498,15 @@ export class RemoteAdapter implements IChatAgentClient {
 				permissionRequest: {
 					requestId,
 					options,
-					selectedOptionId: "allow_once",
+					selectedOptionId: sessionApproved
+						? "allow_session"
+						: "allow_once",
 					isActive: false,
 				},
 			});
-			return { kind: "approved" };
+			return sessionApproved
+				? { kind: "approve-for-session", rules: [] }
+				: { kind: "approve-once" };
 		}
 
 		return await new Promise<PermissionRequestResult>((resolve) => {
@@ -1500,6 +1514,7 @@ export class RemoteAdapter implements IChatAgentClient {
 				requestId,
 				sessionId,
 				toolCallId,
+				permissionKind: request.kind,
 				options,
 				resolve,
 			});
@@ -1683,6 +1698,7 @@ export class RemoteAdapter implements IChatAgentClient {
 		this.pendingPermissions.clear();
 		this.permissionQueuesBySession.clear();
 		this.activePermissionRequestBySession.clear();
+		this.sessionApprovedKinds.clear();
 
 		for (const pending of this.pendingElicitations.values()) {
 			pending.resolve({ action: "cancel" });
@@ -1744,9 +1760,16 @@ export class RemoteAdapter implements IChatAgentClient {
 			case "allow_once":
 				result = { kind: "approve-once" };
 				break;
-			case "allow_session":
+			case "allow_session": {
+				// Record the kind as session-approved for auto-approval of future requests
+				const kinds =
+					this.sessionApprovedKinds.get(pending.sessionId) ??
+					new Set<string>();
+				kinds.add(pending.permissionKind);
+				this.sessionApprovedKinds.set(pending.sessionId, kinds);
 				result = { kind: "approve-for-session", rules: [] };
 				break;
+			}
 			case "reject_once":
 			default:
 				result = {

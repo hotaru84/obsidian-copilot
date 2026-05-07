@@ -47,6 +47,14 @@ export interface UsePermissionReturn {
 	approveActivePermission: () => Promise<boolean>;
 
 	/**
+	 * Approve the currently active permission request for the session.
+	 * Selects "allow_session" option.
+	 * Used for hotkey handling.
+	 * @returns True if permission was approved, false if no active permission
+	 */
+	approveActivePermissionForSession: () => Promise<boolean>;
+
+	/**
 	 * Reject the currently active permission request.
 	 * Selects "reject_once" or "reject_always" option.
 	 * Used for hotkey handling.
@@ -183,6 +191,31 @@ export function usePermission(
 	}, [activePermission, approvePermission]);
 
 	/**
+	 * Approve the currently active permission for the session.
+	 */
+	const approveActivePermissionForSession =
+		useCallback(async (): Promise<boolean> => {
+			if (!activePermission || activePermission.options.length === 0) {
+				return false;
+			}
+
+			const option = selectOption(activePermission.options, [
+				"allow_session",
+				"allow_once",
+			]);
+
+			if (!option) {
+				return false;
+			}
+
+			await approvePermission(
+				activePermission.requestId,
+				option.optionId,
+			);
+			return true;
+		}, [activePermission, approvePermission]);
+
+	/**
 	 * Reject the currently active permission.
 	 */
 	const rejectActivePermission = useCallback(async (): Promise<boolean> => {
@@ -218,6 +251,7 @@ export function usePermission(
 		errorInfo,
 		approvePermission,
 		approveActivePermission,
+		approveActivePermissionForSession,
 		rejectActivePermission,
 		clearError,
 	};

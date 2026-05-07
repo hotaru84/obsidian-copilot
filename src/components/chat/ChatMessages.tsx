@@ -1,7 +1,11 @@
 import * as React from "react";
 const { useRef, useState, useEffect, useCallback } = React;
 
-import type { ChatMessage } from "../../domain/models/chat-message";
+import type {
+	ChatMessage,
+	ElicitationResponse,
+} from "../../domain/models/chat-message";
+import type { SessionUsageMetrics } from "../../domain/models/chat-session";
 import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import type AgentClientPlugin from "../../plugin";
 import type { IChatViewHost } from "./types";
@@ -28,11 +32,15 @@ export interface ChatMessagesProps {
 	view: IChatViewHost;
 	/** Agent client for terminal operations */
 	acpClient?: IChatAgentClient;
+	/** Current session ID (required for usage metrics) */
+	sessionId?: string | null;
 	/** Callback to approve a permission request */
 	onApprovePermission?: (
 		requestId: string,
 		optionId: string,
 	) => Promise<void>;
+	/** Callback to submit elicitation responses */
+	onSubmitElicitation?: (response: ElicitationResponse) => Promise<void>;
 }
 
 /**
@@ -53,10 +61,17 @@ export function ChatMessages({
 	plugin,
 	view,
 	acpClient,
+	sessionId,
 	onApprovePermission,
+	onSubmitElicitation,
 }: ChatMessagesProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [isAtBottom, setIsAtBottom] = useState(true);
+	const prevAssistantPhasesRef = useRef<Map<string, string>>(new Map());
+	const [responseDurationsByMessageId, setResponseDurationsByMessageId] =
+		useState<Record<string, number>>({});
+	const [responseMetricsByMessageId, setResponseMetricsByMessageId] =
+		useState<Record<string, SessionUsageMetrics | null>>({});
 
 	/**
 	 * Check if the scroll position is near the bottom.
@@ -108,6 +123,72 @@ export function ChatMessages({
 		checkIfAtBottom();
 	}, [view, checkIfAtBottom]);
 
+	// Capture response duration and usage metrics when an assistant message transitions
+	// from streaming to completed.
+	useEffect(() => {
+		const completedTransitions: ChatMessage[] = [];
+		const nextPhases = new Map<string, string>();
+
+		for (const message of messages) {
+			if (message.role !== "assistant") {
+				continue;
+			}
+
+			const phase = message.streamingPhase ?? "completed";
+			nextPhases.set(message.id, phase);
+
+			const previousPhase = prevAssistantPhasesRef.current.get(
+				message.id,
+			);
+			if (previousPhase === "streaming" && phase === "completed") {
+				completedTransitions.push(message);
+			}
+		}
+
+		prevAssistantPhasesRef.current = nextPhases;
+
+		if (completedTransitions.length === 0) {
+			return;
+		}
+
+		setResponseDurationsByMessageId((prev) => {
+			const next = { ...prev };
+			for (const message of completedTransitions) {
+				const durationMs = Math.max(
+					0,
+					Date.now() - message.timestamp.getTime(),
+				);
+				next[message.id] = durationMs;
+			}
+			return next;
+		});
+
+		if (!acpClient || !sessionId) {
+			return;
+		}
+
+		void acpClient
+			.getUsageMetrics(sessionId)
+			.then((metrics) => {
+				setResponseMetricsByMessageId((prev) => {
+					const next = { ...prev };
+					for (const message of completedTransitions) {
+						next[message.id] = metrics;
+					}
+					return next;
+				});
+			})
+			.catch(() => {
+				setResponseMetricsByMessageId((prev) => {
+					const next = { ...prev };
+					for (const message of completedTransitions) {
+						next[message.id] = null;
+					}
+					return next;
+				});
+			});
+	}, [acpClient, messages, sessionId]);
+
 	return (
 		<div
 			ref={containerRef}
@@ -129,6 +210,13 @@ export function ChatMessages({
 							message={message}
 							plugin={plugin}
 							acpClient={acpClient}
+							responseDurationMs={
+								responseDurationsByMessageId[message.id]
+							}
+							responseUsageMetrics={
+								responseMetricsByMessageId[message.id]
+							}
+							onSubmitElicitation={onSubmitElicitation}
 							onApprovePermission={onApprovePermission}
 						/>
 					))}

@@ -1,5 +1,8 @@
 import * as React from "react";
-import type { MessageContent } from "../../domain/models/chat-message";
+import type {
+	ElicitationResponse,
+	MessageContent,
+} from "../../domain/models/chat-message";
 import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import type AgentClientPlugin from "../../plugin";
 import { MarkdownTextRenderer } from "./MarkdownTextRenderer";
@@ -7,6 +10,7 @@ import { CollapsibleThought } from "./CollapsibleThought";
 import { TerminalRenderer } from "./TerminalRenderer";
 import { TextWithMentions } from "./TextWithMentions";
 import { ToolCallRenderer } from "./ToolCallRenderer";
+import { ToolUiElicitationCard } from "./tool-ui/ToolUiElicitationCard";
 
 interface MessageContentRendererProps {
 	content: MessageContent;
@@ -20,6 +24,8 @@ interface MessageContentRendererProps {
 		requestId: string,
 		optionId: string,
 	) => Promise<void>;
+	/** Callback to submit elicitation responses */
+	onSubmitElicitation?: (response: ElicitationResponse) => Promise<void>;
 }
 
 export function MessageContentRenderer({
@@ -30,7 +36,13 @@ export function MessageContentRenderer({
 	messageStreamingPhase,
 	acpClient,
 	onApprovePermission,
+	onSubmitElicitation,
 }: MessageContentRendererProps) {
+	const useToolUiRefresh =
+		((plugin.settings.displaySettings as Record<string, unknown>)
+			.useToolUiRefresh as boolean) === true;
+	const showEmojis = plugin.settings.displaySettings.showEmojis;
+
 	switch (content.type) {
 		case "text":
 			// User messages: render with mention support
@@ -67,7 +79,6 @@ export function MessageContentRenderer({
 			);
 
 		case "plan": {
-			const showEmojis = plugin.settings.displaySettings.showEmojis;
 			return (
 				<div className="agent-client-message-plan agent-client-tool-ui-plan">
 					<div className="agent-client-message-plan-title">
@@ -106,6 +117,21 @@ export function MessageContentRenderer({
 			);
 
 		case "elicitation": {
+			if (useToolUiRefresh) {
+				return (
+					<ToolUiElicitationCard
+						requestId={content.requestId}
+						message={content.message}
+						requestedSchema={content.requestedSchema}
+						status={content.status}
+						response={content.response}
+						error={content.error}
+						showEmojis={showEmojis}
+						onSubmit={onSubmitElicitation}
+					/>
+				);
+			}
+
 			const propertyEntries = Object.entries(
 				content.requestedSchema.properties,
 			);

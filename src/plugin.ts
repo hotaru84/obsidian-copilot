@@ -951,6 +951,23 @@ export default class AgentClientPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "approve-active-permission-for-session",
+			name: "Approve active permission for session",
+			callback: async () => {
+				const focusedId = this.lastActiveChatViewId;
+				const isFloatingFocused =
+					focusedId?.startsWith("floating-chat-");
+				if (!isFloatingFocused) {
+					await this.activateView();
+				}
+				this.app.workspace.trigger(
+					"agent-client:approve-active-permission-for-session" as "quit",
+					this.lastActiveChatViewId,
+				);
+			},
+		});
+
+		this.addCommand({
 			id: "reject-active-permission",
 			name: "Reject active permission",
 			callback: async () => {

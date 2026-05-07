@@ -260,14 +260,50 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-message-tool-call.agent-client-tool-ui-tool-call {
-	padding: 12px;
-	border-radius: 10px;
+	margin-top: 10px;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.agent-client-message-tool-call-header {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.agent-client-message-tool-call-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 15px;
+	font-weight: 700;
+}
+
+.agent-client-message-tool-call-command {
+	margin: 0;
+}
+
+.agent-client-message-tool-call-command code {
+	padding: 8px 10px;
 	border: 1px solid var(--background-modifier-border);
-	background: linear-gradient(
-		180deg,
-		var(--background-secondary) 0%,
-		var(--background-primary) 100%
-	);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--background-primary) 90%, black 10%);
+}
+
+.agent-client-message-tool-call-locations {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.agent-client-message-tool-call-status {
+	font-size: 12px;
+	color: var(--text-faint);
 }
 
 /* Plan */
@@ -493,71 +529,109 @@ If your plugin does not need CSS, delete this file.
 
 /* ===== Tool UI (Experimental) - Approval Card ===== */
 .agent-client-tool-ui-approval-card {
-	margin-top: 6px;
-	padding: 12px;
+	margin-top: 0;
+	padding: 18px 20px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	background: linear-gradient(
-		180deg,
-		var(--background-secondary) 0%,
-		var(--background-primary) 100%
-	);
+	border-radius: 24px;
+	background: var(--background-primary);
+	box-shadow:
+		0 1px 2px rgba(15, 23, 42, 0.04),
+		0 10px 30px rgba(15, 23, 42, 0.06);
 	max-width: 100%;
 	min-width: 0;
 	box-sizing: border-box;
 }
 
 .agent-client-tool-ui-approval-card-header {
-	margin-bottom: 10px;
+	margin-bottom: 14px;
 }
 
 .agent-client-tool-ui-approval-card-title {
-	font-size: 13px;
+	font-size: 15px;
 	font-weight: 700;
 	color: var(--text-normal);
 }
 
 .agent-client-tool-ui-approval-card-subtitle {
-	margin-top: 4px;
-	font-size: 12px;
+	margin-top: 6px;
+	font-size: 13px;
 	color: var(--text-muted);
+	line-height: 1.5;
 }
 
 .agent-client-tool-ui-approval-card-actions {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 8px;
-	justify-content: flex-end;
+	flex-direction: column;
+	gap: 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 18px;
+	overflow: hidden;
+	background: var(--background-primary);
 }
 
 .agent-client-tool-ui-approval-button {
-	padding: 8px 14px !important;
-	border: 1px solid var(--background-modifier-border) !important;
-	border-radius: 8px !important;
+	padding: 18px 18px !important;
+	border: 0 !important;
+	border-bottom: 1px solid var(--background-modifier-border) !important;
+	border-radius: 0 !important;
 	background-color: var(--background-primary) !important;
 	color: var(--text-normal) !important;
-	font-size: 12px;
+	font-size: 14px;
 	font-weight: 600;
 	cursor: pointer;
 	word-break: break-word;
 	overflow-wrap: break-word;
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	width: 100%;
+	text-align: left;
 	transition:
-		transform 0.12s ease,
-		box-shadow 0.12s ease,
-		background-color 0.12s ease;
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.agent-client-tool-ui-approval-button:last-child {
+	border-bottom: 0 !important;
+}
+
+.agent-client-tool-ui-approval-button-check {
+	width: 18px;
+	height: 18px;
+	margin-top: 2px;
+	border: 2px solid color-mix(in srgb, var(--text-muted) 55%, transparent);
+	border-radius: 6px;
+	background: transparent;
+	flex-shrink: 0;
+}
+
+.agent-client-tool-ui-approval-button-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.agent-client-tool-ui-approval-button-label {
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.agent-client-tool-ui-approval-button-description {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--text-muted);
+	line-height: 1.45;
 }
 
 .agent-client-tool-ui-approval-button:hover {
-	transform: translateY(-1px);
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-	background-color: var(--background-modifier-hover) !important;
+	background-color: var(--background-secondary) !important;
 }
 
 .agent-client-tool-ui-approval-button:disabled {
-	opacity: 0.55;
+	opacity: 0.75;
 	cursor: not-allowed;
-	transform: none;
-	box-shadow: none;
 }
 
 .agent-client-tool-ui-kind-allow_always {
@@ -577,12 +651,16 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-tool-ui-approval-receipt {
-	padding: 8px;
-	border-radius: 8px;
-	font-size: 12px;
+	padding: 12px 14px;
+	border-radius: 14px;
+	font-size: 13px;
 	font-weight: 600;
-	background-color: var(--background-primary);
-	border: 1px dashed var(--background-modifier-border);
+	background-color: color-mix(
+		in srgb,
+		var(--background-secondary) 75%,
+		var(--background-primary) 25%
+	);
+	border: 1px solid var(--background-modifier-border);
 }
 
 .agent-client-tool-ui-approval-receipt-selected {
@@ -591,6 +669,209 @@ If your plugin does not need CSS, delete this file.
 
 .agent-client-tool-ui-approval-receipt-cancelled {
 	color: var(--color-orange);
+}
+
+/* ===== Tool UI (Experimental) - Elicitation Card ===== */
+.agent-client-tool-ui-elicitation-card {
+	margin-top: 6px;
+	padding: 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	background: linear-gradient(
+		180deg,
+		var(--background-secondary) 0%,
+		var(--background-primary) 100%
+	);
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+}
+
+.agent-client-tool-ui-elicitation-header {
+	margin-bottom: 10px;
+}
+
+.agent-client-tool-ui-elicitation-title {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.agent-client-tool-ui-elicitation-subtitle {
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+	word-break: break-word;
+}
+
+.agent-client-tool-ui-elicitation-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.agent-client-tool-ui-elicitation-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.agent-client-tool-ui-elicitation-label {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.agent-client-tool-ui-elicitation-required {
+	margin-left: 4px;
+	color: var(--text-accent);
+}
+
+.agent-client-tool-ui-elicitation-description {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.agent-client-tool-ui-elicitation-input {
+	padding: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 12px;
+}
+
+.agent-client-tool-ui-elicitation-checkbox-row {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--text-normal);
+}
+
+.agent-client-tool-ui-elicitation-error {
+	font-size: 11px;
+	color: var(--color-red);
+}
+
+.agent-client-tool-ui-elicitation-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.agent-client-tool-ui-elicitation-button {
+	padding: 8px 14px !important;
+	border: 1px solid var(--background-modifier-border) !important;
+	border-radius: 8px !important;
+	background-color: var(--background-primary) !important;
+	color: var(--text-normal) !important;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	transition:
+		transform 0.12s ease,
+		box-shadow 0.12s ease,
+		background-color 0.12s ease;
+}
+
+.agent-client-tool-ui-elicitation-button:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+	background-color: var(--background-modifier-hover) !important;
+}
+
+.agent-client-tool-ui-elicitation-button:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+	transform: none;
+	box-shadow: none;
+}
+
+.agent-client-tool-ui-elicitation-button-submit {
+	border-color: var(--text-accent) !important;
+}
+
+.agent-client-tool-ui-elicitation-receipt {
+	padding: 8px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	background-color: var(--background-primary);
+	border: 1px dashed var(--background-modifier-border);
+}
+
+.agent-client-tool-ui-elicitation-receipt-title {
+	color: var(--text-accent);
+}
+
+.agent-client-tool-ui-elicitation-receipt-line {
+	margin-top: 6px;
+	color: var(--text-normal);
+	font-weight: 500;
+}
+
+.agent-client-tool-ui-elicitation-receipt-fields {
+	margin-top: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.agent-client-tool-ui-elicitation-receipt-field {
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-muted);
+	word-break: break-word;
+	display: flex;
+	gap: 6px;
+}
+
+.agent-client-tool-ui-elicitation-receipt-field-key {
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.agent-client-tool-ui-elicitation-receipt-field-key::after {
+	content: ":";
+}
+
+.agent-client-tool-ui-elicitation-receipt-field-value {
+	color: var(--text-normal);
+	word-break: break-word;
+}
+
+.agent-client-tool-ui-elicitation-receipt--completed
+	.agent-client-tool-ui-elicitation-receipt-title {
+	color: var(--color-green);
+}
+
+.agent-client-tool-ui-elicitation-receipt--declined
+	.agent-client-tool-ui-elicitation-receipt-title,
+.agent-client-tool-ui-elicitation-receipt--cancelled
+	.agent-client-tool-ui-elicitation-receipt-title {
+	color: var(--text-muted);
+}
+
+.agent-client-tool-ui-elicitation-error-banner {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 10px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	font-size: 12px;
+	background-color: rgba(var(--color-red-rgb, 255, 80, 80), 0.08);
+	border: 1px solid var(--color-red);
+	color: var(--color-red);
+}
+
+.agent-client-tool-ui-elicitation-error-banner-hint {
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--text-muted);
 }
 
 /* ===== Tool UI (Experimental) - Terminal Card ===== */
@@ -1036,7 +1317,7 @@ If your plugin does not need CSS, delete this file.
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 8px;
+	border-radius: 20px;
 	background-color: var(--background-primary);
 	overflow: hidden;
 	transition: box-shadow 0.15s ease;
@@ -1441,112 +1722,128 @@ If your plugin does not need CSS, delete this file.
 
 /* ===== Tool UI (Experimental) - Chat Input ===== */
 .agent-client-chat-input-container.agent-client-tool-ui-chat-input {
-	padding: 10px;
-	background:
-		radial-gradient(
-			120% 140% at 100% 100%,
-			rgba(34, 197, 94, 0.08) 0%,
-			rgba(34, 197, 94, 0) 55%
-		),
-		radial-gradient(
-			100% 140% at 0% 100%,
-			rgba(14, 165, 233, 0.09) 0%,
-			rgba(14, 165, 233, 0) 52%
-		);
+	padding: 8px 10px 10px;
+	background: transparent;
 }
 
 .agent-client-chat-input-box.agent-client-tool-ui-chat-input-box {
-	border-radius: 16px;
-	border-color: var(--interactive-accent);
-	background: linear-gradient(
-		180deg,
-		var(--background-primary) 0%,
-		var(--background-secondary) 100%
+	background: color-mix(
+		in srgb,
+		var(--background-secondary) 85%,
+		var(--background-primary) 15%
 	);
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-	transition:
-		box-shadow 0.2s ease,
-		transform 0.2s ease;
+	transition: border-color 0.15s ease;
 }
 
 .agent-client-chat-input-box.agent-client-tool-ui-chat-input-box:focus-within {
-	box-shadow:
-		0 0 0 2px var(--interactive-accent),
-		0 10px 26px rgba(0, 0, 0, 0.14);
-	transform: translateY(-1px);
+	border-color: color-mix(
+		in srgb,
+		var(--text-muted) 52%,
+		var(--background-primary) 48%
+	);
 }
 
 .agent-client-chat-input-textarea.agent-client-tool-ui-chat-input-textarea {
-	min-height: 88px;
-	padding: 14px 14px 10px;
+	min-height: 32px;
+	max-height: 200px;
+	padding: 10px 18px;
 	font-size: calc(var(--ac-chat-font-size) + 1px);
 	line-height: 1.5;
 }
 
 .agent-client-chat-input-actions.agent-client-tool-ui-chat-input-actions {
-	padding: 6px 12px 10px;
+	padding: 8px 18px 10px;
 	gap: 10px;
-	border-top: 1px solid var(--background-modifier-border);
-	background: linear-gradient(
-		180deg,
-		rgba(0, 0, 0, 0) 0%,
-		rgba(0, 0, 0, 0.03) 100%
-	);
+	border-top: 0;
+	background: transparent;
 }
 
 .agent-client-tool-ui-selector-chip {
-	height: 24px;
-	padding: 0 8px;
+	height: 30px;
+	padding: 0 12px;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 999px;
-	background-color: var(--background-primary);
+	background-color: color-mix(
+		in srgb,
+		var(--background-primary) 88%,
+		transparent
+	);
 }
 
 .agent-client-tool-ui-selector-chip:hover {
-	border-color: var(--interactive-accent);
+	border-color: var(--text-faint);
 	background-color: var(--background-secondary);
 }
 
 .agent-client-tool-ui-input-icon-button {
-	width: 24px;
-	height: 24px;
+	width: 30px;
+	height: 30px;
 	border-radius: 999px !important;
-	border: 1px solid var(--background-modifier-border) !important;
+	border: 0 !important;
+	background: transparent !important;
 }
 
 .agent-client-tool-ui-input-icon-button:hover {
-	border-color: var(--interactive-accent) !important;
+	background: color-mix(
+		in srgb,
+		var(--background-modifier-hover) 86%,
+		transparent
+	) !important;
+}
+
+.agent-client-tool-menu-button.agent-client-tool-ui-input-icon-button::before {
+	width: 22px;
+	height: 22px;
+	background-color: var(--text-normal);
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>');
 }
 
 .agent-client-chat-send-button.agent-client-tool-ui-input-send-button {
-	width: 28px;
-	height: 28px;
+	width: 40px;
+	height: 40px;
 	border-radius: 999px !important;
-	border: 1px solid var(--background-modifier-border) !important;
-	background-color: var(--background-primary) !important;
+	border: 0 !important;
+	background-color: var(--interactive-accent) !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .agent-client-chat-send-button.agent-client-tool-ui-input-send-button:hover {
-	border-color: var(--interactive-accent) !important;
-	background-color: var(--background-secondary) !important;
+	background-color: color-mix(in srgb, var(--interactive-accent) 90%, transparent) !important;
+}
+
+.agent-client-chat-send-button.agent-client-tool-ui-input-send-button
+	svg.agent-client-icon-active,
+.agent-client-chat-send-button.agent-client-tool-ui-input-send-button
+	svg.agent-client-icon-inactive,
+.agent-client-chat-send-button.agent-client-tool-ui-input-send-button
+	svg.agent-client-icon-sending {
+	color: #f8fafc;
 }
 
 @media (max-width: 700px) {
 	.agent-client-chat-input-container.agent-client-tool-ui-chat-input {
-		padding: 8px;
+		padding: 8px 8px 10px;
 	}
 
 	.agent-client-chat-input-box.agent-client-tool-ui-chat-input-box {
-		border-radius: 12px;
+		border-radius: 28px;
 	}
 
 	.agent-client-chat-input-actions.agent-client-tool-ui-chat-input-actions {
 		gap: 6px;
-		padding: 6px 10px 8px;
+		padding: 8px 12px 10px;
 	}
 
 	.agent-client-tool-ui-selector-chip {
 		max-width: 98px;
+	}
+
+	.agent-client-chat-send-button.agent-client-tool-ui-input-send-button {
+		width: 36px;
+		height: 36px;
 	}
 }
 
@@ -2069,46 +2366,40 @@ If your plugin does not need CSS, delete this file.
 .agent-client-chat-view-messages.agent-client-tool-ui-chat-messages {
 	padding: 18px 14px;
 	gap: 8px;
-	background:
-		radial-gradient(
-			100% 120% at 0% 0%,
-			rgba(14, 165, 233, 0.08) 0%,
-			rgba(14, 165, 233, 0) 60%
-		),
-		radial-gradient(
-			120% 140% at 100% 100%,
-			rgba(34, 197, 94, 0.06) 0%,
-			rgba(34, 197, 94, 0) 55%
-		);
+	background: color-mix(
+		in srgb,
+		var(--background-secondary) 46%,
+		var(--background-primary) 54%
+	);
 }
 
 .agent-client-message-renderer.agent-client-tool-ui-message {
 	padding: 0;
-	margin: 2px 0;
-	border-radius: 14px;
-	border: 1px solid var(--background-modifier-border);
-	backdrop-filter: blur(2px);
+	margin: 6px 0;
+	border-radius: 0;
+	border: 0;
+	box-shadow: none;
 }
 
 .agent-client-message-renderer.agent-client-tool-ui-message.agent-client-message-user {
-	padding: 10px 14px;
-	background: linear-gradient(
-		125deg,
-		rgba(14, 165, 233, 0.18) 0%,
-		rgba(14, 165, 233, 0.06) 45%,
-		var(--background-primary) 100%
+	align-self: flex-end;
+	width: fit-content;
+	max-width: min(75%, 640px);
+	padding: 6px 14px;
+	border-radius: 18px;
+	border: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 75%, transparent);
+	background: color-mix(
+		in srgb,
+		var(--background-primary) 50%,
+		var(--background-secondary) 50%
 	);
-	border-color: var(--background-modifier-border);
 }
 
 .agent-client-message-renderer.agent-client-tool-ui-message.agent-client-message-assistant {
-	padding: 10px 14px;
-	background: linear-gradient(
-		180deg,
-		var(--background-primary) 0%,
-		var(--background-secondary) 100%
-	);
-	border-color: var(--background-modifier-border);
+	align-self: stretch;
+	padding: 0 6px;
+	background: transparent;
 }
 
 .agent-client-message-renderer.agent-client-tool-ui-message
@@ -2116,7 +2407,138 @@ If your plugin does not need CSS, delete this file.
 .agent-client-message-renderer.agent-client-tool-ui-message
 	.agent-client-markdown-text-renderer {
 	margin: 0;
-	line-height: 1.6;
+	line-height: 1.5;
+}
+
+.agent-client-message-response-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.agent-client-message-response-action-button {
+	width: 28px;
+	height: 28px;
+	padding: 0 !important;
+	border-radius: 6px !important;
+	background: transparent !important;
+	color: var(--text-muted) !important;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.agent-client-message-response-action-button:hover {
+	background: var(--background-secondary) !important;
+	color: var(--text-normal) !important;
+}
+
+.agent-client-message-response-action-button::before {
+	content: '';
+	width: 16px;
+	height: 16px;
+	display: block;
+	background-color: currentColor;
+	-webkit-mask-size: contain;
+	mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: center;
+	mask-position: center;
+}
+
+.agent-client-response-copy-button::before {
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>');
+}
+
+.agent-client-response-save-button::before {
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>');
+}
+
+.agent-client-message-response-stats {
+	position: relative;
+	margin-left: auto;
+}
+
+.agent-client-message-response-time {
+	width: 28px;
+	height: 28px;
+	padding: 0 !important;
+	border: 1px solid var(--background-modifier-border) !important;
+	border-radius: 6px !important;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0;
+	background: transparent !important;
+	color: var(--text-muted) !important;
+	cursor: pointer;
+	transition:
+		background-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.agent-client-message-response-time:hover {
+	background: var(--background-secondary) !important;
+	color: var(--text-normal) !important;
+}
+
+.agent-client-message-response-time::before {
+	content: '';
+	width: 16px;
+	height: 16px;
+	display: block;
+	background-color: currentColor;
+	-webkit-mask-size: contain;
+	mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: center;
+	mask-position: center;
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>');
+}
+	background: var(--background-primary) !important;
+	color: var(--text-muted) !important;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.agent-client-message-response-stats-popover {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 6px);
+	width: 220px;
+	padding: 10px;
+	border-radius: 12px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+	z-index: 20;
+}
+
+.agent-client-message-response-stats-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	font-size: 12px;
+	padding: 3px 0;
+	color: var(--text-muted);
+}
+
+.agent-client-message-response-stats-row strong {
+	color: var(--text-normal);
+	font-weight: 600;
 }
 
 .agent-client-message-plan.agent-client-tool-ui-plan {
@@ -2216,15 +2638,20 @@ If your plugin does not need CSS, delete this file.
 
 /* ===== Tool UI: Suggestion Dropdown ===== */
 .agent-client-mention-dropdown.agent-client-tool-ui-suggestion-dropdown {
-	border-radius: 12px;
+	left: 0;
+	right: auto;
+	width: min(520px, calc(100vw - 28px));
+	max-height: 280px;
+	border-radius: 22px;
 	border: 1px solid var(--background-modifier-border);
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+	box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
 	background: var(--background-primary);
 	overflow: hidden;
 }
 
 .agent-client-mention-dropdown.agent-client-tool-ui-suggestion-dropdown
 	.agent-client-mention-dropdown-item {
+	padding: 12px 18px;
 	border-radius: 0;
 	transition: background 0.12s;
 }
@@ -2246,18 +2673,43 @@ If your plugin does not need CSS, delete this file.
 
 .agent-client-mention-dropdown.agent-client-tool-ui-suggestion-dropdown
 	.agent-client-mention-dropdown-item.agent-client-selected {
-	background: var(--background-secondary);
+	background: color-mix(
+		in srgb,
+		var(--background-secondary) 82%,
+		transparent
+	);
 }
 
 .agent-client-mention-dropdown.agent-client-tool-ui-suggestion-dropdown
 	.agent-client-mention-dropdown-item-name {
-	font-weight: 500;
+	font-size: 16px;
+	font-weight: 600;
 	color: var(--text-normal);
+}
+
+/* ===== Tool UI: Command Chip ===== */
+.agent-client-command-chip {
+	display: inline-block;
+	padding: 2px 8px;
+	margin-right: 6px;
+	border-radius: 6px;
+	background: color-mix(
+		in srgb,
+		var(--background-secondary) 60%,
+		transparent
+	);
+	border: 1px solid var(--background-modifier-border);
+	font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-muted);
+	vertical-align: middle;
+	white-space: nowrap;
 }
 
 .agent-client-mention-dropdown.agent-client-tool-ui-suggestion-dropdown
 	.agent-client-mention-dropdown-item-path {
-	font-size: 11px;
+	font-size: 14px;
 	color: var(--text-muted);
 }
 
@@ -2267,12 +2719,44 @@ If your plugin does not need CSS, delete this file.
 	}
 
 	.agent-client-message-renderer.agent-client-tool-ui-message {
-		border-radius: 12px;
+		padding: 0 4px;
+		border-radius: 16px;
 	}
 
 	.agent-client-message-renderer.agent-client-tool-ui-message.agent-client-message-user,
 	.agent-client-message-renderer.agent-client-tool-ui-message.agent-client-message-assistant {
-		padding: 8px 10px;
+		padding: 0 4px;
+	}
+
+	.agent-client-message-renderer.agent-client-tool-ui-message.agent-client-message-user {
+		max-width: 88%;
+		padding: 6px 12px;
+		border-radius: 16px;
+	}
+
+	.agent-client-tool-ui-approval-card {
+		padding: 16px;
+		border-radius: 20px;
+	}
+
+	.agent-client-tool-ui-approval-button {
+		padding: 14px 14px !important;
+		gap: 12px;
+	}
+
+	.agent-client-message-response-actions {
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	.agent-client-message-response-stats {
+		margin-right: 0;
+	}
+
+	.agent-client-message-response-stats-popover {
+		left: 0;
+		right: auto;
+		width: min(240px, calc(100vw - 44px));
 	}
 }
 

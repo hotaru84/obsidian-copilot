@@ -259,6 +259,7 @@ function FloatingChatComponent({
 		handleSetRemoteAgent,
 		handleCompactHistory,
 		handleTruncateHistory,
+		handleSubmitElicitation,
 		inputValue,
 		setInputValue,
 		attachedImages,
@@ -754,6 +755,29 @@ function FloatingChatComponent({
 			},
 		);
 
+		const approveSessionRef = (
+			workspace as unknown as {
+				on: (
+					name: string,
+					callback: CustomEventCallback,
+				) => ReturnType<typeof workspace.on>;
+			}
+		).on(
+			"agent-client:approve-active-permission-for-session",
+			(targetViewId?: string) => {
+				if (targetViewId && targetViewId !== viewId) return;
+				void (async () => {
+					const success =
+						await permission.approveActivePermissionForSession();
+					if (!success) {
+						new Notice(
+							"[Agent Client] no active permission request",
+						);
+					}
+				})();
+			},
+		);
+
 		const rejectRef = (
 			workspace as unknown as {
 				on: (
@@ -790,12 +814,14 @@ function FloatingChatComponent({
 
 		return () => {
 			workspace.offref(approveRef);
+			workspace.offref(approveSessionRef);
 			workspace.offref(rejectRef);
 			workspace.offref(cancelRef);
 		};
 	}, [
 		plugin.app.workspace,
 		permission.approveActivePermission,
+		permission.approveActivePermissionForSession,
 		permission.rejectActivePermission,
 		handleStopGeneration,
 		viewId,
@@ -879,6 +905,7 @@ function FloatingChatComponent({
 						view={viewHost}
 						acpClient={acpClientRef.current}
 						onApprovePermission={permission.approvePermission}
+						onSubmitElicitation={handleSubmitElicitation}
 					/>
 				</div>
 

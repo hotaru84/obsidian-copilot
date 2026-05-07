@@ -1,6 +1,23 @@
 import * as React from "react";
 import type { PermissionOption } from "../../../domain/models/chat-message";
 
+function getOptionDescription(option: PermissionOption): string {
+	switch (option.kind) {
+		case "allow_once":
+			return "Allow this action once";
+		case "allow_session":
+			return "Allow for the current session";
+		case "allow_always":
+			return "Always allow this action";
+		case "reject_once":
+			return "Reject this action once";
+		case "reject_always":
+			return "Always reject this action";
+		default:
+			return "Choose how this action should proceed";
+	}
+}
+
 interface ToolUiApprovalCardProps {
 	requestId: string;
 	toolCallId: string;
@@ -58,6 +75,7 @@ export function ToolUiApprovalCard({
 							key={option.optionId}
 							type="button"
 							className={`agent-client-tool-ui-approval-button ${option.kind ? `agent-client-tool-ui-kind-${option.kind}` : ""}`}
+							data-selected={selectedOptionId === option.optionId}
 							disabled={!isInteractive}
 							onClick={() => {
 								onOptionSelected?.(option.optionId);
@@ -69,7 +87,15 @@ export function ToolUiApprovalCard({
 								}
 							}}
 						>
-							{option.name}
+							<span className="agent-client-tool-ui-approval-button-check" />
+							<span className="agent-client-tool-ui-approval-button-copy">
+								<span className="agent-client-tool-ui-approval-button-label">
+									{option.name}
+								</span>
+								<span className="agent-client-tool-ui-approval-button-description">
+									{getOptionDescription(option)}
+								</span>
+							</span>
 						</button>
 					))}
 				</div>

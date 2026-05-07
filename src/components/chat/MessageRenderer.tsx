@@ -1,8 +1,11 @@
 import * as React from "react";
+import { Notice, TFile, normalizePath } from "obsidian";
 import type {
 	ChatMessage,
+	ElicitationResponse,
 	MessageContent,
 } from "../../domain/models/chat-message";
+import type { SessionUsageMetrics } from "../../domain/models/chat-session";
 import type { IChatAgentClient } from "../../domain/ports/chat-agent-client.port";
 import type AgentClientPlugin from "../../plugin";
 import { MessageContentRenderer } from "./MessageContentRenderer";
@@ -16,6 +19,127 @@ interface MessageRendererProps {
 		requestId: string,
 		optionId: string,
 	) => Promise<void>;
+	/** Callback to submit elicitation responses */
+	onSubmitElicitation?: (response: ElicitationResponse) => Promise<void>;
+	/** Wall-clock duration for this completed assistant response */
+	responseDurationMs?: number;
+	/** Usage metrics snapshot captured when this response completed */
+	responseUsageMetrics?: SessionUsageMetrics | null;
+}
+
+function formatDurationLabel(durationMs?: number): string {
+	if (durationMs === undefined) return "--";
+	if (durationMs < 1000) {
+		return `${durationMs}ms`;
+	}
+	const seconds = durationMs / 1000;
+	if (seconds < 60) {
+		return `${seconds.toFixed(1)}s`;
+	}
+	const minutes = Math.floor(seconds / 60);
+	const remain = Math.floor(seconds % 60);
+	return `${minutes}m ${remain}s`;
+}
+
+function toAssistantResponseMarkdown(message: ChatMessage): string {
+	const lines: string[] = [];
+
+	for (const item of message.content) {
+		switch (item.type) {
+			case "text":
+			case "text_with_context":
+				lines.push(item.text.trim());
+				break;
+			case "plan":
+				lines.push("## Plan");
+				for (const entry of item.entries) {
+					lines.push(`- [${entry.status}] ${entry.content}`);
+				}
+				break;
+			case "tool_call":
+				lines.push(`## Tool: ${item.title || "Tool call"}`);
+				lines.push(`Status: ${item.status}`);
+				if (
+					item.rawInput &&
+					typeof item.rawInput.command === "string"
+				) {
+					lines.push(`Command: ${item.rawInput.command}`);
+				}
+				break;
+			case "image":
+				lines.push("![Attached image](embedded)");
+				break;
+			default:
+				break;
+		}
+	}
+
+	const body = lines
+		.filter((line) => line.length > 0)
+		.join("\n\n")
+		.trim();
+	return body.length > 0 ? body : "(empty response)";
+}
+
+async function ensureFolderExists(
+	plugin: AgentClientPlugin,
+	folderPath: string,
+): Promise<void> {
+	const normalized = normalizePath(folderPath).replace(/^\/+|\/+$/g, "");
+	if (!normalized) {
+		return;
+	}
+
+	const segments = normalized.split("/");
+	let current = "";
+
+	for (const segment of segments) {
+		current = current ? `${current}/${segment}` : segment;
+		if (!plugin.app.vault.getAbstractFileByPath(current)) {
+			await plugin.app.vault.createFolder(current);
+		}
+	}
+}
+
+function formatStatsRows(
+	metrics: SessionUsageMetrics | null | undefined,
+	responseDurationMs?: number,
+): Array<{ key: string; value: string }> {
+	if (!metrics) {
+		return [{ key: "Usage metrics", value: "Unavailable" }];
+	}
+
+	const speed =
+		responseDurationMs && responseDurationMs > 0
+			? (
+					(metrics.lastCallOutputTokens / responseDurationMs) *
+					1000
+				).toFixed(1)
+			: "-";
+
+	return [
+		{ key: "Total", value: formatDurationLabel(responseDurationMs) },
+		{
+			key: "API total",
+			value: formatDurationLabel(metrics.totalApiDurationMs),
+		},
+		{
+			key: "Input tokens",
+			value: `${metrics.lastCallInputTokens}`,
+		},
+		{
+			key: "Output tokens",
+			value: `${metrics.lastCallOutputTokens}`,
+		},
+		{
+			key: "Speed",
+			value: speed === "-" ? "-" : `${speed} tok/s`,
+		},
+		{
+			key: "Requests",
+			value: `${metrics.totalUserRequests}`,
+		},
+	];
 }
 
 /**
@@ -61,12 +185,104 @@ export function MessageRenderer({
 	plugin,
 	acpClient,
 	onApprovePermission,
+	onSubmitElicitation,
+	responseDurationMs,
+	responseUsageMetrics,
 }: MessageRendererProps) {
 	const groups = groupContent(message.content);
+	const [isStatsOpen, setIsStatsOpen] = React.useState(false);
+	const statsPopoverRef = React.useRef<HTMLDivElement>(null);
+	const statsRows = React.useMemo(
+		() => formatStatsRows(responseUsageMetrics, responseDurationMs),
+		[responseDurationMs, responseUsageMetrics],
+	);
+
+	React.useEffect(() => {
+		if (!isStatsOpen) return;
+
+		const handleOutsideClick = (event: MouseEvent) => {
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (!statsPopoverRef.current?.contains(target)) {
+				setIsStatsOpen(false);
+			}
+		};
+
+		document.addEventListener("mousedown", handleOutsideClick);
+		return () => {
+			document.removeEventListener("mousedown", handleOutsideClick);
+		};
+	}, [isStatsOpen]);
+
 	const roleClass =
 		message.role === "user"
 			? "agent-client-message-user"
 			: "agent-client-message-assistant";
+	const shouldShowResponseActions =
+		message.role === "assistant" && message.streamingPhase === "completed";
+
+	const handleCopyResponse = React.useCallback(() => {
+		const markdown = toAssistantResponseMarkdown(message);
+		void navigator.clipboard
+			.writeText(markdown)
+			.then(() => {
+				new Notice("Copied response");
+			})
+			.catch(() => {
+				new Notice("Failed to copy response");
+			});
+	}, [message]);
+
+	const handleSaveAsMarkdown = React.useCallback(() => {
+		const markdownBody = toAssistantResponseMarkdown(message);
+		const folder =
+			plugin.settings.exportSettings.defaultFolder || "Agent Client";
+		const now = new Date();
+		const yyyy = now.getFullYear();
+		const mm = String(now.getMonth() + 1).padStart(2, "0");
+		const dd = String(now.getDate()).padStart(2, "0");
+		const hh = String(now.getHours()).padStart(2, "0");
+		const min = String(now.getMinutes()).padStart(2, "0");
+		const ss = String(now.getSeconds()).padStart(2, "0");
+		const suffix = message.id.slice(0, 8);
+		const baseName = `response_${yyyy}${mm}${dd}_${hh}${min}${ss}_${suffix}`;
+
+		const createNote = async () => {
+			await ensureFolderExists(plugin, folder);
+
+			let candidate = normalizePath(`${folder}/${baseName}.md`);
+			let attempt = 2;
+			while (plugin.app.vault.getAbstractFileByPath(candidate)) {
+				candidate = normalizePath(
+					`${folder}/${baseName}_${attempt}.md`,
+				);
+				attempt += 1;
+			}
+
+			const frontmatter = [
+				"---",
+				`created: ${new Date().toISOString()}`,
+				"source: obsidian-copilot-response",
+				"---",
+				"",
+			].join("\n");
+
+			const file = await plugin.app.vault.create(
+				candidate,
+				`${frontmatter}${markdownBody}\n`,
+			);
+			if (file instanceof TFile) {
+				const leaf = plugin.app.workspace.getLeaf(false);
+				await leaf.openFile(file);
+			}
+
+			new Notice("Saved response as Markdown note");
+		};
+
+		void createNote().catch(() => {
+			new Notice("Failed to save Markdown note");
+		});
+	}, [message, plugin]);
 
 	return (
 		<div
@@ -91,6 +307,7 @@ export function MessageRenderer({
 										message.streamingPhase
 									}
 									acpClient={acpClient}
+									onSubmitElicitation={onSubmitElicitation}
 									onApprovePermission={onApprovePermission}
 								/>
 							))}
@@ -107,12 +324,56 @@ export function MessageRenderer({
 								messageRole={message.role}
 								messageStreamingPhase={message.streamingPhase}
 								acpClient={acpClient}
+								onSubmitElicitation={onSubmitElicitation}
 								onApprovePermission={onApprovePermission}
 							/>
 						</div>
 					);
 				}
 			})}
+			{shouldShowResponseActions && (
+				<div className="agent-client-message-response-actions">
+					<button
+						type="button"
+						className="agent-client-message-response-action-button agent-client-response-copy-button"
+						title="Copy response to clipboard"
+						onClick={handleCopyResponse}
+					></button>
+					<button
+						type="button"
+						className="agent-client-message-response-action-button agent-client-response-save-button"
+						title="Save response as markdown note"
+						onClick={handleSaveAsMarkdown}
+					></button>
+					<div
+						className="agent-client-message-response-stats"
+						ref={statsPopoverRef}
+					>
+						<button
+							type="button"
+							className="agent-client-message-response-time"
+							onClick={() => setIsStatsOpen((prev) => !prev)}
+							onMouseEnter={() => setIsStatsOpen(true)}
+							onMouseLeave={() => setIsStatsOpen(false)}
+						>
+							{formatDurationLabel(responseDurationMs)}
+						</button>
+						{isStatsOpen && (
+							<div className="agent-client-message-response-stats-popover">
+								{statsRows.map((row) => (
+									<div
+										key={row.key}
+										className="agent-client-message-response-stats-row"
+									>
+										<span>{row.key}</span>
+										<strong>{row.value}</strong>
+									</div>
+								))}
+							</div>
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

@@ -97,7 +97,7 @@ function findActiveElicitation(
 			const content = message.content[contentIndex];
 			if (
 				content.type === "elicitation" &&
-				content.status === "pending"
+				(content.status === "pending" || content.status === "failed")
 			) {
 				return content;
 			}
@@ -898,6 +898,16 @@ export function useChatController(
 	]);
 
 	useEffect(() => {
+		const useToolUiRefresh =
+			((plugin.settings.displaySettings as Record<string, unknown>)
+				.useToolUiRefresh as boolean) === true;
+
+		if (useToolUiRefresh) {
+			elicitationModalRef.current?.close();
+			elicitationModalRef.current = null;
+			return;
+		}
+
 		if (!activeElicitation) {
 			elicitationModalRef.current?.close();
 			elicitationModalRef.current = null;
@@ -920,7 +930,12 @@ export function useChatController(
 		}
 
 		elicitationModalRef.current.updateProps(props);
-	}, [activeElicitation, handleSubmitElicitation, plugin.app]);
+	}, [
+		activeElicitation,
+		handleSubmitElicitation,
+		plugin.app,
+		plugin.settings.displaySettings,
+	]);
 
 	// ============================================================
 	// Effects - Session Lifecycle
