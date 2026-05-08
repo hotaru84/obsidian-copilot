@@ -117,7 +117,7 @@ export function MessageContentRenderer({
 			);
 
 		case "elicitation": {
-			if (useToolUiRefresh) {
+			if (onSubmitElicitation || useToolUiRefresh) {
 				return (
 					<ToolUiElicitationCard
 						requestId={content.requestId}

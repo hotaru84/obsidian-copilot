@@ -2143,31 +2143,60 @@ export class RemoteAdapter implements IChatAgentClient {
 		response: ElicitationResponse,
 	): Promise<ElicitationResult> {
 		const pending = this.pendingElicitations.get(requestId);
-		if (!pending || pending.sessionId !== sessionId) {
+		if (pending && pending.sessionId === sessionId) {
+			this.pendingElicitations.delete(requestId);
+
+			if (this.getActiveElicitationRequestId(sessionId) === requestId) {
+				this.setActiveElicitationRequestId(sessionId, null);
+			}
+
+			pending.resolve(response);
+			this.sessionUpdateCallback?.({
+				type: "elicitation_complete",
+				sessionId,
+				requestId,
+				response,
+				success: true,
+			});
+			this.processNextElicitation(sessionId);
+			return { success: true };
+		}
+
+		const state = this.sessionStates.get(sessionId);
+		if (!state) {
 			this.logger.warn(
-				`[RemoteAdapter] Elicitation request not found or stale: ${requestId}`,
+				`[RemoteAdapter] Elicitation session not found for request: ${requestId}`,
 			);
 			return { success: false };
 		}
 
-		this.pendingElicitations.delete(requestId);
+		try {
+			const result = await state.session.rpc.ui.handlePendingElicitation(
+				requestId,
+				response,
+			);
+			if (!result.success) {
+				this.logger.warn(
+					`[RemoteAdapter] Runtime rejected elicitation response for request: ${requestId}`,
+				);
+				return { success: false };
+			}
 
-		if (this.getActiveElicitationRequestId(sessionId) === requestId) {
-			this.setActiveElicitationRequestId(sessionId, null);
+			this.sessionUpdateCallback?.({
+				type: "elicitation_complete",
+				sessionId,
+				requestId,
+				response,
+				success: true,
+			});
+			return { success: true };
+		} catch (error) {
+			this.logger.error(
+				`[RemoteAdapter] Failed to submit elicitation response via session.rpc.ui for request: ${requestId}`,
+				error,
+			);
+			return { success: false };
 		}
-
-		pending.resolve(response);
-
-		this.sessionUpdateCallback?.({
-			type: "elicitation_complete",
-			sessionId,
-			requestId,
-			response,
-			success: true,
-		});
-
-		this.processNextElicitation(sessionId);
-		return { success: true };
 	}
 
 	getConnectionState(): AgentConnectionState {

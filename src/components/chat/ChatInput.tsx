@@ -235,8 +235,6 @@ export function ChatInput({
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const dragCounterRef = useRef(0);
 	const sendButtonRef = useRef<HTMLButtonElement>(null);
-	const modeButtonRef = useRef<HTMLDivElement>(null);
-	const [, setIsModeDropdownOpen] = useState(false);
 	const modelButtonRef = useRef<HTMLDivElement>(null);
 	const [, setIsModelDropdownOpen] = useState(false);
 	const remoteAgentButtonRef = useRef<HTMLDivElement>(null);
@@ -837,37 +835,22 @@ export function ChatInput({
 	const onModeChangeRef = useRef(onModeChange);
 	onModeChangeRef.current = onModeChange;
 
-	// Handle mode selector click
-	const handleModeSelectorClick = useCallback(() => {
-		if (
-			!modeButtonRef.current ||
-			!modes?.availableModes ||
-			modes.availableModes.length <= 1
-		) {
-			return;
-		}
+	const showSelectorMenu = useCallback(
+		(
+			menu: Menu,
+			triggerEl: HTMLDivElement,
+			clickEvent?: React.MouseEvent<HTMLDivElement>,
+		) => {
+			if (clickEvent) {
+				menu.showAtMouseEvent(clickEvent.nativeEvent);
+				return;
+			}
 
-		const menu = new Menu();
-		const currentModeId = modes.currentModeId;
-
-		for (const mode of modes.availableModes) {
-			const isActive = mode.id === currentModeId;
-			menu.addItem((item) => {
-				item.setTitle(mode.name)
-					.setIcon(isActive ? "check" : "")
-					.onClick(() => {
-						if (onModeChangeRef.current) {
-							onModeChangeRef.current(mode.id);
-						}
-						setIsModeDropdownOpen(false);
-					});
-			});
-		}
-
-		const rect = modeButtonRef.current.getBoundingClientRect();
-		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
-		setIsModeDropdownOpen(true);
-	}, [modes]);
+			const rect = triggerEl.getBoundingClientRect();
+			menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
+		},
+		[],
+	);
 
 	// Stable references for model callbacks
 	const onModelChangeRef = useRef(onModelChange);
@@ -890,51 +873,53 @@ export function ChatInput({
 	}, [remoteAgents]);
 
 	// Handle remote agent selector click
-	const handleRemoteAgentSelectorClick = useCallback(() => {
-		if (
-			!remoteAgentButtonRef.current ||
-			!remoteAgents?.availableAgents ||
-			remoteAgents.availableAgents.length === 0
-		) {
-			return;
-		}
+	const handleRemoteAgentSelectorClick = useCallback(
+		(clickEvent?: React.MouseEvent<HTMLDivElement>) => {
+			if (
+				!remoteAgentButtonRef.current ||
+				!remoteAgents?.availableAgents ||
+				remoteAgents.availableAgents.length === 0
+			) {
+				return;
+			}
 
-		const menu = new Menu();
-		const currentAgentId = remoteAgents.currentAgentId;
+			const menu = new Menu();
+			const currentAgentId = remoteAgents.currentAgentId;
 
-		// Option to clear the agent (use default)
-		menu.addItem((item) => {
-			item.setTitle("Default")
-				.setIcon(currentAgentId === null ? "check" : "")
-				.onClick(() => {
-					if (onRemoteAgentChangeRef.current) {
-						onRemoteAgentChangeRef.current(null);
-					}
-					setIsRemoteAgentDropdownOpen(false);
-				});
-		});
-
-		for (const agent of remoteAgents.availableAgents) {
-			const isActive = agent.agentId === currentAgentId;
+			// Option to clear the agent (use default)
 			menu.addItem((item) => {
-				item.setTitle(agent.name)
-					.setIcon(isActive ? "check" : "")
+				item.setTitle("Default")
+					.setIcon(currentAgentId === null ? "check" : "")
 					.onClick(() => {
-						logger.log(
-							`[ChatInput] Agent selected: agentId='${agent.agentId}', name='${agent.name}'`,
-						);
 						if (onRemoteAgentChangeRef.current) {
-							onRemoteAgentChangeRef.current(agent.agentId);
+							onRemoteAgentChangeRef.current(null);
 						}
 						setIsRemoteAgentDropdownOpen(false);
 					});
 			});
-		}
 
-		const rect = remoteAgentButtonRef.current.getBoundingClientRect();
-		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
-		setIsRemoteAgentDropdownOpen(true);
-	}, [remoteAgents]);
+			for (const agent of remoteAgents.availableAgents) {
+				const isActive = agent.agentId === currentAgentId;
+				menu.addItem((item) => {
+					item.setTitle(agent.name)
+						.setIcon(isActive ? "check" : "")
+						.onClick(() => {
+							logger.log(
+								`[ChatInput] Agent selected: agentId='${agent.agentId}', name='${agent.name}'`,
+							);
+							if (onRemoteAgentChangeRef.current) {
+								onRemoteAgentChangeRef.current(agent.agentId);
+							}
+							setIsRemoteAgentDropdownOpen(false);
+						});
+				});
+			}
+
+			showSelectorMenu(menu, remoteAgentButtonRef.current, clickEvent);
+			setIsRemoteAgentDropdownOpen(true);
+		},
+		[remoteAgents, showSelectorMenu],
+	);
 
 	// Tool menu button ref
 	const toolMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -1111,36 +1096,38 @@ export function ChatInput({
 	);
 
 	// Handle model selector click
-	const handleModelSelectorClick = useCallback(() => {
-		if (
-			!modelButtonRef.current ||
-			!models?.availableModels ||
-			models.availableModels.length <= 1
-		) {
-			return;
-		}
+	const handleModelSelectorClick = useCallback(
+		(clickEvent?: React.MouseEvent<HTMLDivElement>) => {
+			if (
+				!modelButtonRef.current ||
+				!models?.availableModels ||
+				models.availableModels.length <= 1
+			) {
+				return;
+			}
 
-		const menu = new Menu();
-		const currentModelId = models.currentModelId;
+			const menu = new Menu();
+			const currentModelId = models.currentModelId;
 
-		for (const model of models.availableModels) {
-			const isActive = model.modelId === currentModelId;
-			menu.addItem((item) => {
-				item.setTitle(model.name)
-					.setIcon(isActive ? "check" : "")
-					.onClick(() => {
-						if (onModelChangeRef.current) {
-							onModelChangeRef.current(model.modelId);
-						}
-						setIsModelDropdownOpen(false);
-					});
-			});
-		}
+			for (const model of models.availableModels) {
+				const isActive = model.modelId === currentModelId;
+				menu.addItem((item) => {
+					item.setTitle(model.name)
+						.setIcon(isActive ? "check" : "")
+						.onClick(() => {
+							if (onModelChangeRef.current) {
+								onModelChangeRef.current(model.modelId);
+							}
+							setIsModelDropdownOpen(false);
+						});
+				});
+			}
 
-		const rect = modelButtonRef.current.getBoundingClientRect();
-		menu.showAtPosition({ x: rect.left, y: rect.bottom + 5 });
-		setIsModelDropdownOpen(true);
-	}, [models]);
+			showSelectorMenu(menu, modelButtonRef.current, clickEvent);
+			setIsModelDropdownOpen(true);
+		},
+		[models, showSelectorMenu],
+	);
 
 	// Placeholder text
 	const placeholder = `Send a message... (@ to mention${availableCommands.length > 0 ? ", / for commands" : ""})`;
@@ -1306,40 +1293,6 @@ export function ChatInput({
 								/>
 							</div>
 						)}
-
-					{/* Mode Selector */}
-					{modes && modes.availableModes.length > 1 && (
-						<div
-							ref={modeButtonRef}
-							className="agent-client-mode-selector agent-client-tool-ui-selector-chip"
-							onClick={handleModeSelectorClick}
-							role="button"
-							tabIndex={0}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" || e.key === " ") {
-									e.preventDefault();
-									handleModeSelectorClick();
-								}
-							}}
-							title={
-								modes.availableModes.find(
-									(m) => m.id === modes.currentModeId,
-								)?.description ?? "Select mode"
-							}
-						>
-							<span className="agent-client-mode-selector-text">
-								{modes.availableModes.find(
-									(m) => m.id === modes.currentModeId,
-								)?.name ?? "Select mode"}
-							</span>
-							<span
-								className="agent-client-mode-selector-icon"
-								ref={(el) => {
-									if (el) setIcon(el, "chevron-down");
-								}}
-							/>
-						</div>
-					)}
 
 					{/* Model Selector (experimental) */}
 					{models && models.availableModels.length > 1 && (

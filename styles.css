@@ -561,68 +561,75 @@ If your plugin does not need CSS, delete this file.
 
 .agent-client-tool-ui-approval-card-actions {
 	display: flex;
-	flex-direction: column;
-	gap: 0;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 18px;
-	overflow: hidden;
-	background: var(--background-primary);
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
 }
 
 .agent-client-tool-ui-approval-button {
-	padding: 18px 18px !important;
-	border: 0 !important;
-	border-bottom: 1px solid var(--background-modifier-border) !important;
-	border-radius: 0 !important;
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 7px 11px !important;
+	border: 1px solid var(--background-modifier-border) !important;
+	border-radius: 10px !important;
 	background-color: var(--background-primary) !important;
 	color: var(--text-normal) !important;
-	font-size: 14px;
+	font-size: 13px;
 	font-weight: 600;
 	cursor: pointer;
 	word-break: break-word;
 	overflow-wrap: break-word;
-	display: flex;
-	align-items: flex-start;
-	gap: 14px;
-	width: 100%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	width: auto;
+	max-width: 100%;
+	flex: 0 1 auto;
+	min-height: 0 !important;
+	height: auto !important;
+	line-height: 1.2;
 	text-align: left;
+	box-sizing: border-box;
 	transition:
 		background-color 0.12s ease,
 		color 0.12s ease;
 }
 
-.agent-client-tool-ui-approval-button:last-child {
-	border-bottom: 0 !important;
-}
-
 .agent-client-tool-ui-approval-button-check {
-	width: 18px;
-	height: 18px;
-	margin-top: 2px;
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	margin-top: 0;
 	border: 2px solid color-mix(in srgb, var(--text-muted) 55%, transparent);
-	border-radius: 6px;
+	border-radius: 4px;
 	background: transparent;
 	flex-shrink: 0;
 }
 
 .agent-client-tool-ui-approval-button-copy {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
+	display: flex !important;
+	flex-direction: row !important;
+	align-items: center;
+	flex: 1 1 auto;
+	gap: 0;
 	min-width: 0;
+	text-align: left;
 }
 
 .agent-client-tool-ui-approval-button-label {
-	font-size: 15px;
-	font-weight: 700;
+	display: block;
+	width: auto;
+	font-size: 13px;
+	font-weight: 600;
 	color: var(--text-normal);
+	text-align: left;
+	white-space: nowrap;
 }
 
 .agent-client-tool-ui-approval-button-description {
-	font-size: 13px;
-	font-weight: 400;
-	color: var(--text-muted);
-	line-height: 1.45;
+	display: none;
 }
 
 .agent-client-tool-ui-approval-button:hover {
@@ -636,18 +643,102 @@ If your plugin does not need CSS, delete this file.
 
 .agent-client-tool-ui-kind-allow_always {
 	border-color: var(--color-green) !important;
+	background-color: color-mix(
+		in srgb,
+		var(--color-green) 16%,
+		var(--background-primary) 84%
+	) !important;
 }
 
 .agent-client-tool-ui-kind-reject_once {
 	border-color: var(--color-red) !important;
+	background-color: color-mix(
+		in srgb,
+		var(--color-red) 14%,
+		var(--background-primary) 86%
+	) !important;
+}
+
+.agent-client-tool-ui-kind-reject_always {
+	border-color: var(--color-red) !important;
+	background-color: color-mix(
+		in srgb,
+		var(--color-red) 18%,
+		var(--background-primary) 82%
+	) !important;
 }
 
 .agent-client-tool-ui-kind-allow_once {
 	border-color: var(--color-orange) !important;
+	background-color: color-mix(
+		in srgb,
+		var(--color-orange) 16%,
+		var(--background-primary) 84%
+	) !important;
 }
 
 .agent-client-tool-ui-kind-allow_session {
 	border-color: var(--color-blue) !important;
+	background-color: color-mix(
+		in srgb,
+		var(--color-blue) 14%,
+		var(--background-primary) 86%
+	) !important;
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-allow_always:hover {
+	background-color: color-mix(
+		in srgb,
+		var(--color-green) 24%,
+		var(--background-primary) 76%
+	) !important;
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-allow_once:hover {
+	background-color: color-mix(
+		in srgb,
+		var(--color-orange) 24%,
+		var(--background-primary) 76%
+	) !important;
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-allow_session:hover {
+	background-color: color-mix(
+		in srgb,
+		var(--color-blue) 22%,
+		var(--background-primary) 78%
+	) !important;
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-reject_once:hover,
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-reject_always:hover {
+	background-color: color-mix(
+		in srgb,
+		var(--color-red) 22%,
+		var(--background-primary) 78%
+	) !important;
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-allow_always
+	.agent-client-tool-ui-approval-button-check {
+	border-color: color-mix(in srgb, var(--color-green) 70%, transparent);
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-allow_once
+	.agent-client-tool-ui-approval-button-check {
+	border-color: color-mix(in srgb, var(--color-orange) 70%, transparent);
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-allow_session
+	.agent-client-tool-ui-approval-button-check {
+	border-color: color-mix(in srgb, var(--color-blue) 68%, transparent);
+}
+
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-reject_once
+	.agent-client-tool-ui-approval-button-check,
+.agent-client-tool-ui-approval-button.agent-client-tool-ui-kind-reject_always
+	.agent-client-tool-ui-approval-button-check {
+	border-color: color-mix(in srgb, var(--color-red) 70%, transparent);
 }
 
 .agent-client-tool-ui-approval-receipt {
@@ -1317,14 +1408,14 @@ If your plugin does not need CSS, delete this file.
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 20px;
+	border-radius: 8px;
 	background-color: var(--background-primary);
 	overflow: hidden;
-	transition: box-shadow 0.15s ease;
+	transition: background-color 0.15s ease;
 }
 
 .agent-client-chat-input-box:focus-within {
-	box-shadow: 0 0 0 1.5px var(--background-modifier-border);
+	background-color: color-mix(in srgb, var(--background-primary) 80%, var(--background-secondary) 20%);
 }
 
 .agent-client-chat-input-box.agent-client-dragging-over {
@@ -1484,7 +1575,7 @@ If your plugin does not need CSS, delete this file.
 /* Input Actions Container */
 .agent-client-chat-input-actions {
 	display: flex;
-	align-items: center;
+	align-items: flex-end;
 	justify-content: flex-end;
 	gap: 8px;
 	padding: 4px 12px 8px 12px;
@@ -1752,7 +1843,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-chat-input-actions.agent-client-tool-ui-chat-input-actions {
-	padding: 8px 18px 10px;
+	padding: 8px;
 	gap: 10px;
 	border-top: 0;
 	background: transparent;
@@ -1762,7 +1853,7 @@ If your plugin does not need CSS, delete this file.
 	height: 30px;
 	padding: 0 12px;
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 999px;
+	border-radius: 8px;
 	background-color: color-mix(
 		in srgb,
 		var(--background-primary) 88%,
@@ -1778,31 +1869,32 @@ If your plugin does not need CSS, delete this file.
 .agent-client-tool-ui-input-icon-button {
 	width: 30px;
 	height: 30px;
-	border-radius: 999px !important;
-	border: 0 !important;
-	background: transparent !important;
-}
-
-.agent-client-tool-ui-input-icon-button:hover {
-	background: color-mix(
+	border-radius: 8px !important;
+	border: 1px solid var(--background-modifier-border) !important;
+	background-color: color-mix(
 		in srgb,
-		var(--background-modifier-hover) 86%,
+		var(--background-primary) 88%,
 		transparent
 	) !important;
 }
 
+.agent-client-tool-ui-input-icon-button:hover {
+	border-color: var(--text-faint) !important;
+	background-color: var(--background-secondary) !important;
+}
+
 .agent-client-tool-menu-button.agent-client-tool-ui-input-icon-button::before {
-	width: 22px;
-	height: 22px;
-	background-color: var(--text-normal);
-	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>');
-	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>');
+	width: 18px;
+	height: 18 px;
+	background-color: var(--text-faint);
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2"/></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2"/></svg>');
 }
 
 .agent-client-chat-send-button.agent-client-tool-ui-input-send-button {
 	width: 40px;
 	height: 40px;
-	border-radius: 999px !important;
+	border-radius: 8px !important;
 	border: 0 !important;
 	background-color: var(--interactive-accent) !important;
 	display: flex;
@@ -1811,7 +1903,11 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-chat-send-button.agent-client-tool-ui-input-send-button:hover {
-	background-color: color-mix(in srgb, var(--interactive-accent) 90%, transparent) !important;
+	background-color: color-mix(
+		in srgb,
+		var(--interactive-accent) 90%,
+		transparent
+	) !important;
 }
 
 .agent-client-chat-send-button.agent-client-tool-ui-input-send-button
@@ -2419,12 +2515,27 @@ If your plugin does not need CSS, delete this file.
 	border-top: 1px solid var(--background-modifier-border);
 }
 
+.agent-client-sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
 .agent-client-message-response-action-button {
 	width: 28px;
 	height: 28px;
 	padding: 0 !important;
 	border-radius: 6px !important;
+	position: relative;
+	overflow: visible;
 	background: transparent !important;
+	box-shadow: none !important;
 	color: var(--text-muted) !important;
 	cursor: pointer;
 	display: flex;
@@ -2440,8 +2551,75 @@ If your plugin does not need CSS, delete this file.
 	color: var(--text-normal) !important;
 }
 
+.agent-client-message-response-tooltip {
+	position: fixed;
+	z-index: 9999;
+	min-width: 0;
+	max-width: min(280px, calc(100vw - 24px));
+	padding: 7px 11px;
+	border-radius: 10px;
+	font-size: 11px;
+	line-height: 1.2;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	color: var(--text-normal);
+	background: color-mix(
+		in srgb,
+		var(--background-primary) 88%,
+		var(--background-secondary) 12%
+	);
+	border: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 82%, transparent);
+	box-shadow:
+		0 14px 30px rgba(15, 23, 42, 0.18),
+		0 2px 0 color-mix(in srgb, var(--background-primary) 75%, white 25%) inset;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	pointer-events: none;
+	transform: translateX(-50%);
+	animation: agent-client-message-response-tooltip-in 0.12s ease-out;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.agent-client-message-response-tooltip::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	width: 10px;
+	height: 10px;
+	background: inherit;
+	border-left: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 82%, transparent);
+	border-top: 1px solid
+		color-mix(in srgb, var(--background-modifier-border) 82%, transparent);
+	box-shadow: inherit;
+	transform: translateX(-50%) rotate(45deg);
+}
+
+.agent-client-message-response-tooltip-top::before {
+	bottom: -6px;
+}
+
+.agent-client-message-response-tooltip-bottom::before {
+	top: -6px;
+	transform: translateX(-50%) rotate(225deg);
+}
+
+@keyframes agent-client-message-response-tooltip-in {
+	from {
+		opacity: 0;
+		transform: translateX(-50%) translateY(2px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(-50%) translateY(0) scale(1);
+	}
+}
+
 .agent-client-message-response-action-button::before {
-	content: '';
+	content: "";
 	width: 16px;
 	height: 16px;
 	display: block;
@@ -2464,24 +2642,17 @@ If your plugin does not need CSS, delete this file.
 	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>');
 }
 
-.agent-client-message-response-stats {
-	position: relative;
-	margin-left: auto;
-}
-
 .agent-client-message-response-time {
 	width: 28px;
 	height: 28px;
 	padding: 0 !important;
-	border: 1px solid var(--background-modifier-border) !important;
 	border-radius: 6px !important;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 0;
 	background: transparent !important;
 	color: var(--text-muted) !important;
 	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	transition:
 		background-color 0.12s ease,
 		color 0.12s ease;
@@ -2493,7 +2664,7 @@ If your plugin does not need CSS, delete this file.
 }
 
 .agent-client-message-response-time::before {
-	content: '';
+	content: "";
 	width: 16px;
 	height: 16px;
 	display: block;
@@ -2507,17 +2678,8 @@ If your plugin does not need CSS, delete this file.
 	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>');
 	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>');
 }
-	background: var(--background-primary) !important;
-	color: var(--text-muted) !important;
-	font-size: 12px;
-	font-weight: 600;
-	cursor: pointer;
-}
-
 .agent-client-message-response-stats-popover {
 	position: absolute;
-	right: 0;
-	top: calc(100% + 6px);
 	width: 220px;
 	padding: 10px;
 	border-radius: 12px;
@@ -2740,8 +2902,8 @@ If your plugin does not need CSS, delete this file.
 	}
 
 	.agent-client-tool-ui-approval-button {
-		padding: 14px 14px !important;
-		gap: 12px;
+		padding: 6px 10px !important;
+		gap: 7px;
 	}
 
 	.agent-client-message-response-actions {
@@ -2754,8 +2916,6 @@ If your plugin does not need CSS, delete this file.
 	}
 
 	.agent-client-message-response-stats-popover {
-		left: 0;
-		right: auto;
 		width: min(240px, calc(100vw - 44px));
 	}
 }

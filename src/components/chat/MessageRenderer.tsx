@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Notice, TFile, normalizePath } from "obsidian";
 import type {
 	ChatMessage,
@@ -25,20 +26,6 @@ interface MessageRendererProps {
 	responseDurationMs?: number;
 	/** Usage metrics snapshot captured when this response completed */
 	responseUsageMetrics?: SessionUsageMetrics | null;
-}
-
-function formatDurationLabel(durationMs?: number): string {
-	if (durationMs === undefined) return "--";
-	if (durationMs < 1000) {
-		return `${durationMs}ms`;
-	}
-	const seconds = durationMs / 1000;
-	if (seconds < 60) {
-		return `${seconds.toFixed(1)}s`;
-	}
-	const minutes = Math.floor(seconds / 60);
-	const remain = Math.floor(seconds % 60);
-	return `${minutes}m ${remain}s`;
 }
 
 function toAssistantResponseMarkdown(message: ChatMessage): string {
@@ -101,47 +88,6 @@ async function ensureFolderExists(
 	}
 }
 
-function formatStatsRows(
-	metrics: SessionUsageMetrics | null | undefined,
-	responseDurationMs?: number,
-): Array<{ key: string; value: string }> {
-	if (!metrics) {
-		return [{ key: "Usage metrics", value: "Unavailable" }];
-	}
-
-	const speed =
-		responseDurationMs && responseDurationMs > 0
-			? (
-					(metrics.lastCallOutputTokens / responseDurationMs) *
-					1000
-				).toFixed(1)
-			: "-";
-
-	return [
-		{ key: "Total", value: formatDurationLabel(responseDurationMs) },
-		{
-			key: "API total",
-			value: formatDurationLabel(metrics.totalApiDurationMs),
-		},
-		{
-			key: "Input tokens",
-			value: `${metrics.lastCallInputTokens}`,
-		},
-		{
-			key: "Output tokens",
-			value: `${metrics.lastCallOutputTokens}`,
-		},
-		{
-			key: "Speed",
-			value: speed === "-" ? "-" : `${speed} tok/s`,
-		},
-		{
-			key: "Requests",
-			value: `${metrics.totalUserRequests}`,
-		},
-	];
-}
-
 /**
  * Group consecutive image contents together for horizontal scrolling display.
  * Non-image contents are wrapped individually.
@@ -186,16 +132,81 @@ export function MessageRenderer({
 	acpClient,
 	onApprovePermission,
 	onSubmitElicitation,
-	responseDurationMs,
-	responseUsageMetrics,
 }: MessageRendererProps) {
 	const groups = groupContent(message.content);
 	const [isStatsOpen, setIsStatsOpen] = React.useState(false);
 	const statsPopoverRef = React.useRef<HTMLDivElement>(null);
-	const statsRows = React.useMemo(
-		() => formatStatsRows(responseUsageMetrics, responseDurationMs),
-		[responseDurationMs, responseUsageMetrics],
+	const [responseTooltip, setResponseTooltip] = React.useState<{
+		label: string;
+		left: number;
+		top: number;
+		placement: "top" | "bottom";
+	} | null>(null);
+	const responseTooltipHideTimerRef = React.useRef<number | null>(null);
+	const responseTooltipTargetRef = React.useRef<HTMLElement | null>(null);
+
+	const clearResponseTooltipHideTimer = React.useCallback(() => {
+		if (responseTooltipHideTimerRef.current !== null) {
+			window.clearTimeout(responseTooltipHideTimerRef.current);
+			responseTooltipHideTimerRef.current = null;
+		}
+	}, []);
+
+	const hideResponseTooltip = React.useCallback(() => {
+		clearResponseTooltipHideTimer();
+		setResponseTooltip(null);
+		responseTooltipTargetRef.current = null;
+	}, [clearResponseTooltipHideTimer]);
+
+	const showResponseTooltip = React.useCallback(
+		(label: string, target: HTMLElement) => {
+			clearResponseTooltipHideTimer();
+			responseTooltipTargetRef.current = target;
+
+			const rect = target.getBoundingClientRect();
+			const estimateWidth = Math.min(
+				280,
+				Math.max(176, label.length * 7 + 28),
+			);
+			const tooltipHeight = 34;
+			const gap = 10;
+			const margin = 12;
+			const fitsAbove = rect.top >= tooltipHeight + gap + margin;
+			const placement: "top" | "bottom" = fitsAbove ? "top" : "bottom";
+			const top = fitsAbove
+				? Math.max(margin, rect.top - tooltipHeight - gap)
+				: rect.bottom + gap;
+			const left = Math.min(
+				window.innerWidth - margin - estimateWidth / 2,
+				Math.max(
+					margin + estimateWidth / 2,
+					rect.left + rect.width / 2,
+				),
+			);
+
+			setResponseTooltip({ label, left, top, placement });
+		},
+		[clearResponseTooltipHideTimer],
 	);
+
+	const scheduleHideResponseTooltip = React.useCallback(() => {
+		clearResponseTooltipHideTimer();
+		responseTooltipHideTimerRef.current = window.setTimeout(() => {
+			setResponseTooltip((current) => {
+				if (
+					current &&
+					responseTooltipTargetRef.current &&
+					responseTooltipTargetRef.current.matches(
+						":hover, :focus-visible",
+					)
+				) {
+					return current;
+				}
+				return null;
+			});
+			responseTooltipHideTimerRef.current = null;
+		}, 80);
+	}, [clearResponseTooltipHideTimer]);
 
 	React.useEffect(() => {
 		if (!isStatsOpen) return;
@@ -213,6 +224,21 @@ export function MessageRenderer({
 			document.removeEventListener("mousedown", handleOutsideClick);
 		};
 	}, [isStatsOpen]);
+
+	React.useEffect(() => {
+		if (!responseTooltip) return;
+
+		const handleScrollOrResize = () => {
+			hideResponseTooltip();
+		};
+
+		window.addEventListener("scroll", handleScrollOrResize, true);
+		window.addEventListener("resize", handleScrollOrResize);
+		return () => {
+			window.removeEventListener("scroll", handleScrollOrResize, true);
+			window.removeEventListener("resize", handleScrollOrResize);
+		};
+	}, [responseTooltip, hideResponseTooltip]);
 
 	const roleClass =
 		message.role === "user"
@@ -333,47 +359,74 @@ export function MessageRenderer({
 			})}
 			{shouldShowResponseActions && (
 				<div className="agent-client-message-response-actions">
+					<span
+						id="agent-client-response-copy-label"
+						className="agent-client-sr-only"
+					>
+						Copy response to clipboard
+					</span>
 					<button
 						type="button"
 						className="agent-client-message-response-action-button agent-client-response-copy-button"
-						title="Copy response to clipboard"
+						aria-labelledby="agent-client-response-copy-label"
+						onMouseEnter={(e) =>
+							showResponseTooltip(
+								"Copy response to clipboard",
+								e.currentTarget,
+							)
+						}
+						onMouseLeave={scheduleHideResponseTooltip}
+						onFocus={(e) =>
+							showResponseTooltip(
+								"Copy response to clipboard",
+								e.currentTarget,
+							)
+						}
+						onBlur={scheduleHideResponseTooltip}
 						onClick={handleCopyResponse}
 					></button>
+					<span
+						id="agent-client-response-save-label"
+						className="agent-client-sr-only"
+					>
+						Save response as markdown note
+					</span>
 					<button
 						type="button"
 						className="agent-client-message-response-action-button agent-client-response-save-button"
-						title="Save response as markdown note"
+						aria-labelledby="agent-client-response-save-label"
+						onMouseEnter={(e) =>
+							showResponseTooltip(
+								"Save response as markdown note",
+								e.currentTarget,
+							)
+						}
+						onMouseLeave={scheduleHideResponseTooltip}
+						onFocus={(e) =>
+							showResponseTooltip(
+								"Save response as markdown note",
+								e.currentTarget,
+							)
+						}
+						onBlur={scheduleHideResponseTooltip}
 						onClick={handleSaveAsMarkdown}
 					></button>
-					<div
-						className="agent-client-message-response-stats"
-						ref={statsPopoverRef}
-					>
-						<button
-							type="button"
-							className="agent-client-message-response-time"
-							onClick={() => setIsStatsOpen((prev) => !prev)}
-							onMouseEnter={() => setIsStatsOpen(true)}
-							onMouseLeave={() => setIsStatsOpen(false)}
-						>
-							{formatDurationLabel(responseDurationMs)}
-						</button>
-						{isStatsOpen && (
-							<div className="agent-client-message-response-stats-popover">
-								{statsRows.map((row) => (
-									<div
-										key={row.key}
-										className="agent-client-message-response-stats-row"
-									>
-										<span>{row.key}</span>
-										<strong>{row.value}</strong>
-									</div>
-								))}
-							</div>
-						)}
-					</div>
 				</div>
 			)}
+			{responseTooltip &&
+				createPortal(
+					<div
+						className={`agent-client-message-response-tooltip agent-client-message-response-tooltip-${responseTooltip.placement}`}
+						style={{
+							left: `${responseTooltip.left}px`,
+							top: `${responseTooltip.top}px`,
+						}}
+						role="tooltip"
+					>
+						{responseTooltip.label}
+					</div>,
+					document.body,
+				)}
 		</div>
 	);
 }

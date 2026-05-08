@@ -826,18 +826,14 @@ export function useChatController(
 			}
 
 			try {
-				await acpAdapter.handlePendingElicitation(
+				const result = await acpAdapter.handlePendingElicitation(
 					session.sessionId,
 					activeElicitation.requestId,
 					response,
 				);
-				chat.handleSessionUpdate({
-					type: "elicitation_complete",
-					sessionId: session.sessionId,
-					requestId: activeElicitation.requestId,
-					response,
-					success: true,
-				});
+				if (!result.success) {
+					throw new Error("Runtime rejected elicitation response");
+				}
 			} catch (error) {
 				logger.error("Elicitation submit error:", error);
 				chat.handleSessionUpdate({
@@ -898,44 +894,11 @@ export function useChatController(
 	]);
 
 	useEffect(() => {
-		const useToolUiRefresh =
-			((plugin.settings.displaySettings as Record<string, unknown>)
-				.useToolUiRefresh as boolean) === true;
-
-		if (useToolUiRefresh) {
-			elicitationModalRef.current?.close();
-			elicitationModalRef.current = null;
-			return;
-		}
-
-		if (!activeElicitation) {
-			elicitationModalRef.current?.close();
-			elicitationModalRef.current = null;
-			return;
-		}
-
-		const props = {
-			message: activeElicitation.message,
-			requestedSchema: activeElicitation.requestedSchema,
-			onSubmit: handleSubmitElicitation,
-		};
-
-		if (!elicitationModalRef.current) {
-			elicitationModalRef.current = new ElicitationModal(
-				plugin.app,
-				props,
-			);
-			elicitationModalRef.current.open();
-			return;
-		}
-
-		elicitationModalRef.current.updateProps(props);
-	}, [
-		activeElicitation,
-		handleSubmitElicitation,
-		plugin.app,
-		plugin.settings.displaySettings,
-	]);
+		// Inline elicitation UI is now the primary path.
+		// Keep modal closed so we do not show duplicate input surfaces.
+		elicitationModalRef.current?.close();
+		elicitationModalRef.current = null;
+	}, [activeElicitation]);
 
 	// ============================================================
 	// Effects - Session Lifecycle

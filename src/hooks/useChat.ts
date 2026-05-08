@@ -237,11 +237,25 @@ function mergeElicitationContent(
 	existing: ElicitationMessageContent,
 	update: ElicitationMessageContent,
 ): ElicitationMessageContent {
+	const STATUS_ORDER: Record<ElicitationMessageContent["status"], number> = {
+		pending: 0,
+		submitted: 1,
+		completed: 2,
+		declined: 2,
+		cancelled: 2,
+		failed: 2,
+	};
+	const mergedStatus =
+		(STATUS_ORDER[update.status] ?? 0) >=
+		(STATUS_ORDER[existing.status] ?? 0)
+			? update.status
+			: existing.status;
+
 	return {
 		...existing,
 		message: update.message || existing.message,
 		requestedSchema: update.requestedSchema || existing.requestedSchema,
-		status: update.status,
+		status: mergedStatus,
 		response: update.response ?? existing.response,
 		error: update.error ?? existing.error,
 	};
