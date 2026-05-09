@@ -1,33 +1,20 @@
 <h1 align="center">Copilot for Obsidian</h1>
 
-<p align="center">
-  <img src="https://img.shields.io/github/downloads/hotaru84/obsidian-copilot/total" alt="GitHub Downloads">
-  <img src="https://img.shields.io/github/license/hotaru84/obsidian-copilot" alt="License">
-  <img src="https://img.shields.io/github/v/release/hotaru84/obsidian-copilot" alt="GitHub release">
-  <img src="https://img.shields.io/github/last-commit/hotaru84/obsidian-copilot" alt="GitHub last commit">
-</p>
-
-<p align="center">
-  <a href="README.ja.md">日本語はこちら</a>
-</p>
-
 Chat with GitHub Copilot directly in Obsidian using the built-in remote runtime SDK.
-
-https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 
 ## Features
 
 - **Note Mentions**: Reference your notes with `@notename` syntax
 - **Selection Context**: Automatically send selected text as context to the agent
 - **Image Attachments**: Paste or drag-and-drop images into the chat
-- **Slash Commands**: Use `/` commands provided by GitHub Copilot
+- **Slash Commands**: Use `/` commands from GitHub Copilot and local custom prompts
 - **Multi-Session**: Run multiple chat sessions simultaneously in separate views
 - **Broadcast Commands**: Send a message to all open chat views simultaneously
 - **Floating Chat**: A persistent, collapsible chat window for quick access
 - **Mode & Model Switching**: Change Copilot modes and models from the chat
 - **Session History**: Resume or fork previous conversations
 - **Chat Export**: Save conversations as Markdown notes in your vault
-- **Scheduled Prompts**: Automate recurring messages with time-window scheduling
+- **Custom Prompts & Scheduling**: Run local prompt files on demand or by schedule
 - **Terminal Integration**: Let Copilot execute commands and return results
 - **MCP Tool Calls**: View Model Context Protocol tool usage inline in chat
 - **Input History**: Navigate previous messages with ↑/↓ arrow keys
@@ -50,7 +37,47 @@ https://github.com/user-attachments/assets/1c538349-b3fb-44dd-a163-7331cbca7824
 4. Optional: configure **Enable MCP config discovery** and **MCP servers JSON**.
 5. Start chatting from the ribbon icon.
 
-**[Full Documentation](https://github.com/hotaru84/obsidian-copilot/wiki)**
+## Custom Prompts
+
+Custom prompts are Markdown files in your vault (default folder: `Prompts`) that can be executed manually, via slash command, by periodic schedule, or by file events.
+
+- **Slash command registration**: Prompt files are automatically registered as local slash commands (for example, `/daily-note-summary`) based on prompt title/file name.
+- **Quick one-shot execution**: Running a custom prompt slash command executes the prompt body immediately through the same runner used by manual execution.
+- **Condition config file**: Execution conditions are managed in a vault JSON file (default: `Prompts/.copilot-prompts.json`), not in prompt front-matter.
+- **Exclusive modes**: Each prompt can be `manual`, `periodic`, or `event` (periodic/event are exclusive).
+- **Periodic scheduling**: Configure `timeWindows` (max 3), optional `daysOfWeek`, and optional `scheduledDate` (`YYYY-MM-DD`).
+- **Event scheduling (daily note)**: Run when a new daily note is created, with the created daily note content injected as prompt context.
+- **Event scheduling (external path)**: Run when a new direct-child file is created in a configured external directory (vault outside).
+- **Background execution**: Automatic runs are executed in dedicated background chat tabs so they do not interrupt your active tab.
+- **Manual run options**: Run from command palette (`Run custom prompt`) or from the Custom Prompts settings modal (`Run now`).
+- **Pause/Resume control**: Pause or resume automatic prompt runs globally.
+- **Execution queue and history**: Runs are queued safely and recent execution history is tracked in settings/status menu.
+- **Per-scheduled-tab permission behavior**: Optionally auto-allow permission requests only for background tabs created for automatic runs.
+- **Built-in sample template**: Create a sample prompt file quickly, then configure conditions in the settings modal.
+
+Condition config example (`Prompts/.copilot-prompts.json`):
+
+```json
+{
+  "version": 1,
+  "prompts": {
+    "Prompts/Daily Note Summary.md": {
+      "mode": "periodic",
+      "enabled": true,
+      "timeWindows": [
+        { "startTime": "08:00", "endTime": "09:00" }
+      ],
+      "daysOfWeek": [1, 2, 3, 4, 5]
+    },
+    "Prompts/Ingest External Inbox.md": {
+      "mode": "event",
+      "enabled": true,
+      "eventType": "external-file-created",
+      "externalWatchPath": "C:/tmp/inbox"
+    }
+  }
+}
+```
 
 ## Development
 

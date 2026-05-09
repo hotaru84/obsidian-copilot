@@ -2,16 +2,11 @@
  * Utilities for parsing and writing YAML front-matter on prompt files.
  */
 
-import type {
-	PromptFileMeta,
-	TimeWindow,
-} from "../domain/models/scheduled-prompt";
+import type { PromptFileMeta } from "../domain/models/scheduled-prompt";
 
 /**
- * Parse a prompt file's front-matter (as returned by Obsidian's
- * `metadataCache.getFileCache(file)?.frontmatter`) into a `PromptFileMeta`.
- *
- * Missing or invalid fields fall back to safe defaults.
+ * Parse prompt display metadata from front-matter.
+ * Execution conditions are loaded from a separate JSON config file.
  */
 export function parsePromptFrontmatter(
 	frontmatter: Record<string, unknown> | null | undefined,
@@ -29,64 +24,14 @@ export function parsePromptFrontmatter(
 			? fm.description.trim()
 			: undefined;
 
-	const enabled = fm.enabled === false ? false : true;
-
-	const timeWindows = parseTimeWindows(fm.timeWindows);
-	const daysOfWeek = parseDaysOfWeek(fm.daysOfWeek);
-	const scheduledDate = parseScheduledDate(fm.scheduledDate);
-
 	return {
 		title,
 		description,
-		enabled,
-		timeWindows,
-		daysOfWeek,
-		scheduledDate,
 		filePath,
+		condition: { mode: "manual" },
+		enabled: false,
+		timeWindows: [],
 	};
-}
-
-function parseTimeWindows(raw: unknown): TimeWindow[] {
-	if (!Array.isArray(raw)) return [];
-	const result: TimeWindow[] = [];
-	for (const item of raw) {
-		if (
-			item &&
-			typeof item === "object" &&
-			typeof (item as Record<string, unknown>).startTime === "string" &&
-			typeof (item as Record<string, unknown>).endTime === "string"
-		) {
-			result.push({
-				startTime: (item as Record<string, string>).startTime,
-				endTime: (item as Record<string, string>).endTime,
-			});
-		}
-	}
-	return result;
-}
-
-function parseDaysOfWeek(raw: unknown): number[] | undefined {
-	if (!Array.isArray(raw)) return undefined;
-	const nums = raw
-		.map((v) => Number(v))
-		.filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
-	if (nums.length === 0) return undefined;
-	return nums;
-}
-
-/**
- * Parse a YYYY-MM-DD date string from front-matter.
- * Returns the string as-is if valid, or undefined otherwise.
- */
-function parseScheduledDate(raw: unknown): string | undefined {
-	if (typeof raw !== "string") return undefined;
-	const trimmed = raw.trim();
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined;
-	// Validate it is an actual calendar date (guards against e.g. 2024-02-30)
-	const date = new Date(trimmed);
-	if (isNaN(date.getTime())) return undefined;
-	if (date.toISOString().slice(0, 10) !== trimmed) return undefined;
-	return trimmed;
 }
 
 /**
@@ -104,11 +49,6 @@ export function stripFrontmatter(content: string): string {
 export const SAMPLE_PROMPT_TEMPLATE = `---
 title: Daily Note Summary
 description: Summarise today's active note and suggest next steps
-enabled: true
-timeWindows:
-  - startTime: "08:00"
-    endTime: "09:00"
-daysOfWeek: [1, 2, 3, 4, 5]
 ---
 
 Please summarise my recent notes and suggest concrete next steps for today.

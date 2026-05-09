@@ -1,10 +1,5 @@
 /**
- * Domain models for scheduled custom prompts.
- *
- * Prompts are stored as Markdown files in a designated vault folder.
- * Scheduling metadata (time windows, days of week, enabled flag) is
- * read from the file's YAML front-matter; the body text is sent to
- * the agent.
+ * Domain models for custom prompts and execution conditions.
  */
 
 /**
@@ -18,29 +13,66 @@ export interface TimeWindow {
 	endTime: string;
 }
 
-/**
- * Metadata derived from a prompt file's YAML front-matter.
- * Also carries the vault-relative file path at runtime.
- */
-export interface PromptFileMeta {
-	/** Display name (front-matter `title`) */
-	title: string;
-	/** Short description shown in the UI (front-matter `description`) */
-	description?: string;
-	/** Whether scheduled execution is currently active (front-matter `enabled`, default true) */
+/** Supported event trigger types for prompt execution. */
+export type PromptEventType = "daily-note-created" | "external-file-created";
+
+/** Runtime trigger source persisted to execution history. */
+export type PromptExecutionTrigger =
+	| "scheduled"
+	| "manual"
+	| `event:${PromptEventType}`;
+
+/** Periodic (time-based) execution condition. */
+export interface PromptPeriodicCondition {
+	mode: "periodic";
 	enabled: boolean;
-	/** Time windows when the prompt can be executed (front-matter `timeWindows`) */
 	timeWindows: TimeWindow[];
-	/** Days of week when the prompt can run (0=Sun, 6=Sat; empty = every day) */
 	daysOfWeek?: number[];
-	/**
-	 * Specific date on which the prompt should run (front-matter `scheduledDate`, YYYY-MM-DD).
-	 * When set, the prompt only executes on that calendar date (one-time scheduling).
-	 * The timeWindows filter still applies within that day.
-	 */
 	scheduledDate?: string;
-	/** Vault-relative path to the source file – injected at runtime */
+}
+
+/** Event-driven execution condition. */
+export interface PromptEventCondition {
+	mode: "event";
+	enabled: boolean;
+	eventType: PromptEventType;
+	/** Required only when eventType is external-file-created. */
+	externalWatchPath?: string;
+}
+
+/** Explicit manual-only mode (no automatic execution). */
+export interface PromptManualCondition {
+	mode: "manual";
+	enabled?: boolean;
+}
+
+/**
+ * Per-prompt execution condition.
+ * periodic と event は排他。manual は自動実行なし。
+ */
+export type PromptExecutionCondition =
+	| PromptPeriodicCondition
+	| PromptEventCondition
+	| PromptManualCondition;
+
+/** Prompt metadata loaded from a prompt markdown file and condition config. */
+export interface PromptFileMeta {
+	/** Display name */
+	title: string;
+	/** Optional short description */
+	description?: string;
+	/** Vault-relative path to the source file */
 	filePath: string;
+	/** Execution condition from config file. */
+	condition: PromptExecutionCondition;
+	/** Compatibility field for legacy UI/logic. */
+	enabled: boolean;
+	/** Compatibility field for periodic configuration. */
+	timeWindows: TimeWindow[];
+	/** Compatibility field for periodic configuration. */
+	daysOfWeek?: number[];
+	/** Compatibility field for periodic configuration. */
+	scheduledDate?: string;
 }
 
 /**
@@ -60,7 +92,16 @@ export interface PromptExecutionRecord {
 	/** Whether the prompt was sent successfully */
 	success: boolean;
 	/** How this run was triggered */
-	trigger?: "scheduled" | "manual";
+	trigger?: PromptExecutionTrigger;
 	/** Error message if the execution failed */
 	error?: string;
+	/** Context text passed to the agent (for event-triggered runs) */
+	contextText?: string;
+	/** Agent response (truncated to conserve storage, null if not captured) */
+	responseText?: string | null;
+}
+
+export interface PromptConditionConfigFile {
+	version: 1;
+	prompts: Record<string, PromptExecutionCondition>;
 }

@@ -1,4 +1,6 @@
 import {
+	App,
+	type EventRef,
 	Plugin,
 	WorkspaceLeaf,
 	WorkspaceSplit,
@@ -21,6 +23,7 @@ import {
 } from "./adapters/obsidian/settings-store.adapter";
 import { AgentClientSettingTab } from "./components/settings/AgentClientSettingTab";
 import { CustomPromptsModal } from "./components/settings/CustomPromptsModal";
+import { ExecutionHistoryDetailModal } from "./components/settings/ExecutionHistoryDetailModal";
 import { RemoteAdapter } from "./adapters/remote/remote.adapter";
 import { parseChatFontSize } from "./shared/display-settings";
 import {
@@ -35,6 +38,9 @@ import type { IChatViewContainer } from "./domain/ports/chat-view-container.port
 import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
 import type {
+	PromptConditionConfigFile,
+	PromptEventType,
+	PromptExecutionCondition,
 	PromptFileMeta,
 	PromptExecutionRecord,
 } from "./domain/models/scheduled-prompt";
@@ -47,6 +53,13 @@ import {
 	stripFrontmatter,
 } from "./shared/frontmatter-utils";
 import { RunPromptModal } from "./components/chat/RunPromptModal";
+import {
+	createEmptyPromptConditionConfig,
+	loadPromptConditionConfig,
+	normalizePromptCondition,
+	savePromptConditionConfig,
+} from "./shared/prompt-condition-config";
+import { ExternalFileObserver } from "./shared/external-file-observer";
 
 function getLocalDateString(date: Date): string {
 	const year = date.getFullYear();
@@ -73,6 +86,90 @@ function formatClock(dateIso: string): string {
 function truncateText(value: string, maxLength: number): string {
 	if (value.length <= maxLength) return value;
 	return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function buildDailyNoteEventContext(filePath: string, content: string): string {
+	return [
+		`A daily note was created: ${filePath}`,
+		"Use the note below as context.",
+		"",
+		"[Daily Note Content]",
+		content,
+	].join("\n");
+}
+
+function buildExternalFileEventContext(filePath: string): string {
+	return `A new external file was created: ${filePath}`;
+}
+
+function applyConditionToMeta(
+	meta: PromptFileMeta,
+	condition: PromptExecutionCondition,
+): PromptFileMeta {
+	if (condition.mode === "periodic") {
+		return {
+			...meta,
+			condition,
+			enabled: condition.enabled,
+			timeWindows: condition.timeWindows,
+			daysOfWeek: condition.daysOfWeek,
+			scheduledDate: condition.scheduledDate,
+		};
+	}
+
+	return {
+		...meta,
+		condition,
+		enabled: false,
+		timeWindows: [],
+		daysOfWeek: undefined,
+		scheduledDate: undefined,
+	};
+}
+
+function dailyNoteFormatToRegex(format: string): RegExp | null {
+	if (!format || typeof format !== "string") return null;
+	const escaped = format.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const pattern = escaped
+		.replace(/YYYY/g, "\\d{4}")
+		.replace(/MM/g, "\\d{2}")
+		.replace(/DD/g, "\\d{2}");
+	return new RegExp(`^${pattern}$`);
+}
+
+function isDailyNoteByConfig(filePath: string, app: App): boolean {
+	const internal = (app as unknown as { internalPlugins?: unknown })
+		.internalPlugins as
+		| {
+				plugins?: Record<
+					string,
+					{ enabled?: boolean; instance?: unknown }
+				>;
+		  }
+		| undefined;
+	const plugin = internal?.plugins?.["daily-notes"];
+	const instance = plugin?.instance as
+		| {
+				options?: { folder?: string; format?: string };
+		  }
+		| undefined;
+	const folder = instance?.options?.folder?.trim();
+	const format = instance?.options?.format?.trim();
+	const fileName = filePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
+
+	if (folder && !filePath.startsWith(`${folder}/`)) {
+		return false;
+	}
+
+	if (format) {
+		const regex = dailyNoteFormatToRegex(format);
+		if (regex) {
+			return regex.test(fileName);
+		}
+	}
+
+	// Fallback: yyyy-mm-dd
+	return /^\d{4}-\d{2}-\d{2}$/.test(fileName);
 }
 
 /** Maximum seconds to wait for a new chat view to register after opening one. */
@@ -162,6 +259,10 @@ export interface AgentClientPluginSettings {
 	// Scheduled / custom prompt settings
 	/** Vault-relative path to the folder containing prompt .md files */
 	promptsFolder: string;
+	/** Vault-relative path to prompt execution condition JSON file */
+	promptConditionsConfigPath: string;
+	/** Absolute external directory paths to watch for new files */
+	externalFileWatchPaths: string[];
 	/** Auto-allow permissions for scheduled execution chat tabs only */
 	autoAllowPermissionsForScheduledChats: boolean;
 	promptExecutionHistory: PromptExecutionRecord[];
@@ -212,6 +313,8 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 	floatingWindowSize: { width: 400, height: 500 },
 	floatingButtonPosition: { right: 40, bottom: 30 },
 	promptsFolder: "Prompts",
+	promptConditionsConfigPath: "Prompts/.copilot-prompts.json",
+	externalFileWatchPaths: [],
 	autoAllowPermissionsForScheduledChats: true,
 	promptExecutionHistory: [],
 	schedulerPaused: false,
@@ -243,6 +346,13 @@ export default class AgentClientPlugin extends Plugin {
 	private schedulerStatusBarItem: HTMLElement | null = null;
 	/** View IDs created for scheduled prompt execution tabs */
 	private scheduledPromptViewIds = new Set<string>();
+	/** Prompt condition config cache loaded from vault JSON */
+	private promptConditionConfig: PromptConditionConfigFile =
+		createEmptyPromptConditionConfig();
+	/** Vault create event subscription for daily note observation */
+	private promptVaultCreateRef: EventRef | null = null;
+	/** External filesystem observer for prompt events */
+	private externalFileObserver: ExternalFileObserver | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -371,7 +481,7 @@ export default class AgentClientPlugin extends Plugin {
 				this.updateSchedulerStatusBar();
 			},
 			getOrOpenView: async (trigger) => {
-				if (trigger === "scheduled") {
+				if (trigger !== "manual") {
 					return this.openScheduledPromptView();
 				}
 
@@ -398,6 +508,15 @@ export default class AgentClientPlugin extends Plugin {
 		if (this.settings.schedulerPaused) {
 			this.scheduledPromptRunner.pause();
 		}
+
+		await this.reloadPromptConditionConfig();
+		// Delay observer registration until after the vault has finished its
+		// initial indexing.  Obsidian fires vault "create" events for every
+		// existing file during startup, which would cause all daily-note prompts
+		// to be queued immediately on every plugin load.
+		this.app.workspace.onLayoutReady(() => {
+			this.startPromptObservers();
+		});
 
 		// Status bar item for scheduler
 		this.schedulerStatusBarItem = this.addStatusBarItem();
@@ -437,6 +556,7 @@ export default class AgentClientPlugin extends Plugin {
 	onunload() {
 		// Stop scheduler
 		this.scheduledPromptRunner?.stop();
+		this.stopPromptObservers();
 
 		// Unmount floating button
 		this.floatingButton?.unmount();
@@ -463,14 +583,165 @@ export default class AgentClientPlugin extends Plugin {
 	// Prompt folder helpers
 	// ──────────────────────────────────────────────────────────────
 
+	private async reloadPromptConditionConfig(): Promise<void> {
+		this.promptConditionConfig = await loadPromptConditionConfig(
+			this.app,
+			this.settings.promptConditionsConfigPath,
+		);
+		this.restartExternalFileObserver();
+	}
+
+	getPromptConditionConfigSnapshot(): PromptConditionConfigFile {
+		return this.promptConditionConfig;
+	}
+
+	async updatePromptConditionsConfigPath(path: string): Promise<void> {
+		this.settings.promptConditionsConfigPath =
+			path.trim() || DEFAULT_SETTINGS.promptConditionsConfigPath;
+		await this.saveSettings();
+		await this.reloadPromptConditionConfig();
+	}
+
+	async updateExternalFileWatchPaths(paths: string[]): Promise<void> {
+		this.settings.externalFileWatchPaths = paths
+			.map((path) => path.trim())
+			.filter((path) => path.length > 0);
+		await this.saveSettings();
+		this.restartExternalFileObserver();
+	}
+
+	async savePromptCondition(
+		filePath: string,
+		condition: PromptExecutionCondition,
+	): Promise<void> {
+		this.promptConditionConfig = {
+			...this.promptConditionConfig,
+			prompts: {
+				...this.promptConditionConfig.prompts,
+				[filePath]: normalizePromptCondition(condition),
+			},
+		};
+
+		await savePromptConditionConfig(
+			this.app,
+			this.settings.promptConditionsConfigPath,
+			this.promptConditionConfig,
+		);
+		this.restartExternalFileObserver();
+		this.updateSchedulerStatusBar();
+	}
+
+	async clearPromptCondition(filePath: string): Promise<void> {
+		const prompts = { ...this.promptConditionConfig.prompts };
+		delete prompts[filePath];
+		this.promptConditionConfig = {
+			...this.promptConditionConfig,
+			prompts,
+		};
+		await savePromptConditionConfig(
+			this.app,
+			this.settings.promptConditionsConfigPath,
+			this.promptConditionConfig,
+		);
+		this.restartExternalFileObserver();
+		this.updateSchedulerStatusBar();
+	}
+
+	private startPromptObservers(): void {
+		this.stopPromptObservers();
+
+		this.promptVaultCreateRef = this.app.vault.on("create", (file) => {
+			if (!(file instanceof TFile) || file.extension !== "md") {
+				return;
+			}
+			if (!isDailyNoteByConfig(file.path, this.app)) {
+				return;
+			}
+
+			void (async () => {
+				try {
+					const raw = await this.app.vault.read(file);
+					const maxLen = this.settings.displaySettings.maxNoteLength;
+					const limited =
+						raw.length > maxLen
+							? `${raw.slice(0, maxLen)}\n\n[Truncated to ${maxLen} chars]`
+							: raw;
+					await this.scheduledPromptRunner.runByEvent(
+						"daily-note-created",
+						buildDailyNoteEventContext(file.path, limited),
+					);
+				} catch (error) {
+					console.warn(
+						`[Agent Client] Failed to read daily note for event context: ${file.path}`,
+						error,
+					);
+					await this.scheduledPromptRunner.runByEvent(
+						"daily-note-created",
+						`A daily note was created: ${file.path}`,
+					);
+				}
+			})();
+		});
+
+		this.externalFileObserver = new ExternalFileObserver({
+			onFileCreated: (_watchPath, filePath) => {
+				void this.scheduledPromptRunner.runByEvent(
+					"external-file-created",
+					buildExternalFileEventContext(filePath),
+				);
+			},
+			onError: (watchPath, error) => {
+				console.warn(
+					`[Agent Client] External file watcher error for ${watchPath}`,
+					error,
+				);
+			},
+		});
+		this.restartExternalFileObserver();
+	}
+
+	private restartExternalFileObserver(): void {
+		if (!this.externalFileObserver) return;
+
+		const paths = new Set<string>(this.settings.externalFileWatchPaths);
+		for (const condition of Object.values(
+			this.promptConditionConfig.prompts,
+		)) {
+			if (
+				condition.mode === "event" &&
+				condition.eventType === "external-file-created" &&
+				condition.externalWatchPath &&
+				condition.externalWatchPath.trim().length > 0
+			) {
+				paths.add(condition.externalWatchPath.trim());
+			}
+		}
+
+		this.externalFileObserver.start(Array.from(paths));
+	}
+
+	private stopPromptObservers(): void {
+		if (this.promptVaultCreateRef) {
+			this.app.vault.offref(this.promptVaultCreateRef);
+			this.promptVaultCreateRef = null;
+		}
+		this.externalFileObserver?.stop();
+		this.externalFileObserver = null;
+	}
+
 	/**
 	 * Load all prompt files from the configured prompts folder.
-	 * Reads each .md file, parses its frontmatter, and strips the YAML block
-	 * to produce the agent-facing body text.
+	 * Reads each .md file, parses display metadata, and joins execution
+	 * conditions from the prompt condition config JSON.
 	 */
 	async loadPromptsFromFolder(): Promise<
 		Array<{ meta: PromptFileMeta; body: string }>
 	> {
+		this.promptConditionConfig = await loadPromptConditionConfig(
+			this.app,
+			this.settings.promptConditionsConfigPath,
+		);
+		this.restartExternalFileObserver();
 		const folderPath = this.settings.promptsFolder || "Prompts";
 		const folder = this.app.vault.getFolderByPath(folderPath);
 		if (!folder) return [];
@@ -481,10 +752,14 @@ export default class AgentClientPlugin extends Plugin {
 			try {
 				const content = await this.app.vault.read(child);
 				const fmCache = this.app.metadataCache.getFileCache(child);
-				const meta = parsePromptFrontmatter(
+				const baseMeta = parsePromptFrontmatter(
 					fmCache?.frontmatter ?? null,
 					child.path,
 				);
+				const condition = normalizePromptCondition(
+					this.promptConditionConfig.prompts[child.path],
+				);
+				const meta = applyConditionToMeta(baseMeta, condition);
 				const body = stripFrontmatter(content);
 				results.push({ meta, body });
 			} catch {
@@ -1198,12 +1473,50 @@ export default class AgentClientPlugin extends Plugin {
 		const pendingCount =
 			this.scheduledPromptRunner.getPendingExecutionCount();
 		const next = this.scheduledPromptRunner.getNextScheduledExecution(now);
+		const cachedPrompts = this.scheduledPromptRunner.getCachedPrompts();
+		const periodicCount = cachedPrompts.filter(
+			(entry) =>
+				entry.meta.condition.mode === "periodic" &&
+				entry.meta.enabled &&
+				entry.meta.timeWindows.length > 0,
+		).length;
+		const eventCount = cachedPrompts.filter(
+			(entry) =>
+				entry.meta.condition.mode === "event" &&
+				entry.meta.condition.enabled,
+		).length;
+		const dailyEventCount = cachedPrompts.filter(
+			(entry) =>
+				entry.meta.condition.mode === "event" &&
+				entry.meta.condition.enabled &&
+				entry.meta.condition.eventType === "daily-note-created",
+		).length;
+		const externalEventCount = cachedPrompts.filter(
+			(entry) =>
+				entry.meta.condition.mode === "event" &&
+				entry.meta.condition.enabled &&
+				entry.meta.condition.eventType === "external-file-created",
+		).length;
 		const todayHistory = this.getTodayPromptHistory();
 		const latestRecord = this.settings.promptExecutionHistory.at(-1);
 
 		menu.addItem((item) => {
 			item.setTitle("Scheduler status").setIsLabel(true);
 		});
+
+		menu.addItem((item) => {
+			item.setTitle(
+				`Periodic: ${periodicCount} / Event: ${eventCount}`,
+			).setIsLabel(true);
+		});
+
+		if (eventCount > 0) {
+			menu.addItem((item) => {
+				item.setTitle(
+					`Event details: Daily note ${dailyEventCount}, External file ${externalEventCount}`,
+				).setIsLabel(true);
+			});
+		}
 
 		if (running) {
 			const elapsedMs =
@@ -1318,11 +1631,12 @@ export default class AgentClientPlugin extends Plugin {
 					item.setTitle(
 						`${statusIcon} ${timestamp} ${truncateText(record.title, 34)}`,
 					)
-						.setIcon("play")
+						.setIcon("info")
 						.onClick(() => {
-							void this.scheduledPromptRunner.runNow(
-								record.filePath,
-							);
+							new ExecutionHistoryDetailModal(
+								this.app,
+								record,
+							).open();
 						});
 				});
 			}
@@ -1364,11 +1678,20 @@ export default class AgentClientPlugin extends Plugin {
 		el.empty();
 		el.addClass("agent-client-scheduler-status");
 
-		const enabledCount =
-			this.scheduledPromptRunner
-				?.getCachedPrompts()
-				.filter((e) => e.meta.enabled && e.meta.timeWindows.length > 0)
-				.length ?? 0;
+		const cachedPrompts =
+			this.scheduledPromptRunner?.getCachedPrompts() ?? [];
+		const periodicCount = cachedPrompts.filter(
+			(entry) =>
+				entry.meta.condition.mode === "periodic" &&
+				entry.meta.enabled &&
+				entry.meta.timeWindows.length > 0,
+		).length;
+		const eventCount = cachedPrompts.filter(
+			(entry) =>
+				entry.meta.condition.mode === "event" &&
+				entry.meta.condition.enabled,
+		).length;
+		const automaticCount = periodicCount + eventCount;
 
 		const now = new Date();
 		const running =
@@ -1380,11 +1703,12 @@ export default class AgentClientPlugin extends Plugin {
 		const textEl = el.createSpan({ cls: "agent-client-scheduler-label" });
 
 		// Show when no enabled schedules exist
-		if (enabledCount === 0) {
+		if (automaticCount === 0) {
 			setIcon(iconEl, "timer");
 			iconEl.addClass("is-inactive");
-			textEl.textContent = "0";
-			el.title = "No scheduled prompts enabled. Click to configure.";
+			textEl.textContent = "P0/E0";
+			el.title =
+				"No automatic prompts enabled (periodic/event). Click to configure.";
 			return;
 		}
 
@@ -1408,22 +1732,23 @@ export default class AgentClientPlugin extends Plugin {
 		if (paused) {
 			setIcon(iconEl, "circle-pause");
 			iconEl.addClass("is-paused");
-			textEl.textContent = `${enabledCount}`;
-			el.title = "Scheduled prompts paused. Click for details.";
+			textEl.textContent = `P${periodicCount}/E${eventCount}`;
+			el.title =
+				"Automatic prompts paused (periodic/event). Click for details.";
 			return;
 		}
 
 		setIcon(iconEl, "timer");
 		iconEl.addClass("is-active");
-		textEl.textContent = `${enabledCount}`;
+		textEl.textContent = `P${periodicCount}/E${eventCount}`;
 		const next = this.scheduledPromptRunner?.getNextScheduledExecution(now);
 		if (next) {
 			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
-			el.title = `Next: ${next.title} in ${formatDuration(remainingMs)}. Click for details.`;
+			el.title = `Periodic next: ${next.title} in ${formatDuration(remainingMs)}. Event watchers active: ${eventCount}. Click for details.`;
 			return;
 		}
 
-		el.title = "Scheduled prompts active. Click for details.";
+		el.title = `Automatic prompts active (Periodic: ${periodicCount}, Event: ${eventCount}). Click for details.`;
 	}
 
 	async loadSettings() {
@@ -1686,6 +2011,22 @@ export default class AgentClientPlugin extends Plugin {
 				rawSettings.promptsFolder.trim().length > 0
 					? rawSettings.promptsFolder.trim()
 					: DEFAULT_SETTINGS.promptsFolder,
+			promptConditionsConfigPath:
+				typeof rawSettings.promptConditionsConfigPath === "string" &&
+				rawSettings.promptConditionsConfigPath.trim().length > 0
+					? rawSettings.promptConditionsConfigPath.trim()
+					: DEFAULT_SETTINGS.promptConditionsConfigPath,
+			externalFileWatchPaths: Array.isArray(
+				rawSettings.externalFileWatchPaths,
+			)
+				? (rawSettings.externalFileWatchPaths as unknown[])
+						.filter(
+							(path): path is string =>
+								typeof path === "string" &&
+								path.trim().length > 0,
+						)
+						.map((path) => path.trim())
+				: DEFAULT_SETTINGS.externalFileWatchPaths,
 			autoAllowPermissionsForScheduledChats:
 				typeof rawSettings.autoAllowPermissionsForScheduledChats ===
 				"boolean"

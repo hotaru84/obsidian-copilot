@@ -147,6 +147,13 @@ export interface IChatViewContainer {
 	sendTextPrompt(text: string): Promise<boolean>;
 
 	/**
+	 * Whether the session is idle (not generating a response).
+	 * Returns true when the session is ready and not currently processing a message.
+	 * Used by the scheduled prompt runner to wait for completion after sending.
+	 */
+	isIdle(): boolean;
+
+	/**
 	 * Cancel current operation.
 	 * Stops ongoing message generation.
 	 */

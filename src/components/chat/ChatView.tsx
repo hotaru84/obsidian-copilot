@@ -354,6 +354,8 @@ function ChatComponent({
 			sendTextPrompt: sendTextPromptForScheduler,
 			canSend: canSendForBroadcast,
 			cancel: cancelForBroadcast,
+			isIdle: () =>
+				isSessionReady && !isSending && !sessionHistory.loading,
 		});
 
 		return () => {
@@ -643,6 +645,7 @@ type SendMessageCallback = () => Promise<boolean>;
 type SendTextPromptCallback = (text: string) => Promise<boolean>;
 type CanSendCallback = () => boolean;
 type CancelCallback = () => Promise<void>;
+type IsIdleCallback = () => boolean;
 
 export class ChatView extends ItemView implements IChatViewContainer {
 	private root: Root | null = null;
@@ -670,6 +673,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	private sendTextPromptCallback: SendTextPromptCallback | null = null;
 	private canSendCallback: CanSendCallback | null = null;
 	private cancelCallback: CancelCallback | null = null;
+	private isIdleCallback: IsIdleCallback | null = null;
 
 	private displayText: string = "Copilot chat";
 
@@ -816,6 +820,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		sendTextPrompt: SendTextPromptCallback;
 		canSend: CanSendCallback;
 		cancel: CancelCallback;
+		isIdle: IsIdleCallback;
 	}): void {
 		this.getDisplayNameCallback = callbacks.getDisplayName;
 		this.getInputStateCallback = callbacks.getInputState;
@@ -824,6 +829,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		this.sendTextPromptCallback = callbacks.sendTextPrompt;
 		this.canSendCallback = callbacks.canSend;
 		this.cancelCallback = callbacks.cancel;
+		this.isIdleCallback = callbacks.isIdle;
 	}
 
 	/**
@@ -837,6 +843,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		this.sendTextPromptCallback = null;
 		this.canSendCallback = null;
 		this.cancelCallback = null;
+		this.isIdleCallback = null;
 	}
 
 	getDisplayName(): string {
@@ -871,6 +878,10 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	 */
 	async sendTextPrompt(text: string): Promise<boolean> {
 		return (await this.sendTextPromptCallback?.(text)) ?? false;
+	}
+
+	isIdle(): boolean {
+		return this.isIdleCallback?.() ?? true;
 	}
 
 	/**

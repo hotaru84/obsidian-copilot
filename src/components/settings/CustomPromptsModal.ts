@@ -1,6 +1,8 @@
 import { App, Modal, Notice, Setting, TFile, setIcon } from "obsidian";
 import type AgentClientPlugin from "../../plugin";
 import type {
+	PromptEventType,
+	PromptExecutionCondition,
 	PromptFileMeta,
 	TimeWindow,
 } from "../../domain/models/scheduled-prompt";
@@ -214,9 +216,8 @@ export class CustomPromptsModal extends Modal {
 
 		// Schedule indicator icon
 		const hasSchedule =
-			meta.timeWindows.length > 0 ||
-			(meta.daysOfWeek && meta.daysOfWeek.length > 0) ||
-			meta.scheduledDate;
+			meta.condition.mode === "periodic" ||
+			(meta.condition.mode === "event" && meta.condition.enabled);
 
 		if (hasSchedule) {
 			const scheduleIconEl = titleContainerEl.createDiv({
@@ -284,139 +285,220 @@ export class CustomPromptsModal extends Modal {
 			cls: "agent-client-prompt-form",
 		});
 
-		let editedTitle = meta.title;
-		let editedDescription = meta.description ?? "";
-		const editedTimeWindows: TimeWindow[] = meta.timeWindows.map((tw) => ({
-			...tw,
-		}));
+		let editedMode: "manual" | "periodic" | "event" = meta.condition.mode;
+		let editedEventType: PromptEventType =
+			meta.condition.mode === "event"
+				? meta.condition.eventType
+				: "daily-note-created";
+		let editedExternalWatchPath =
+			meta.condition.mode === "event"
+				? (meta.condition.externalWatchPath ?? "")
+				: "";
+
+		const editedTimeWindows: TimeWindow[] = meta.timeWindows
+			.slice(0, 3)
+			.map((tw) => ({
+				...tw,
+			}));
 		const editedDaysOfWeek: number[] = [...(meta.daysOfWeek ?? [])];
 		let editedScheduledDate: string = meta.scheduledDate ?? "";
 
-		new Setting(formEl).setName("Title").addText((text) =>
-			text.setValue(editedTitle).onChange((v) => {
-				editedTitle = v.trim();
-			}),
-		);
-
-		new Setting(formEl).setName("Description").addText((text) =>
-			text.setValue(editedDescription).onChange((v) => {
-				editedDescription = v;
-			}),
-		);
-
-		// Time windows
-		const twContainer = formEl.createDiv({
-			cls: "agent-client-time-windows",
-		});
-		const renderTw = () => {
-			twContainer.empty();
-			new Setting(twContainer)
-				.setName("Time windows") // eslint-disable-line obsidianmd/ui/sentence-case
-				.setDesc(
-					"When this prompt can run. Leave empty for manual-only.",
-				);
-			if (editedTimeWindows.length === 0) {
-				twContainer.createEl("p", {
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					text: "No time windows yet. Add one below.",
-					cls: "agent-client-settings-empty-hint",
-				});
-			} else {
-				for (let i = 0; i < editedTimeWindows.length; i++) {
-					const tw = editedTimeWindows[i];
-					new Setting(twContainer)
-						.setName(`Window ${i + 1}`)
-						.addText((text) => {
-							text.setValue(tw.startTime)
-								.setPlaceholder("08:00")
-								.onChange((v) => {
-									tw.startTime = v;
-								});
-							text.inputEl.type = "time";
-							text.inputEl.addClass("agent-client-time-input");
-						})
-						.addText((text) => {
-							text.setValue(tw.endTime)
-								.setPlaceholder("10:00")
-								.onChange((v) => {
-									tw.endTime = v;
-								});
-							text.inputEl.type = "time";
-							text.inputEl.addClass("agent-client-time-input");
-						})
-						.addButton((btn) =>
-							btn
-								.setIcon("trash")
-								.setTooltip("Remove")
-								.onClick(() => {
-									editedTimeWindows.splice(i, 1);
-									renderTw();
-								}),
-						);
-				}
-			}
-			new Setting(twContainer).addButton((btn) =>
-				btn.setButtonText("Add time window").onClick(() => {
-					editedTimeWindows.push({
-						startTime: "08:00",
-						endTime: "10:00",
+		new Setting(formEl)
+			.setName("Execution mode")
+			.setDesc("Choose how this prompt should be triggered.")
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption("manual", "Manual only")
+					.addOption("periodic", "Periodic (time windows)")
+					.addOption("event", "Event-based")
+					.setValue(editedMode)
+					.onChange((value) => {
+						editedMode = value as "manual" | "periodic" | "event";
+						syncModeVisibility();
 					});
-					renderTw();
-				}),
-			);
-		};
-		renderTw();
+			});
 
-		// Days of week
-		const daysSetting = new Setting(formEl)
-			.setName("Days of week")
-			.setDesc(
-				"Select days when the prompt should run. Leave empty for every day.",
-			)
-			.setClass("agent-client-days-of-week");
-		const daysContainer = daysSetting.settingEl.createDiv({
-			cls: "agent-client-days-checkboxes",
-		});
-		const safeId = meta.filePath.replace(/[^a-zA-Z0-9]/g, "_");
-		for (let day = 0; day < 7; day++) {
-			const wrapper = daysContainer.createDiv({
-				cls: "agent-client-day-checkbox",
+		let periodicSectionEl: HTMLElement | null = null;
+		let eventSectionEl: HTMLElement | null = null;
+
+		const syncModeVisibility = () => {
+			if (periodicSectionEl) {
+				periodicSectionEl.style.display =
+					editedMode === "periodic" ? "" : "none";
+			}
+			if (eventSectionEl) {
+				eventSectionEl.style.display =
+					editedMode === "event" ? "" : "none";
+			}
+		};
+
+		{
+			periodicSectionEl = formEl.createDiv({
+				cls: "agent-client-condition-periodic",
 			});
-			const checkbox = wrapper.createEl("input", { type: "checkbox" });
-			checkbox.id = `edit-day-${safeId}-${day}`;
-			checkbox.checked = editedDaysOfWeek.includes(day);
-			checkbox.addEventListener("change", () => {
-				if (checkbox.checked) {
-					if (!editedDaysOfWeek.includes(day))
-						editedDaysOfWeek.push(day);
+			// Time windows
+			const twContainer = periodicSectionEl.createDiv({
+				cls: "agent-client-time-windows",
+			});
+			const renderTw = () => {
+				twContainer.empty();
+				new Setting(twContainer)
+					.setName("Time windows")
+					.setDesc("When this prompt can run. Maximum 3 windows.");
+				if (editedTimeWindows.length === 0) {
+					twContainer.createEl("p", {
+						text: "No time windows yet. Add one below.",
+						cls: "agent-client-settings-empty-hint",
+					});
 				} else {
-					const idx = editedDaysOfWeek.indexOf(day);
-					if (idx >= 0) editedDaysOfWeek.splice(idx, 1);
+					for (let i = 0; i < editedTimeWindows.length; i++) {
+						const tw = editedTimeWindows[i];
+						new Setting(twContainer)
+							.setName(`Window ${i + 1}`)
+							.addText((text) => {
+								text.setValue(tw.startTime)
+									.setPlaceholder("08:00")
+									.onChange((v) => {
+										tw.startTime = v;
+									});
+								text.inputEl.type = "time";
+								text.inputEl.addClass(
+									"agent-client-time-input",
+								);
+							})
+							.addText((text) => {
+								text.setValue(tw.endTime)
+									.setPlaceholder("10:00")
+									.onChange((v) => {
+										tw.endTime = v;
+									});
+								text.inputEl.type = "time";
+								text.inputEl.addClass(
+									"agent-client-time-input",
+								);
+							})
+							.addButton((btn) =>
+								btn
+									.setIcon("trash")
+									.setTooltip("Remove")
+									.onClick(() => {
+										editedTimeWindows.splice(i, 1);
+										renderTw();
+									}),
+							);
+					}
 				}
+				new Setting(twContainer).addButton((btn) =>
+					btn.setButtonText("Add time window").onClick(() => {
+						if (editedTimeWindows.length >= 3) {
+							new Notice("Time windows are limited to 3.");
+							return;
+						}
+						editedTimeWindows.push({
+							startTime: "08:00",
+							endTime: "10:00",
+						});
+						renderTw();
+					}),
+				);
+			};
+			renderTw();
+
+			// Days of week
+			const daysSetting = new Setting(periodicSectionEl)
+				.setName("Days of week")
+				.setDesc(
+					"Select days when the prompt should run. Leave empty for every day.",
+				)
+				.setClass("agent-client-days-of-week");
+			const daysContainer = daysSetting.settingEl.createDiv({
+				cls: "agent-client-days-checkboxes",
 			});
-			wrapper.createEl("label", {
-				text: DAY_LABELS[day],
-				attr: { for: checkbox.id },
-			});
+			const safeId = meta.filePath.replace(/[^a-zA-Z0-9]/g, "_");
+			for (let day = 0; day < 7; day++) {
+				const wrapper = daysContainer.createDiv({
+					cls: "agent-client-day-checkbox",
+				});
+				const checkbox = wrapper.createEl("input", {
+					type: "checkbox",
+				});
+				checkbox.id = `edit-day-${safeId}-${day}`;
+				checkbox.checked = editedDaysOfWeek.includes(day);
+				checkbox.addEventListener("change", () => {
+					if (checkbox.checked) {
+						if (!editedDaysOfWeek.includes(day))
+							editedDaysOfWeek.push(day);
+					} else {
+						const idx = editedDaysOfWeek.indexOf(day);
+						if (idx >= 0) editedDaysOfWeek.splice(idx, 1);
+					}
+				});
+				wrapper.createEl("label", {
+					text: DAY_LABELS[day],
+					attr: { for: checkbox.id },
+				});
+			}
+
+			new Setting(periodicSectionEl)
+				.setName("Scheduled date")
+				.setDesc(
+					"Run only on this specific date (YYYY-MM-DD). Leave empty for recurring execution.",
+				)
+				.addText((text) => {
+					text.setValue(editedScheduledDate)
+						.setPlaceholder("YYYY-MM-DD")
+						.onChange((v) => {
+							editedScheduledDate = v.trim();
+						});
+					text.inputEl.type = "date";
+					text.inputEl.addClass("agent-client-date-input");
+				});
 		}
 
-		// Scheduled date (one-time execution)
-		new Setting(formEl)
-			.setName("Scheduled date")
-			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Run only on this specific date (YYYY-MM-DD). Leave empty for recurring execution.",
-			)
-			.addText((text) => {
-				text.setValue(editedScheduledDate)
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					.setPlaceholder("YYYY-MM-DD")
-					.onChange((v) => {
-						editedScheduledDate = v.trim();
-					});
-				text.inputEl.type = "date";
-				text.inputEl.addClass("agent-client-date-input");
+		{
+			eventSectionEl = formEl.createDiv({
+				cls: "agent-client-condition-event",
 			});
+			let externalPathSetting: Setting | null = null;
+			const updateEventDetailVisibility = () => {
+				if (!externalPathSetting) return;
+				externalPathSetting.settingEl.style.display =
+					editedEventType === "external-file-created" ? "" : "none";
+			};
+
+			new Setting(eventSectionEl)
+				.setName("Event type")
+				.setDesc("Choose event trigger for this prompt.")
+				.addDropdown((dropdown) => {
+					dropdown
+						.addOption("daily-note-created", "Daily note created")
+						.addOption(
+							"external-file-created",
+							"External file created",
+						)
+						.setValue(editedEventType)
+						.onChange((value) => {
+							editedEventType = value as PromptEventType;
+							syncModeVisibility();
+							updateEventDetailVisibility();
+						});
+				});
+
+			externalPathSetting = new Setting(eventSectionEl)
+				.setName("External watch path")
+				.setDesc("Required when event type is External file created.")
+				.addText((text) => {
+					text.setPlaceholder("C:/tmp/inbox")
+						.setValue(editedExternalWatchPath)
+						.onChange((value) => {
+							editedExternalWatchPath = value.trim();
+						});
+				});
+
+			updateEventDetailVisibility();
+		}
+
+		syncModeVisibility();
 
 		// Save / Cancel
 		new Setting(formEl)
@@ -425,69 +507,86 @@ export class CustomPromptsModal extends Modal {
 					.setButtonText("Save")
 					.setCta()
 					.onClick(async () => {
-						// Validate time windows
-						for (const tw of editedTimeWindows) {
-							const sm = /^(\d{1,2}):(\d{2})$/.exec(tw.startTime);
-							const em = /^(\d{1,2}):(\d{2})$/.exec(tw.endTime);
-							if (!sm || !em) {
-								new Notice(
-									// eslint-disable-next-line obsidianmd/ui/sentence-case
-									"Invalid time format. Use HH:MM (e.g., 08:00).",
-								);
+						let condition: PromptExecutionCondition = {
+							mode: "manual",
+						};
+
+						if (editedMode === "periodic") {
+							if (editedTimeWindows.length > 3) {
+								new Notice("Time windows are limited to 3.");
 								return;
+							}
+
+							for (const tw of editedTimeWindows) {
+								const sm = /^(\d{1,2}):(\d{2})$/.exec(
+									tw.startTime,
+								);
+								const em = /^(\d{1,2}):(\d{2})$/.exec(
+									tw.endTime,
+								);
+								if (!sm || !em) {
+									new Notice(
+										"Invalid time format. Use HH:MM (e.g., 08:00).",
+									);
+									return;
+								}
+								if (
+									timeMatchToMinutes(sm) >=
+									timeMatchToMinutes(em)
+								) {
+									new Notice(
+										"Start time must be before end time.",
+									);
+									return;
+								}
 							}
 							if (
-								timeMatchToMinutes(sm) >= timeMatchToMinutes(em)
+								editedScheduledDate &&
+								!/^\d{4}-\d{2}-\d{2}$/.test(editedScheduledDate)
 							) {
 								new Notice(
-									"Start time must be before end time.",
+									"Invalid date format. Use YYYY-MM-DD (e.g., 2024-03-15).",
 								);
 								return;
 							}
-						}
-						// Validate scheduled date if provided
-						if (
-							editedScheduledDate &&
-							!/^\d{4}-\d{2}-\d{2}$/.test(editedScheduledDate)
-						) {
-							new Notice(
-								// eslint-disable-next-line obsidianmd/ui/sentence-case
-								"Invalid date format. Use YYYY-MM-DD (e.g., 2024-03-15).",
-							);
-							return;
-						}
-						// Write back to the file's YAML front-matter
-						const file =
-							this.plugin.app.vault.getAbstractFileByPath(
-								meta.filePath,
-							);
-						if (!(file instanceof TFile)) {
-							new Notice(
-								`[Agent Client] File not found: ${meta.filePath}`,
-							);
-							return;
-						}
-						await this.plugin.app.fileManager.processFrontMatter(
-							file,
-							(fm: Record<string, unknown>) => {
-								fm.title = editedTitle || meta.title;
-								fm.description =
-									editedDescription.trim() || undefined;
-								fm.enabled = editedTimeWindows.length > 0;
-								fm.timeWindows =
-									editedTimeWindows.length > 0
-										? editedTimeWindows
-										: undefined;
-								fm.daysOfWeek =
+
+							condition = {
+								mode: "periodic",
+								enabled: editedTimeWindows.length > 0,
+								timeWindows: editedTimeWindows,
+								daysOfWeek:
 									editedDaysOfWeek.length > 0 &&
 									editedDaysOfWeek.length < 7
 										? [...editedDaysOfWeek].sort(
 												(a, b) => a - b,
 											)
-										: undefined;
-								fm.scheduledDate =
-									editedScheduledDate || undefined;
-							},
+										: undefined,
+								scheduledDate: editedScheduledDate || undefined,
+							};
+						} else if (editedMode === "event") {
+							if (
+								editedEventType === "external-file-created" &&
+								editedExternalWatchPath.trim().length === 0
+							) {
+								new Notice(
+									"External watch path is required for external-file-created.",
+								);
+								return;
+							}
+							condition = {
+								mode: "event",
+								enabled: true,
+								eventType: editedEventType,
+								externalWatchPath:
+									editedEventType === "external-file-created"
+										? editedExternalWatchPath.trim()
+										: undefined,
+							};
+						}
+
+						await this.plugin.savePromptCondition(
+							meta.filePath,
+							condition,
 						);
 						this.plugin.updateSchedulerStatusBar();
 						this.expandedFilePath = null;

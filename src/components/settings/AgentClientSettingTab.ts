@@ -700,6 +700,42 @@ export class AgentClientSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName("Custom prompts").setHeading();
 
 		new Setting(containerEl)
+			.setName("Condition config file")
+			.setDesc(
+				"Vault-relative JSON file path for per-prompt execution conditions.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Prompts/.copilot-prompts.json")
+					.setValue(this.plugin.settings.promptConditionsConfigPath)
+					.onChange(async (value) => {
+						await this.plugin.updatePromptConditionsConfigPath(
+							value,
+						);
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("External watch paths")
+			.setDesc(
+				"Absolute directory paths (one per line). New direct-child files trigger prompts with external-file-created condition.",
+			)
+			.addTextArea((textArea) =>
+				textArea
+					.setPlaceholder("C:/tmp/inbox")
+					.setValue(
+						this.plugin.settings.externalFileWatchPaths.join("\n"),
+					)
+					.onChange(async (value) => {
+						const paths = value
+							.split(/\r?\n/)
+							.map((line) => line.trim())
+							.filter((line) => line.length > 0);
+						await this.plugin.updateExternalFileWatchPaths(paths);
+					}),
+			);
+
+		new Setting(containerEl)
 			.setName("Auto-allow permissions in scheduled chat tabs")
 			.setDesc(
 				"Automatically allow permission requests in background tabs created for scheduled prompt execution. ⚠️ use with caution - this gives scheduled runs full access to your system.",
@@ -721,7 +757,7 @@ export class AgentClientSettingTab extends PluginSettingTab {
 			.setName("Scheduled prompts")
 			.setDesc(
 				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Manage scheduled prompts, time windows, and execution history.",
+				"Manage prompt execution conditions (periodic/event) and execution history.",
 			)
 			.addButton((btn) =>
 				btn

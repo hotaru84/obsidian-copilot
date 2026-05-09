@@ -10,6 +10,8 @@
 
 import { Notice } from "obsidian";
 import type {
+	PromptEventType,
+	PromptExecutionTrigger,
 	PromptFileMeta,
 	PromptExecutionRecord,
 	TimeWindow,
@@ -39,7 +41,7 @@ export interface SchedulerCallbacks {
 	 * registered.
 	 */
 	getOrOpenView: (
-		trigger: "scheduled" | "manual",
+		trigger: PromptExecutionTrigger,
 	) => Promise<IChatViewContainer | null>;
 }
 
@@ -47,7 +49,7 @@ export interface CurrentExecutionInfo {
 	filePath: string;
 	title: string;
 	startedAt: string;
-	trigger: "scheduled" | "manual";
+	trigger: PromptExecutionTrigger;
 }
 
 export interface NextScheduledExecutionInfo {
@@ -59,11 +61,16 @@ export interface NextScheduledExecutionInfo {
 interface QueueItem {
 	meta: PromptFileMeta;
 	body: string;
-	trigger: "scheduled" | "manual";
+	trigger: PromptExecutionTrigger;
+	contextText?: string; // For event/manual runs
 }
 
 /** Maximum retry attempts while waiting for the session to become ready (1 attempt/s). */
 const MAX_SESSION_INIT_RETRY_ATTEMPTS = 30;
+/** Maximum time (ms) to wait for the agent to finish generating after prompt is sent. */
+const MAX_RESPONSE_WAIT_MS = 5 * 60 * 1000; // 5 minutes
+/** Polling interval (ms) when waiting for idle. */
+const IDLE_POLL_INTERVAL_MS = 500;
 
 // ──────────────────────────────────────────────────────────────
 // Time Utilities
@@ -123,6 +130,7 @@ function shouldRunPrompt(
 	now: Date,
 	history: PromptExecutionRecord[],
 ): boolean {
+	if (meta.condition.mode !== "periodic") return false;
 	if (!meta.enabled) return false;
 	if (meta.timeWindows.length === 0) return false;
 	if (isExecutedToday(meta.filePath, history)) return false;
@@ -236,6 +244,7 @@ export class ScheduledPromptRunner {
 		let best: NextScheduledExecutionInfo | null = null;
 
 		for (const { meta } of this.cachedPrompts) {
+			if (meta.condition.mode !== "periodic") continue;
 			if (!meta.enabled || meta.timeWindows.length === 0) continue;
 
 			for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
@@ -323,7 +332,31 @@ export class ScheduledPromptRunner {
 			new Notice(`[Agent Client] Prompt file not found: ${filePath}`);
 			return;
 		}
-		this.enqueueExecution(entry.meta, entry.body, "manual");
+		this.enqueueExecution(entry.meta, entry.body, "manual", undefined);
+		await this.processQueue();
+	}
+
+	/** Execute prompts configured for a given event type. */
+	async runByEvent(
+		eventType: PromptEventType,
+		contextText: string,
+	): Promise<void> {
+		const prompts = await this.callbacks.getPromptsFromFolder();
+		this.cachedPrompts = prompts;
+
+		for (const { meta, body } of prompts) {
+			if (meta.condition.mode !== "event") continue;
+			if (!meta.condition.enabled) continue;
+			if (meta.condition.eventType !== eventType) continue;
+			const text = `${body.trim()}\n\n[Event Context]\n${contextText}`;
+			this.enqueueExecution(
+				meta,
+				text,
+				`event:${eventType}`,
+				contextText,
+			);
+		}
+
 		await this.processQueue();
 	}
 
@@ -344,7 +377,7 @@ export class ScheduledPromptRunner {
 		);
 
 		for (const { meta, body } of toRun) {
-			this.enqueueExecution(meta, body, "scheduled");
+			this.enqueueExecution(meta, body, "scheduled", undefined);
 		}
 
 		await this.processQueue();
@@ -353,7 +386,8 @@ export class ScheduledPromptRunner {
 	private enqueueExecution(
 		meta: PromptFileMeta,
 		body: string,
-		trigger: "scheduled" | "manual",
+		trigger: PromptExecutionTrigger,
+		contextText?: string,
 	): void {
 		if (
 			trigger === "scheduled" &&
@@ -362,7 +396,7 @@ export class ScheduledPromptRunner {
 			return;
 		}
 
-		this.executionQueue.push({ meta, body, trigger });
+		this.executionQueue.push({ meta, body, trigger, contextText });
 		if (trigger === "scheduled") {
 			this.queuedScheduledFilePaths.add(meta.filePath);
 		}
@@ -378,7 +412,12 @@ export class ScheduledPromptRunner {
 				const item = this.executionQueue.shift();
 				if (!item) continue;
 
-				await this.executePrompt(item.meta, item.body, item.trigger);
+				await this.executePrompt(
+					item.meta,
+					item.body,
+					item.trigger,
+					item.contextText,
+				);
 				if (item.trigger === "scheduled") {
 					this.queuedScheduledFilePaths.delete(item.meta.filePath);
 				}
@@ -392,7 +431,8 @@ export class ScheduledPromptRunner {
 	private async executePrompt(
 		meta: PromptFileMeta,
 		body: string,
-		trigger: "scheduled" | "manual",
+		trigger: PromptExecutionTrigger,
+		contextText?: string,
 	): Promise<void> {
 		const startedAtIso = new Date().toISOString();
 		this.currentExecution = {
@@ -410,6 +450,7 @@ export class ScheduledPromptRunner {
 			executedAt: startedAtIso,
 			trigger,
 			success: false,
+			contextText,
 		};
 		let view: IChatViewContainer | null = null;
 
@@ -441,6 +482,19 @@ export class ScheduledPromptRunner {
 			}
 
 			if (sent) {
+				// Wait for the agent to finish generating the response before
+				// marking execution as complete.
+				const deadline = Date.now() + MAX_RESPONSE_WAIT_MS;
+				// Give the session a moment to transition from ready → busy
+				await new Promise<void>((resolve) =>
+					window.setTimeout(resolve, 800),
+				);
+				while (!view.isIdle() && Date.now() < deadline) {
+					this.callbacks.onStateChange?.();
+					await new Promise<void>((resolve) =>
+						window.setTimeout(resolve, IDLE_POLL_INTERVAL_MS),
+					);
+				}
 				record.success = true;
 				new Notice(
 					`[Agent Client] Scheduled prompt "${meta.title}" executed`,
@@ -461,7 +515,7 @@ export class ScheduledPromptRunner {
 				5000,
 			);
 		} finally {
-			if (trigger === "scheduled" && view) {
+			if (trigger !== "manual" && view) {
 				try {
 					await view.close();
 				} catch (error) {
