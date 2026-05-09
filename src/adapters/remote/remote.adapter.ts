@@ -500,8 +500,10 @@ export class RemoteAdapter implements IChatAgentClient {
 			return null;
 		}
 
-		const properties = record.properties;
-		if (!properties || typeof properties !== "object") {
+		const properties = this.normalizeElicitationProperties(
+			record.properties,
+		);
+		if (!properties || Object.keys(properties).length === 0) {
 			return null;
 		}
 
@@ -513,8 +515,183 @@ export class RemoteAdapter implements IChatAgentClient {
 
 		return {
 			type: "object",
-			properties: properties as ElicitationSchema["properties"],
+			properties,
 			...(required ? { required } : {}),
+		};
+	}
+
+	private normalizeElicitationProperties(
+		value: unknown,
+	): ElicitationSchema["properties"] | null {
+		if (!value || typeof value !== "object") {
+			return null;
+		}
+
+		const source = value as Record<string, unknown>;
+		const normalized: ElicitationSchema["properties"] = {};
+
+		for (const [key, propertyValue] of Object.entries(source)) {
+			const property = this.normalizeElicitationProperty(propertyValue);
+			if (property) {
+				normalized[key] = property;
+			}
+		}
+
+		return normalized;
+	}
+
+	private normalizeElicitationProperty(
+		value: unknown,
+	): ElicitationSchema["properties"][string] | null {
+		if (!value || typeof value !== "object") {
+			return null;
+		}
+
+		const record = value as Record<string, unknown>;
+		const type = typeof record.type === "string" ? record.type : undefined;
+		if (!type) {
+			return null;
+		}
+
+		const title =
+			typeof record.title === "string" ? record.title : undefined;
+		const description =
+			typeof record.description === "string"
+				? record.description
+				: undefined;
+		const defaultValue =
+			record.default !== undefined ? record.default : undefined;
+
+		const ui =
+			record.ui && typeof record.ui === "object"
+				? this.normalizeElicitationUi(
+						record.ui as Record<string, unknown>,
+					)
+				: undefined;
+
+		if (type === "object") {
+			const properties = this.normalizeElicitationProperties(
+				record.properties,
+			);
+			if (!properties) {
+				return null;
+			}
+
+			const required = Array.isArray(record.required)
+				? record.required.filter(
+						(item): item is string => typeof item === "string",
+					)
+				: undefined;
+
+			return {
+				type: "object",
+				properties,
+				...(title ? { title } : {}),
+				...(description ? { description } : {}),
+				...(required ? { required } : {}),
+				...(ui ? { ui } : {}),
+				...(defaultValue !== undefined
+					? { default: defaultValue }
+					: {}),
+			};
+		}
+
+		if (type === "array") {
+			const items = this.normalizeElicitationProperty(record.items);
+			if (!items) {
+				return null;
+			}
+
+			const minItems =
+				typeof record.minItems === "number"
+					? record.minItems
+					: undefined;
+			const maxItems =
+				typeof record.maxItems === "number"
+					? record.maxItems
+					: undefined;
+
+			return {
+				type: "array",
+				items,
+				...(title ? { title } : {}),
+				...(description ? { description } : {}),
+				...(minItems !== undefined ? { minItems } : {}),
+				...(maxItems !== undefined ? { maxItems } : {}),
+				...(ui ? { ui } : {}),
+				...(defaultValue !== undefined
+					? { default: defaultValue }
+					: {}),
+			};
+		}
+
+		if (
+			type !== "string" &&
+			type !== "number" &&
+			type !== "integer" &&
+			type !== "boolean"
+		) {
+			return null;
+		}
+
+		const enumValues = Array.isArray(record.enum)
+			? record.enum.filter(
+					(item): item is string => typeof item === "string",
+				)
+			: undefined;
+
+		const minimum =
+			typeof record.minimum === "number" ? record.minimum : undefined;
+		const maximum =
+			typeof record.maximum === "number" ? record.maximum : undefined;
+
+		return {
+			type,
+			...(title ? { title } : {}),
+			...(description ? { description } : {}),
+			...(enumValues ? { enum: enumValues } : {}),
+			...(minimum !== undefined ? { minimum } : {}),
+			...(maximum !== undefined ? { maximum } : {}),
+			...(ui ? { ui } : {}),
+			...(defaultValue !== undefined ? { default: defaultValue } : {}),
+		};
+	}
+
+	private normalizeElicitationUi(
+		value: Record<string, unknown>,
+	): NonNullable<ElicitationSchema["properties"][string]["ui"]> | undefined {
+		const widget =
+			value.widget === "text" ||
+			value.widget === "textarea" ||
+			value.widget === "password" ||
+			value.widget === "json"
+				? value.widget
+				: undefined;
+		const order = typeof value.order === "number" ? value.order : undefined;
+		const section =
+			typeof value.section === "string" ? value.section : undefined;
+		const placeholder =
+			typeof value.placeholder === "string"
+				? value.placeholder
+				: undefined;
+		const rows = typeof value.rows === "number" ? value.rows : undefined;
+
+		if (
+			widget === undefined &&
+			order === undefined &&
+			section === undefined &&
+			placeholder === undefined &&
+			rows === undefined
+		) {
+			return undefined;
+		}
+
+		return {
+			...(widget ? { widget } : {}),
+			...(order !== undefined ? { order } : {}),
+			...(section ? { section } : {}),
+			...(placeholder ? { placeholder } : {}),
+			...(rows !== undefined ? { rows } : {}),
 		};
 	}
 
@@ -2162,41 +2339,10 @@ export class RemoteAdapter implements IChatAgentClient {
 			return { success: true };
 		}
 
-		const state = this.sessionStates.get(sessionId);
-		if (!state) {
-			this.logger.warn(
-				`[RemoteAdapter] Elicitation session not found for request: ${requestId}`,
-			);
-			return { success: false };
-		}
-
-		try {
-			const result = await state.session.rpc.ui.handlePendingElicitation(
-				requestId,
-				response,
-			);
-			if (!result.success) {
-				this.logger.warn(
-					`[RemoteAdapter] Runtime rejected elicitation response for request: ${requestId}`,
-				);
-				return { success: false };
-			}
-
-			this.sessionUpdateCallback?.({
-				type: "elicitation_complete",
-				sessionId,
-				requestId,
-				response,
-				success: true,
-			});
-			return { success: true };
-		} catch (error) {
-			this.logger.error(
-				`[RemoteAdapter] Failed to submit elicitation response via session.rpc.ui for request: ${requestId}`,
-				error,
-			);
-			return { success: false };
-		}
+		this.logger.warn(
+			`[RemoteAdapter] Pending elicitation not found for request: ${requestId}`,
+		);
+		return { success: false };
 	}
 
 	getConnectionState(): AgentConnectionState {

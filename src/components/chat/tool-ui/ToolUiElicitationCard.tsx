@@ -6,8 +6,20 @@ import type {
 import {
 	buildElicitationResponseContent,
 	createInitialElicitationValues,
+	getElicitationValueAtPath,
+	listElicitationFormFields,
+	setElicitationValueAtPath,
 	validateElicitationValues,
 } from "../../../shared/elicitation-form";
+import { ElicitationArrayEditor } from "../ElicitationArrayEditor";
+import {
+	canUseStructuredArrayEditor,
+	flattenReceiptEntries,
+	formatReceiptValue,
+	groupFieldsBySection,
+	groupReceiptEntriesBySection,
+	resolveArrayItemType,
+} from "../../../shared/elicitation-ui";
 
 interface ToolUiElicitationCardProps {
 	requestId: string;
@@ -80,6 +92,15 @@ export function ToolUiElicitationCard({
 	const showForm = status === "pending" || status === "failed";
 	const isInteractive = showForm && !isSubmitting;
 
+	const fields = React.useMemo(
+		() => listElicitationFormFields(requestedSchema),
+		[requestedSchema],
+	);
+	const sectionedFields = React.useMemo(
+		() => groupFieldsBySection(fields),
+		[fields],
+	);
+
 	React.useEffect(() => {
 		if (status === "pending") {
 			setValues(createInitialElicitationValues(requestedSchema));
@@ -89,17 +110,14 @@ export function ToolUiElicitationCard({
 	}, [requestId, requestedSchema, status]);
 
 	const handleFieldChange = React.useCallback(
-		(name: string, value: unknown) => {
-			setValues((prev) => ({
-				...prev,
-				[name]: value,
-			}));
+		(path: string, value: unknown) => {
+			setValues((prev) => setElicitationValueAtPath(prev, path, value));
 			setErrors((prev) => {
-				if (!prev[name]) {
+				if (!prev[path]) {
 					return prev;
 				}
 				const next = { ...prev };
-				delete next[name];
+				delete next[path];
 				return next;
 			});
 		},
@@ -143,7 +161,14 @@ export function ToolUiElicitationCard({
 		[isInteractive, onSubmit, requestedSchema, values],
 	);
 
-	const responseEntries = Object.entries(response?.content ?? {});
+	const responseEntries = React.useMemo(
+		() => flattenReceiptEntries(requestedSchema, response),
+		[requestedSchema, response],
+	);
+	const sectionedResponseEntries = React.useMemo(
+		() => groupReceiptEntriesBySection(responseEntries),
+		[responseEntries],
+	);
 
 	return (
 		<div
@@ -177,141 +202,253 @@ export function ToolUiElicitationCard({
 			{showForm && (
 				<>
 					<div className="agent-client-tool-ui-elicitation-fields">
-						{Object.entries(requestedSchema.properties).map(
-							([name, property]) => {
-								const fieldId = `elicitation-${requestId}-${name}`;
-								const value = values[name];
-								const fieldError = errors[name];
-								const label = property.title || name;
-								const required = (
-									requestedSchema.required || []
-								).includes(name);
+						{sectionedFields.map((group) => (
+							<div
+								key={group.section || "__default__"}
+								className="agent-client-tool-ui-elicitation-section"
+							>
+								{group.section && (
+									<div className="agent-client-tool-ui-elicitation-section-title">
+										{group.section}
+									</div>
+								)}
+								{group.fields.map((field) => {
+									const { property } = field;
+									const fieldId = `elicitation-${requestId}-${field.path}`;
+									const value = getElicitationValueAtPath(
+										values,
+										field.path,
+									);
+									const fieldError = errors[field.path];
+									const useStructuredArrayEditor =
+										canUseStructuredArrayEditor(property);
+									const isJsonArrayField =
+										(property.type === "array" &&
+											!useStructuredArrayEditor) ||
+										property.ui?.widget === "json";
+									const enumOptions =
+										property.type !== "array"
+											? property.enum
+											: undefined;
+									const minValue =
+										property.type !== "array"
+											? property.minimum
+											: undefined;
+									const maxValue =
+										property.type !== "array"
+											? property.maximum
+											: undefined;
+									const isTextareaField =
+										property.ui?.widget === "textarea" ||
+										isJsonArrayField;
+									const arrayInputValue =
+										typeof value === "string"
+											? value
+											: Array.isArray(value)
+												? JSON.stringify(value, null, 2)
+												: "";
+									const arrayItemType =
+										resolveArrayItemType(property);
+									const arrayValues = Array.isArray(value)
+										? value
+										: [];
 
-								return (
-									<div
-										key={name}
-										className="agent-client-tool-ui-elicitation-field"
-									>
-										<label
-											htmlFor={fieldId}
-											className="agent-client-tool-ui-elicitation-label"
+									return (
+										<div
+											key={field.path}
+											className="agent-client-tool-ui-elicitation-field"
 										>
-											{label}
-											{required && (
-												<span className="agent-client-tool-ui-elicitation-required">
-													*
-												</span>
-											)}
-										</label>
-										{property.description && (
-											<div className="agent-client-tool-ui-elicitation-description">
-												{property.description}
-											</div>
-										)}
-										{property.enum ? (
-											<select
-												id={fieldId}
-												className="agent-client-tool-ui-elicitation-input"
-												disabled={!isInteractive}
-												value={
-													value !== null &&
-													value !== undefined
-														? String(
-																value as
-																	| string
-																	| number
-																	| boolean,
-															)
-														: ""
-												}
-												onChange={(event) =>
-													handleFieldChange(
-														name,
-														event.target.value,
-													)
-												}
+											<label
+												htmlFor={fieldId}
+												className="agent-client-tool-ui-elicitation-label"
 											>
-												{property.enum.map((option) => {
-													const optionLabel = String(
-														option as
-															| string
-															| number
-															| boolean,
-													);
-													return (
-														<option
-															key={optionLabel}
-															value={optionLabel}
-														>
-															{optionLabel}
-														</option>
-													);
-												})}
-											</select>
-										) : property.type === "boolean" ? (
-											<label className="agent-client-tool-ui-elicitation-checkbox-row">
-												<input
+												{field.label}
+												{field.required && (
+													<span className="agent-client-tool-ui-elicitation-required">
+														*
+													</span>
+												)}
+											</label>
+
+											{field.description && (
+												<div className="agent-client-tool-ui-elicitation-description">
+													{field.description}
+												</div>
+											)}
+
+											{enumOptions ? (
+												<select
 													id={fieldId}
-													type="checkbox"
+													className="agent-client-tool-ui-elicitation-input"
 													disabled={!isInteractive}
-													checked={Boolean(value)}
+													value={
+														value !== null &&
+														value !== undefined
+															? String(
+																	value as
+																		| string
+																		| number
+																		| boolean,
+																)
+															: ""
+													}
 													onChange={(event) =>
 														handleFieldChange(
-															name,
-															event.target
-																.checked,
+															field.path,
+															event.target.value,
+														)
+													}
+												>
+													{enumOptions.map(
+														(option: string) => {
+															const optionLabel =
+																String(
+																	option as
+																		| string
+																		| number
+																		| boolean,
+																);
+															return (
+																<option
+																	key={
+																		optionLabel
+																	}
+																	value={
+																		optionLabel
+																	}
+																>
+																	{
+																		optionLabel
+																	}
+																</option>
+															);
+														},
+													)}
+												</select>
+											) : property.type === "boolean" ? (
+												<label className="agent-client-tool-ui-elicitation-checkbox-row">
+													<input
+														id={fieldId}
+														type="checkbox"
+														disabled={
+															!isInteractive
+														}
+														checked={Boolean(value)}
+														onChange={(event) =>
+															handleFieldChange(
+																field.path,
+																event.target
+																	.checked,
+															)
+														}
+													/>
+													<span>Enabled</span>
+												</label>
+											) : useStructuredArrayEditor ? (
+												<ElicitationArrayEditor
+													fieldPath={field.path}
+													values={arrayValues}
+													itemType={arrayItemType}
+													isInteractive={
+														isInteractive
+													}
+													onChange={(
+														path,
+														nextValues,
+													) =>
+														handleFieldChange(
+															path,
+															nextValues,
+														)
+													}
+													classNames={{
+														container:
+															"agent-client-tool-ui-elicitation-array-editor",
+														empty: "agent-client-tool-ui-elicitation-array-empty",
+														row: "agent-client-tool-ui-elicitation-array-item",
+														input: "agent-client-tool-ui-elicitation-input",
+														checkboxRow:
+															"agent-client-tool-ui-elicitation-checkbox-row",
+														addButton:
+															"agent-client-tool-ui-elicitation-button",
+														removeButton:
+															"agent-client-tool-ui-elicitation-button agent-client-tool-ui-elicitation-array-remove",
+													}}
+												/>
+											) : isTextareaField ? (
+												<textarea
+													id={fieldId}
+													className="agent-client-tool-ui-elicitation-input agent-client-tool-ui-elicitation-textarea"
+													disabled={!isInteractive}
+													placeholder={
+														property.ui
+															?.placeholder ??
+														(isJsonArrayField
+															? 'Enter JSON array, e.g. ["item"]'
+															: undefined)
+													}
+													rows={
+														property.ui?.rows ?? 4
+													}
+													value={arrayInputValue}
+													onChange={(event) =>
+														handleFieldChange(
+															field.path,
+															event.target.value,
 														)
 													}
 												/>
-												<span>Enabled</span>
-											</label>
-										) : (
-											<input
-												id={fieldId}
-												type={
-													property.type ===
-														"number" ||
-													property.type === "integer"
-														? "number"
-														: "text"
-												}
-												className="agent-client-tool-ui-elicitation-input"
-												disabled={!isInteractive}
-												value={
-													value !== null &&
-													value !== undefined
-														? String(
-																value as
-																	| string
-																	| number
-																	| boolean,
-															)
-														: ""
-												}
-												min={property.minimum}
-												max={property.maximum}
-												step={
-													property.type === "integer"
-														? 1
-														: "any"
-												}
-												onChange={(event) =>
-													handleFieldChange(
-														name,
-														event.target.value,
-													)
-												}
-											/>
-										)}
-										{fieldError && (
-											<div className="agent-client-tool-ui-elicitation-error">
-												{fieldError}
-											</div>
-										)}
-									</div>
-								);
-							},
-						)}
+											) : (
+												<input
+													id={fieldId}
+													type={
+														property.type ===
+															"number" ||
+														property.type ===
+															"integer"
+															? "number"
+															: "text"
+													}
+													className="agent-client-tool-ui-elicitation-input"
+													disabled={!isInteractive}
+													value={
+														value !== null &&
+														value !== undefined
+															? String(
+																	value as
+																		| string
+																		| number
+																		| boolean,
+																)
+															: ""
+													}
+													min={minValue}
+													max={maxValue}
+													step={
+														property.type ===
+														"integer"
+															? 1
+															: "any"
+													}
+													onChange={(event) =>
+														handleFieldChange(
+															field.path,
+															event.target.value,
+														)
+													}
+												/>
+											)}
+
+											{fieldError && (
+												<div className="agent-client-tool-ui-elicitation-error">
+													{fieldError}
+												</div>
+											)}
+										</div>
+									);
+								})}
+							</div>
+						))}
 					</div>
 
 					<div className="agent-client-tool-ui-elicitation-actions">
@@ -354,28 +491,33 @@ export function ToolUiElicitationCard({
 					</div>
 					{responseEntries.length > 0 && (
 						<div className="agent-client-tool-ui-elicitation-receipt-fields">
-							{responseEntries.map(([key, value]) => {
-								const prop = requestedSchema.properties[key];
-								const label = prop?.title ?? key;
-								return (
-									<div
-										key={key}
-										className="agent-client-tool-ui-elicitation-receipt-field"
-									>
-										<span className="agent-client-tool-ui-elicitation-receipt-field-key">
-											{label}
-										</span>
-										<span className="agent-client-tool-ui-elicitation-receipt-field-value">
-											{String(
-												value as
-													| string
-													| number
-													| boolean,
-											)}
-										</span>
-									</div>
-								);
-							})}
+							{sectionedResponseEntries.map((group) => (
+								<div
+									key={group.section || "__default__"}
+									className="agent-client-tool-ui-elicitation-receipt-section"
+								>
+									{group.section && (
+										<div className="agent-client-tool-ui-elicitation-receipt-section-title">
+											{group.section}
+										</div>
+									)}
+									{group.entries.map((entry) => (
+										<div
+											key={entry.key}
+											className="agent-client-tool-ui-elicitation-receipt-field"
+										>
+											<span className="agent-client-tool-ui-elicitation-receipt-field-key">
+												{entry.label}
+											</span>
+											<span className="agent-client-tool-ui-elicitation-receipt-field-value">
+												{formatReceiptValue(
+													entry.value,
+												)}
+											</span>
+										</div>
+									))}
+								</div>
+							))}
 						</div>
 					)}
 				</div>

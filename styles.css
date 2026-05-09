@@ -425,6 +425,20 @@ If your plugin does not need CSS, delete this file.
 	gap: 12px;
 }
 
+.agent-client-elicitation-modal-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.agent-client-elicitation-modal-section-title {
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--text-accent);
+}
+
 .agent-client-elicitation-modal-field-group {
 	display: flex;
 	flex-direction: column;
@@ -454,10 +468,34 @@ If your plugin does not need CSS, delete this file.
 	color: var(--text-normal);
 }
 
+.agent-client-elicitation-modal-textarea {
+	resize: vertical;
+	font-family: var(--font-monospace);
+	line-height: 1.4;
+}
+
 .agent-client-elicitation-modal-checkbox-row {
 	display: flex;
 	align-items: center;
 	gap: 8px;
+}
+
+.agent-client-elicitation-modal-array-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.agent-client-elicitation-modal-array-empty {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.agent-client-elicitation-modal-array-item {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 8px;
+	align-items: center;
 }
 
 .agent-client-elicitation-modal-error {
@@ -801,6 +839,20 @@ If your plugin does not need CSS, delete this file.
 	gap: 10px;
 }
 
+.agent-client-tool-ui-elicitation-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.agent-client-tool-ui-elicitation-section-title {
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-accent);
+}
+
 .agent-client-tool-ui-elicitation-field {
 	display: flex;
 	flex-direction: column;
@@ -832,12 +884,40 @@ If your plugin does not need CSS, delete this file.
 	font-size: 12px;
 }
 
+.agent-client-tool-ui-elicitation-textarea {
+	resize: vertical;
+	font-family: var(--font-monospace);
+	line-height: 1.4;
+}
+
 .agent-client-tool-ui-elicitation-checkbox-row {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
 	font-size: 12px;
 	color: var(--text-normal);
+}
+
+.agent-client-tool-ui-elicitation-array-editor {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.agent-client-tool-ui-elicitation-array-empty {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.agent-client-tool-ui-elicitation-array-item {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 8px;
+	align-items: center;
+}
+
+.agent-client-tool-ui-elicitation-array-remove {
+	padding-inline: 10px !important;
 }
 
 .agent-client-tool-ui-elicitation-error {
@@ -908,7 +988,21 @@ If your plugin does not need CSS, delete this file.
 	margin-top: 6px;
 	display: flex;
 	flex-direction: column;
+	gap: 8px;
+}
+
+.agent-client-tool-ui-elicitation-receipt-section {
+	display: flex;
+	flex-direction: column;
 	gap: 2px;
+}
+
+.agent-client-tool-ui-elicitation-receipt-section-title {
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-accent);
 }
 
 .agent-client-tool-ui-elicitation-receipt-field {
@@ -932,6 +1026,7 @@ If your plugin does not need CSS, delete this file.
 .agent-client-tool-ui-elicitation-receipt-field-value {
 	color: var(--text-normal);
 	word-break: break-word;
+	white-space: pre-wrap;
 }
 
 .agent-client-tool-ui-elicitation-receipt--completed

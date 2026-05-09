@@ -69,15 +69,45 @@ export interface TerminalContent {
 /**
  * JSON schema property supported by the runtime's UI elicitation API.
  */
-export interface ElicitationSchemaProperty {
-	type: "string" | "number" | "integer" | "boolean";
+export interface ElicitationSchemaUiMetadata {
+	widget?: "text" | "textarea" | "password" | "json";
+	order?: number;
+	section?: string;
+	placeholder?: string;
+	rows?: number;
+}
+
+interface ElicitationSchemaPropertyBase {
 	title?: string;
 	description?: string;
+	ui?: ElicitationSchemaUiMetadata;
+	default?: unknown;
+}
+
+export interface ElicitationPrimitiveSchemaProperty extends ElicitationSchemaPropertyBase {
+	type: "string" | "number" | "integer" | "boolean";
 	enum?: string[];
 	minimum?: number;
 	maximum?: number;
-	default?: unknown;
 }
+
+export interface ElicitationObjectSchemaProperty extends ElicitationSchemaPropertyBase {
+	type: "object";
+	properties: Record<string, ElicitationSchemaProperty>;
+	required?: string[];
+}
+
+export interface ElicitationArraySchemaProperty extends ElicitationSchemaPropertyBase {
+	type: "array";
+	items: ElicitationSchemaProperty;
+	minItems?: number;
+	maxItems?: number;
+}
+
+export type ElicitationSchemaProperty =
+	| ElicitationPrimitiveSchemaProperty
+	| ElicitationObjectSchemaProperty
+	| ElicitationArraySchemaProperty;
 
 /**
  * JSON schema payload used for collecting structured user input at runtime.
