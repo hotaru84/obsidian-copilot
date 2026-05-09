@@ -50,6 +50,10 @@ export interface CurrentExecutionInfo {
 	title: string;
 	startedAt: string;
 	trigger: PromptExecutionTrigger;
+	/** Event type if triggered by event */
+	eventType?: string; // e.g., "daily-note-created", "external-file-created"
+	/** Context text for event executions (may be truncated for display) */
+	contextText?: string;
 }
 
 export interface NextScheduledExecutionInfo {
@@ -63,6 +67,10 @@ interface QueueItem {
 	body: string;
 	trigger: PromptExecutionTrigger;
 	contextText?: string; // For event/manual runs
+}
+
+export interface ManualPromptRunOptions {
+	contextText?: string;
 }
 
 /** Maximum retry attempts while waiting for the session to become ready (1 attempt/s). */
@@ -144,6 +152,11 @@ function shouldRunPrompt(
 		if (!meta.daysOfWeek.includes(now.getDay())) return false;
 	}
 	return meta.timeWindows.some((w) => isInTimeWindow(now, w));
+}
+
+function appendExecutionContext(body: string, contextText?: string): string {
+	if (!contextText) return body;
+	return `${body.trim()}\n\n[Execution Context]\n${contextText}`;
 }
 
 /**
@@ -318,7 +331,10 @@ export class ScheduledPromptRunner {
 	// ──────────────────────────────────────────────────────────────
 
 	/** Execute the prompt at the given vault path immediately, regardless of schedule. */
-	async runNow(filePath: string): Promise<void> {
+	async runNow(
+		filePath: string,
+		options?: ManualPromptRunOptions,
+	): Promise<void> {
 		// Try cached first, fall back to fresh load
 		let entry = this.cachedPrompts.find(
 			(p) => p.meta.filePath === filePath,
@@ -332,7 +348,8 @@ export class ScheduledPromptRunner {
 			new Notice(`[Agent Client] Prompt file not found: ${filePath}`);
 			return;
 		}
-		this.enqueueExecution(entry.meta, entry.body, "manual", undefined);
+		const body = appendExecutionContext(entry.body, options?.contextText);
+		this.enqueueExecution(entry.meta, body, "manual", options?.contextText);
 		await this.processQueue();
 	}
 
@@ -348,7 +365,7 @@ export class ScheduledPromptRunner {
 			if (meta.condition.mode !== "event") continue;
 			if (!meta.condition.enabled) continue;
 			if (meta.condition.eventType !== eventType) continue;
-			const text = `${body.trim()}\n\n[Event Context]\n${contextText}`;
+			const text = appendExecutionContext(body, contextText);
 			this.enqueueExecution(
 				meta,
 				text,
@@ -435,11 +452,27 @@ export class ScheduledPromptRunner {
 		contextText?: string,
 	): Promise<void> {
 		const startedAtIso = new Date().toISOString();
+
+		// Extract event type from trigger if applicable
+		let eventType: string | undefined;
+		if (trigger.startsWith("event:")) {
+			eventType = trigger.substring(6); // Remove "event:" prefix
+		}
+
+		// Truncate context to 200 chars for display
+		const displayContext = contextText
+			? contextText.length > 200
+				? contextText.substring(0, 200) + "..."
+				: contextText
+			: undefined;
+
 		this.currentExecution = {
 			filePath: meta.filePath,
 			title: meta.title,
 			startedAt: startedAtIso,
 			trigger,
+			eventType,
+			contextText: displayContext,
 		};
 		this.callbacks.onStateChange?.();
 

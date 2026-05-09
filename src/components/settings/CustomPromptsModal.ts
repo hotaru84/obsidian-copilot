@@ -7,6 +7,7 @@ import type {
 	TimeWindow,
 } from "../../domain/models/scheduled-prompt";
 import { SAMPLE_PROMPT_TEMPLATE } from "../../shared/frontmatter-utils";
+import { selectDailyNoteDate } from "../chat/DailyNoteDateModal";
 
 /** Days of week labels (index matches Date.getDay()) */
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -269,7 +270,14 @@ export class CustomPromptsModal extends Modal {
 		});
 		setIcon(runBtn, "play");
 		runBtn.addEventListener("click", () => {
-			void this.plugin.scheduledPromptRunner.runNow(meta.filePath);
+			void (async () => {
+				const date = await selectDailyNoteDate(this.app);
+				if (!date) return;
+				await this.plugin.runPromptNowWithDailyNoteDate(
+					meta.filePath,
+					date,
+				);
+			})();
 		});
 
 		const editBtn = bodyActionsEl.createEl("button", {

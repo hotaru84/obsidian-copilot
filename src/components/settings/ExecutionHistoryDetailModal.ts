@@ -2,10 +2,10 @@ import { Modal, App } from "obsidian";
 import type { PromptExecutionRecord } from "../../domain/models/scheduled-prompt";
 
 const TRIGGER_LABELS: Record<string, string> = {
-	scheduled: "スケジュール実行",
-	manual: "手動実行",
-	"event:daily-note-created": "デイリーノート作成イベント",
-	"event:external-file-created": "外部ファイル作成イベント",
+	scheduled: "Scheduled",
+	manual: "Manual",
+	"event:daily-note-created": "Daily Note Created Event",
+	"event:external-file-created": "External File Created Event",
 };
 
 /**
@@ -20,7 +20,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText("実行履歴詳細");
+		this.titleEl.setText("History detail");
 		this.renderContent();
 	}
 
@@ -37,37 +37,38 @@ export class ExecutionHistoryDetailModal extends Modal {
 		// ════════════════════════════════════════════════════════════════
 
 		const infoSection = contentEl.createDiv("history-detail-section");
-		infoSection.createEl("h3", { text: "基本情報" });
+		infoSection.createEl("h3", { text: "Basic info" });
 
 		// Title
 		const titleRow = infoSection.createDiv("history-detail-row");
-		titleRow.createDiv("history-detail-label").setText("プロンプト:");
+		titleRow.createDiv("history-detail-label").setText("Prompt:");
 		titleRow.createDiv("history-detail-value").setText(this.record.title);
 
 		// File path
 		const pathRow = infoSection.createDiv("history-detail-row");
-		pathRow.createDiv("history-detail-label").setText("ファイル:");
+		pathRow.createDiv("history-detail-label").setText("File:");
 		const pathValue = pathRow.createDiv("history-detail-value");
 		pathValue.setText(this.record.filePath);
 		pathValue.addClass("monospace");
 
 		// Trigger type
 		const triggerRow = infoSection.createDiv("history-detail-row");
-		triggerRow.createDiv("history-detail-label").setText("トリガー:");
+		triggerRow.createDiv("history-detail-label").setText("Trigger:");
 		const triggerLabel = this.record.trigger
 			? TRIGGER_LABELS[this.record.trigger] || this.record.trigger
-			: "不明";
+			: "Unknown";
 		triggerRow.createDiv("history-detail-value").setText(triggerLabel);
 
 		// Status
 		const statusRow = infoSection.createDiv("history-detail-row");
-		statusRow.createDiv("history-detail-label").setText("ステータス:");
+		statusRow.createDiv("history-detail-label").setText("Status:");
 		const statusValue = statusRow.createDiv("history-detail-value");
-		if (this.record.success) {
-			statusValue.setText("✅ 成功");
+		const isSuccess = this.record.success === true && !this.record.error;
+		if (isSuccess) {
+			statusValue.setText("Success");
 			statusValue.addClass("success");
 		} else {
-			statusValue.setText("❌ 失敗");
+			statusValue.setText("Failure");
 			statusValue.addClass("error");
 		}
 
@@ -76,11 +77,11 @@ export class ExecutionHistoryDetailModal extends Modal {
 		// ════════════════════════════════════════════════════════════════
 
 		const timingSection = contentEl.createDiv("history-detail-section");
-		timingSection.createEl("h3", { text: "実行時刻" });
+		timingSection.createEl("h3", { text: "Timing" });
 
 		// Start time
 		const startRow = timingSection.createDiv("history-detail-row");
-		startRow.createDiv("history-detail-label").setText("開始:");
+		startRow.createDiv("history-detail-label").setText("Start:");
 		const startTime = new Date(this.record.executedAt);
 		const startFormatted = this.formatDateTime(startTime);
 		startRow.createDiv("history-detail-value").setText(startFormatted);
@@ -88,7 +89,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 		// Duration
 		if (this.record.completedAt) {
 			const durationRow = timingSection.createDiv("history-detail-row");
-			durationRow.createDiv("history-detail-label").setText("経過時間:");
+			durationRow.createDiv("history-detail-label").setText("Duration:");
 			const endTime = new Date(this.record.completedAt);
 			const duration = endTime.getTime() - startTime.getTime();
 			const durationText = this.formatDuration(duration);
@@ -96,7 +97,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 
 			// Completion time (optional, detailed)
 			const endRow = timingSection.createDiv("history-detail-row");
-			endRow.createDiv("history-detail-label").setText("完了:");
+			endRow.createDiv("history-detail-label").setText("Fininsh:");
 			const endFormatted = this.formatDateTime(endTime);
 			endRow.createDiv("history-detail-value").setText(endFormatted);
 		}
@@ -109,7 +110,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 			const contextSection = contentEl.createDiv(
 				"history-detail-section",
 			);
-			contextSection.createEl("h3", { text: "渡されたコンテキスト" });
+			contextSection.createEl("h3", { text: "Context" });
 
 			const contextValue = contextSection.createDiv(
 				"history-detail-text-box",
@@ -126,7 +127,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 			const responseSection = contentEl.createDiv(
 				"history-detail-section",
 			);
-			responseSection.createEl("h3", { text: "エージェント応答" });
+			responseSection.createEl("h3", { text: "Agent response" });
 
 			const responseValue = responseSection.createDiv(
 				"history-detail-text-box",
@@ -143,7 +144,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 			const errorSection = contentEl.createDiv(
 				"history-detail-section error",
 			);
-			errorSection.createEl("h3", { text: "エラー" });
+			errorSection.createEl("h3", { text: "Error" });
 
 			const errorValue = errorSection.createDiv("history-detail-error");
 			errorValue.setText(this.record.error);
@@ -154,7 +155,7 @@ export class ExecutionHistoryDetailModal extends Modal {
 		// ════════════════════════════════════════════════════════════════
 
 		const buttonRow = contentEl.createDiv("history-detail-button-row");
-		const closeButton = buttonRow.createEl("button", { text: "閉じる" });
+		const closeButton = buttonRow.createEl("button", { text: "Close" });
 		closeButton.addEventListener("click", () => this.close());
 	}
 
@@ -175,11 +176,11 @@ export class ExecutionHistoryDetailModal extends Modal {
 		const hours = Math.floor(minutes / 60);
 
 		if (hours > 0) {
-			return `${hours}時間 ${minutes % 60}分 ${seconds % 60}秒`;
+			return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
 		}
 		if (minutes > 0) {
-			return `${minutes}分 ${seconds % 60}秒`;
+			return `${minutes}m ${seconds % 60}s`;
 		}
-		return `${seconds}秒`;
+		return `${seconds}s`;
 	}
 }

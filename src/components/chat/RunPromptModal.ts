@@ -7,20 +7,21 @@
 
 import { FuzzySuggestModal, App } from "obsidian";
 import type { PromptFileMeta } from "../../domain/models/scheduled-prompt";
-import type { ScheduledPromptRunner } from "../../shared/scheduled-prompt-runner";
+import type AgentClientPlugin from "../../plugin";
+import { selectDailyNoteDate } from "./DailyNoteDateModal";
 
 export class RunPromptModal extends FuzzySuggestModal<PromptFileMeta> {
 	private prompts: PromptFileMeta[];
-	private runner: ScheduledPromptRunner;
+	private plugin: AgentClientPlugin;
 
 	constructor(
 		app: App,
 		prompts: PromptFileMeta[],
-		runner: ScheduledPromptRunner,
+		plugin: AgentClientPlugin,
 	) {
 		super(app);
 		this.prompts = prompts;
-		this.runner = runner;
+		this.plugin = plugin;
 		this.setPlaceholder("Select a prompt to run now\u2026");
 	}
 
@@ -35,6 +36,13 @@ export class RunPromptModal extends FuzzySuggestModal<PromptFileMeta> {
 	}
 
 	onChooseItem(item: PromptFileMeta): void {
-		void this.runner.runNow(item.filePath);
+		void (async () => {
+			const date = await selectDailyNoteDate(this.app);
+			if (!date) return;
+			await this.plugin.runPromptNowWithDailyNoteDate(
+				item.filePath,
+				date,
+			);
+		})();
 	}
 }

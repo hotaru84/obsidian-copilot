@@ -98,6 +98,20 @@ function buildDailyNoteEventContext(filePath: string, content: string): string {
 	].join("\n");
 }
 
+function buildDailyNoteManualContext(
+	filePath: string,
+	date: string,
+	content: string,
+): string {
+	return [
+		`A daily note was selected for manual execution (${date}): ${filePath}`,
+		"Use the note below as context.",
+		"",
+		"[Daily Note Content]",
+		content,
+	].join("\n");
+}
+
 function buildExternalFileEventContext(filePath: string): string {
 	return `A new external file was created: ${filePath}`;
 }
@@ -137,7 +151,27 @@ function dailyNoteFormatToRegex(format: string): RegExp | null {
 	return new RegExp(`^${pattern}$`);
 }
 
-function isDailyNoteByConfig(filePath: string, app: App): boolean {
+function dailyNoteFormatToDateCaptureRegex(format: string): RegExp | null {
+	if (!format || typeof format !== "string") return null;
+	const escaped = format.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const pattern = escaped
+		.replace(/YYYY/g, "(?<year>\\d{4})")
+		.replace(/MM/g, "(?<month>\\d{2})")
+		.replace(/DD/g, "(?<day>\\d{2})");
+	if (
+		!pattern.includes("?<year>") ||
+		!pattern.includes("?<month>") ||
+		!pattern.includes("?<day>")
+	) {
+		return null;
+	}
+	return new RegExp(`^${pattern}$`);
+}
+
+function getDailyNotesPluginOptions(app: App): {
+	folder?: string;
+	format?: string;
+} {
 	const internal = (app as unknown as { internalPlugins?: unknown })
 		.internalPlugins as
 		| {
@@ -153,8 +187,14 @@ function isDailyNoteByConfig(filePath: string, app: App): boolean {
 				options?: { folder?: string; format?: string };
 		  }
 		| undefined;
-	const folder = instance?.options?.folder?.trim();
-	const format = instance?.options?.format?.trim();
+	return {
+		folder: instance?.options?.folder?.trim(),
+		format: instance?.options?.format?.trim(),
+	};
+}
+
+function isDailyNoteByConfig(filePath: string, app: App): boolean {
+	const { folder, format } = getDailyNotesPluginOptions(app);
 	const fileName = filePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
 
 	if (folder && !filePath.startsWith(`${folder}/`)) {
@@ -170,6 +210,48 @@ function isDailyNoteByConfig(filePath: string, app: App): boolean {
 
 	// Fallback: yyyy-mm-dd
 	return /^\d{4}-\d{2}-\d{2}$/.test(fileName);
+}
+
+function extractDailyNoteDate(filePath: string, app: App): string | null {
+	const { format } = getDailyNotesPluginOptions(app);
+	const fileName = filePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
+
+	if (!format) {
+		return /^\d{4}-\d{2}-\d{2}$/.test(fileName) ? fileName : null;
+	}
+
+	const regex = dailyNoteFormatToDateCaptureRegex(format);
+	if (!regex) {
+		return /^\d{4}-\d{2}-\d{2}$/.test(fileName) ? fileName : null;
+	}
+
+	const match = regex.exec(fileName);
+	if (!match?.groups) return null;
+	const year = Number(match.groups.year);
+	const month = Number(match.groups.month);
+	const day = Number(match.groups.day);
+	if (
+		!Number.isInteger(year) ||
+		!Number.isInteger(month) ||
+		!Number.isInteger(day) ||
+		month < 1 ||
+		month > 12 ||
+		day < 1 ||
+		day > 31
+	) {
+		return null;
+	}
+
+	const date = new Date(year, month - 1, day);
+	if (
+		date.getFullYear() !== year ||
+		date.getMonth() !== month - 1 ||
+		date.getDate() !== day
+	) {
+		return null;
+	}
+
+	return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /** Maximum seconds to wait for a new chat view to register after opening one. */
@@ -645,6 +727,57 @@ export default class AgentClientPlugin extends Plugin {
 		);
 		this.restartExternalFileObserver();
 		this.updateSchedulerStatusBar();
+	}
+
+	private findDailyNoteForDate(date: string): TFile | null {
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			if (!isDailyNoteByConfig(file.path, this.app)) continue;
+			if (extractDailyNoteDate(file.path, this.app) === date) {
+				return file;
+			}
+		}
+		return null;
+	}
+
+	async runPromptNowWithDailyNoteDate(
+		filePath: string,
+		dailyNoteDate: string,
+	): Promise<void> {
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(dailyNoteDate)) {
+			new Notice("[Agent Client] Invalid date format. Use YYYY-MM-DD");
+			return;
+		}
+
+		const file = this.findDailyNoteForDate(dailyNoteDate);
+		if (!file) {
+			new Notice(
+				`[Agent Client] Daily note not found for date: ${dailyNoteDate}`,
+			);
+			return;
+		}
+
+		let contextText: string;
+		try {
+			const raw = await this.app.vault.read(file);
+			const maxLen = this.settings.displaySettings.maxNoteLength;
+			const limited =
+				raw.length > maxLen
+					? `${raw.slice(0, maxLen)}\n\n[Truncated to ${maxLen} chars]`
+					: raw;
+			contextText = buildDailyNoteManualContext(
+				file.path,
+				dailyNoteDate,
+				limited,
+			);
+		} catch (error) {
+			console.warn(
+				`[Agent Client] Failed to read daily note for manual context: ${file.path}`,
+				error,
+			);
+			contextText = `A daily note was selected for manual execution (${dailyNoteDate}): ${file.path}`;
+		}
+
+		await this.scheduledPromptRunner.runNow(filePath, { contextText });
 	}
 
 	private startPromptObservers(): void {
@@ -1417,7 +1550,7 @@ export default class AgentClientPlugin extends Plugin {
 					new RunPromptModal(
 						this.app,
 						entries.map((e) => e.meta),
-						this.scheduledPromptRunner,
+						this,
 					).open();
 				})();
 			},
@@ -1452,18 +1585,6 @@ export default class AgentClientPlugin extends Plugin {
 		});
 	}
 
-	private openPluginSettingsTab(): void {
-		const appWithSetting = this.app as {
-			setting?: {
-				open: () => void;
-				openTabById: (tabId: string) => void;
-			};
-		};
-
-		appWithSetting.setting?.open();
-		appWithSetting.setting?.openTabById(this.manifest.id);
-	}
-
 	private showSchedulerStatusMenu(event: MouseEvent): void {
 		if (!this.schedulerStatusBarItem) return;
 
@@ -1473,93 +1594,31 @@ export default class AgentClientPlugin extends Plugin {
 		const pendingCount =
 			this.scheduledPromptRunner.getPendingExecutionCount();
 		const next = this.scheduledPromptRunner.getNextScheduledExecution(now);
-		const cachedPrompts = this.scheduledPromptRunner.getCachedPrompts();
-		const periodicCount = cachedPrompts.filter(
-			(entry) =>
-				entry.meta.condition.mode === "periodic" &&
-				entry.meta.enabled &&
-				entry.meta.timeWindows.length > 0,
-		).length;
-		const eventCount = cachedPrompts.filter(
-			(entry) =>
-				entry.meta.condition.mode === "event" &&
-				entry.meta.condition.enabled,
-		).length;
-		const dailyEventCount = cachedPrompts.filter(
-			(entry) =>
-				entry.meta.condition.mode === "event" &&
-				entry.meta.condition.enabled &&
-				entry.meta.condition.eventType === "daily-note-created",
-		).length;
-		const externalEventCount = cachedPrompts.filter(
-			(entry) =>
-				entry.meta.condition.mode === "event" &&
-				entry.meta.condition.enabled &&
-				entry.meta.condition.eventType === "external-file-created",
-		).length;
 		const todayHistory = this.getTodayPromptHistory();
 		const latestRecord = this.settings.promptExecutionHistory.at(-1);
-
-		menu.addItem((item) => {
-			item.setTitle("Scheduler status").setIsLabel(true);
-		});
-
-		menu.addItem((item) => {
-			item.setTitle(
-				`Periodic: ${periodicCount} / Event: ${eventCount}`,
-			).setIsLabel(true);
-		});
-
-		if (eventCount > 0) {
-			menu.addItem((item) => {
-				item.setTitle(
-					`Event details: Daily note ${dailyEventCount}, External file ${externalEventCount}`,
-				).setIsLabel(true);
-			});
-		}
 
 		if (running) {
 			const elapsedMs =
 				now.getTime() - new Date(running.startedAt).getTime();
+			const elapsedSecs = Math.floor(elapsedMs / 1000);
+
+			// Title line
 			menu.addItem((item) => {
 				item.setTitle(
-					`Running: ${running.title} (${formatDuration(elapsedMs)})`,
-				).setIsLabel(true);
+					`Running: ${running.title} (${elapsedSecs}s)` +
+						(pendingCount > 0 ? ` Queued: ${pendingCount}` : ""),
+				);
 			});
-			if (pendingCount > 0) {
-				menu.addItem((item) => {
-					item.setTitle(`Queued: ${pendingCount}`).setIsLabel(true);
-				});
-			}
 		} else if (pendingCount > 0) {
 			menu.addItem((item) => {
-				item.setTitle(`Queued: ${pendingCount}`).setIsLabel(true);
-			});
-		} else if (this.scheduledPromptRunner.isPaused) {
-			menu.addItem((item) => {
-				item.setTitle("Paused").setIsLabel(true);
+				item.setTitle(`Queued: ${pendingCount}`);
 			});
 		} else if (next) {
 			const remainingMs = new Date(next.runAt).getTime() - now.getTime();
 			menu.addItem((item) => {
 				item.setTitle(
 					`Next: ${next.title} in ${formatDuration(remainingMs)}`,
-				).setIsLabel(true);
-			});
-		} else {
-			menu.addItem((item) => {
-				item.setTitle("No upcoming scheduled prompt").setIsLabel(true);
-			});
-		}
-
-		if (latestRecord) {
-			const finishedAt =
-				latestRecord.completedAt ?? latestRecord.executedAt;
-			const latestStatus = latestRecord.success ? "completed" : "failed";
-			menu.addItem((item) => {
-				item.setTitle(
-					`Last ${latestStatus}: ${latestRecord.title} at ${formatClock(finishedAt)}`,
-				).setIsLabel(true);
+				);
 			});
 		}
 
@@ -1580,7 +1639,7 @@ export default class AgentClientPlugin extends Plugin {
 
 		menu.addItem((item) => {
 			if (this.scheduledPromptRunner.isPaused) {
-				item.setTitle("Resume scheduler")
+				item.setTitle("Start")
 					.setIcon("play")
 					.onClick(() => {
 						this.scheduledPromptRunner.resume();
@@ -1591,7 +1650,7 @@ export default class AgentClientPlugin extends Plugin {
 				return;
 			}
 
-			item.setTitle("Pause scheduler")
+			item.setTitle("Stop")
 				.setIcon("pause")
 				.onClick(() => {
 					this.scheduledPromptRunner.pause();
@@ -1600,6 +1659,8 @@ export default class AgentClientPlugin extends Plugin {
 					void this.saveSettings();
 				});
 		});
+
+		menu.addSeparator();
 
 		menu.addItem((item) => {
 			item.setTitle("Open custom prompts settings")
@@ -1610,26 +1671,20 @@ export default class AgentClientPlugin extends Plugin {
 		});
 
 		menu.addSeparator();
-		menu.addItem((item) => {
-			item.setTitle(
-				"Today's history (click item to run again)",
-			).setIsLabel(true);
-		});
 
 		if (todayHistory.length === 0) {
 			menu.addItem((item) => {
-				item.setTitle("No runs today").setIsLabel(true);
+				item.setTitle("No runs today");
 			});
 		} else {
 			const recentToday = [...todayHistory].slice(-8).reverse();
 			for (const record of recentToday) {
-				const statusIcon = record.success ? "✅" : "❌";
 				const timestamp = formatClock(
 					record.completedAt ?? record.executedAt,
 				);
 				menu.addItem((item) => {
 					item.setTitle(
-						`${statusIcon} ${timestamp} ${truncateText(record.title, 34)}`,
+						`${timestamp} ${truncateText(record.title, 34)}`,
 					)
 						.setIcon("info")
 						.onClick(() => {
