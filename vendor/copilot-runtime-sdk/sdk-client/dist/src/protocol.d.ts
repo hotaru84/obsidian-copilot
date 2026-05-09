@@ -1,13 +1,10 @@
-import type { AssistantMessageEvent, CreateSessionPayload, CreateSessionResult, GetAuthStatusResponse, GetStatusResponse, HealthStatus, AgentInfo, PromptInfo, CustomCommandInfo, ModelInfo, PermissionRespondPayload, PingStatus, RequestEnvelope, ResumeSessionPayload, ResponseEnvelope, SessionEvent, SessionIdPayload, SessionLogPayload, SessionSendAndWaitPayload, SessionSendPayload, SessionSetModelPayload, SessionSetAgentPayload, SessionClearAgentPayload, SessionSetModePayload, SessionExecutePromptPayload, SetWorkspacePayload, SetWorkspaceResult, RestartServerResult } from "./types.js";
+import type { AssistantMessageEvent, CreateSessionPayload, CreateSessionResult, GetAuthStatusResponse, GetStatusResponse, HealthStatus, PromptInfo, CustomCommandInfo, ModelInfo, PermissionRespondPayload, PingStatus, RequestEnvelope, ResumeSessionPayload, ResponseEnvelope, SessionEvent, SessionIdPayload, SessionSendAndWaitPayload, SessionSendPayload, SessionSetAgentPayload, SessionClearAgentPayload, SessionSetModePayload, SetWorkspacePayload, SetWorkspaceResult, RestartServerResult } from "./types.js";
 export declare const PROTOCOL_VERSION = "0.1.0";
 export declare const HEALTH_METHOD = "server.health";
 export declare const PING_METHOD = "server.ping";
 export declare const RESTART_SERVER_METHOD = "server.restart";
 export declare const COPILOT_GET_AUTH_STATUS_METHOD = "copilot.getAuthStatus";
 export declare const COPILOT_LIST_MODELS_METHOD = "copilot.listModels";
-export declare const COPILOT_LIST_AGENTS_METHOD = "copilot.listAgents";
-export declare const COPILOT_LIST_PROMPTS_METHOD = "copilot.listPrompts";
-export declare const COPILOT_LIST_CUSTOM_COMMANDS_METHOD = "copilot.listCustomCommands";
 export declare const COPILOT_CREATE_SESSION_METHOD = "copilot.createSession";
 export declare const COPILOT_RESUME_SESSION_METHOD = "copilot.resumeSession";
 export declare const COPILOT_SESSION_SEND_METHOD = "copilot.session.send";
@@ -15,12 +12,9 @@ export declare const COPILOT_SESSION_SEND_AND_WAIT_METHOD = "copilot.session.sen
 export declare const COPILOT_SESSION_DISCONNECT_METHOD = "copilot.session.disconnect";
 export declare const COPILOT_SESSION_GET_MESSAGES_METHOD = "copilot.session.getMessages";
 export declare const COPILOT_SESSION_ABORT_METHOD = "copilot.session.abort";
-export declare const COPILOT_SESSION_LOG_METHOD = "copilot.session.log";
-export declare const COPILOT_SESSION_SET_MODEL_METHOD = "copilot.session.setModel";
 export declare const COPILOT_SESSION_SET_AGENT_METHOD = "copilot.session.setAgent";
 export declare const COPILOT_SESSION_CLEAR_AGENT_METHOD = "copilot.session.clearAgent";
 export declare const COPILOT_SESSION_SET_MODE_METHOD = "copilot.session.setMode";
-export declare const COPILOT_SESSION_EXECUTE_PROMPT_METHOD = "copilot.session.executePrompt";
 export declare const COPILOT_SESSION_AGENT_LIST_METHOD = "copilot.session.agent.list";
 export declare const COPILOT_SESSION_AGENT_GET_CURRENT_METHOD = "copilot.session.agent.getCurrent";
 export declare const COPILOT_SESSION_AGENT_SELECT_METHOD = "copilot.session.agent.select";
@@ -89,9 +83,6 @@ export declare function createPingRequest(id: string, message?: string): Request
 export declare function createRestartServerRequest(id: string): RequestEnvelope<Record<string, never>>;
 export declare function createGetAuthStatusRequest(id: string): RequestEnvelope<Record<string, never>>;
 export declare function createListModelsRequest(id: string): RequestEnvelope<Record<string, never>>;
-export declare function createListAgentsRequest(id: string): RequestEnvelope<Record<string, never>>;
-export declare function createListPromptsRequest(id: string): RequestEnvelope<Record<string, never>>;
-export declare function createListCustomCommandsRequest(id: string): RequestEnvelope<Record<string, never>>;
 export declare function createCreateSessionRequest(id: string, payload: CreateSessionPayload): RequestEnvelope<CreateSessionPayload>;
 export declare function createResumeSessionRequest(id: string, payload: ResumeSessionPayload): RequestEnvelope<ResumeSessionPayload>;
 export declare function createSessionSendRequest(id: string, payload: SessionSendPayload): RequestEnvelope<SessionSendPayload>;
@@ -99,12 +90,9 @@ export declare function createSessionSendAndWaitRequest(id: string, payload: Ses
 export declare function createSessionDisconnectRequest(id: string, payload: SessionIdPayload): RequestEnvelope<SessionIdPayload>;
 export declare function createSessionGetMessagesRequest(id: string, payload: SessionIdPayload): RequestEnvelope<SessionIdPayload>;
 export declare function createSessionAbortRequest(id: string, payload: SessionIdPayload): RequestEnvelope<SessionIdPayload>;
-export declare function createSessionLogRequest(id: string, payload: SessionLogPayload): RequestEnvelope<SessionLogPayload>;
-export declare function createSessionSetModelRequest(id: string, payload: SessionSetModelPayload): RequestEnvelope<SessionSetModelPayload>;
 export declare function createSessionSetAgentRequest(id: string, payload: SessionSetAgentPayload): RequestEnvelope<SessionSetAgentPayload>;
 export declare function createSessionClearAgentRequest(id: string, payload: SessionClearAgentPayload): RequestEnvelope<SessionClearAgentPayload>;
 export declare function createSessionSetModeRequest(id: string, payload: SessionSetModePayload): RequestEnvelope<SessionSetModePayload>;
-export declare function createSessionExecutePromptRequest(id: string, payload: SessionExecutePromptPayload): RequestEnvelope<SessionExecutePromptPayload>;
 export declare function createSetWorkspaceRequest(id: string, payload: SetWorkspacePayload): RequestEnvelope<SetWorkspacePayload>;
 export declare function createPermissionRespondRequest(id: string, payload: PermissionRespondPayload): RequestEnvelope<PermissionRespondPayload>;
 export declare function createHealthResponse(id: string, status: HealthStatus & {
@@ -114,7 +102,6 @@ export declare function createPingResponse(id: string, message?: string): Respon
 export declare function createRestartServerResponse(id: string, result: RestartServerResult): ResponseEnvelope<RestartServerResult>;
 export declare function createGetAuthStatusResponse(id: string, state: GetAuthStatusResponse): ResponseEnvelope<GetAuthStatusResponse>;
 export declare function createListModelsResponse(id: string, response: ModelInfo[]): ResponseEnvelope<ModelInfo[]>;
-export declare function createListAgentsResponse(id: string, response: AgentInfo[]): ResponseEnvelope<AgentInfo[]>;
 export declare function createListPromptsResponse(id: string, response: PromptInfo[]): ResponseEnvelope<PromptInfo[]>;
 export declare function createSetWorkspaceResponse(id: string, response: SetWorkspaceResult): ResponseEnvelope<SetWorkspaceResult>;
 export declare function createListCustomCommandsResponse(id: string, response: CustomCommandInfo[]): ResponseEnvelope<CustomCommandInfo[]>;
@@ -128,9 +115,6 @@ export declare function isPingRequest(value: unknown): value is RequestEnvelope<
 export declare function isRestartServerRequest(value: unknown): value is RequestEnvelope<Record<string, never>>;
 export declare function isGetAuthStatusRequest(value: unknown): value is RequestEnvelope<Record<string, never>>;
 export declare function isListModelsRequest(value: unknown): value is RequestEnvelope<Record<string, never>>;
-export declare function isListAgentsRequest(value: unknown): value is RequestEnvelope<Record<string, never>>;
-export declare function isListPromptsRequest(value: unknown): value is RequestEnvelope<Record<string, never>>;
-export declare function isListCustomCommandsRequest(value: unknown): value is RequestEnvelope<Record<string, never>>;
 export declare function isCreateSessionRequest(value: unknown): value is RequestEnvelope<CreateSessionPayload>;
 export declare function isResumeSessionRequest(value: unknown): value is RequestEnvelope<ResumeSessionPayload>;
 export declare function isSessionSendRequest(value: unknown): value is RequestEnvelope<SessionSendPayload>;
@@ -138,12 +122,9 @@ export declare function isSessionSendAndWaitRequest(value: unknown): value is Re
 export declare function isSessionDisconnectRequest(value: unknown): value is RequestEnvelope<SessionIdPayload>;
 export declare function isSessionGetMessagesRequest(value: unknown): value is RequestEnvelope<SessionIdPayload>;
 export declare function isSessionAbortRequest(value: unknown): value is RequestEnvelope<SessionIdPayload>;
-export declare function isSessionLogRequest(value: unknown): value is RequestEnvelope<SessionLogPayload>;
-export declare function isSessionSetModelRequest(value: unknown): value is RequestEnvelope<SessionSetModelPayload>;
 export declare function isSessionSetAgentRequest(value: unknown): value is RequestEnvelope<SessionSetAgentPayload>;
 export declare function isSessionClearAgentRequest(value: unknown): value is RequestEnvelope<SessionClearAgentPayload>;
 export declare function isSessionSetModeRequest(value: unknown): value is RequestEnvelope<SessionSetModePayload>;
-export declare function isSessionExecutePromptRequest(value: unknown): value is RequestEnvelope<SessionExecutePromptPayload>;
 export declare function isSetWorkspaceRequest(value: unknown): value is RequestEnvelope<SetWorkspacePayload>;
 export declare function isPermissionRespondRequest(value: unknown): value is RequestEnvelope<PermissionRespondPayload>;
 export declare function createSessionEvent(payload: {

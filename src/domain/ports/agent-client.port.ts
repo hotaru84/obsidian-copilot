@@ -11,7 +11,6 @@ import type {
 } from "../models/chat-message";
 import type {
 	AuthenticationMethod,
-	PromptTemplateInfo,
 	SessionModeState,
 	SessionModelState,
 	SessionRemoteAgentState,
@@ -453,20 +452,6 @@ export interface IAgentClient {
 	 * @returns Promise resolving to session result with new sessionId
 	 */
 	forkSession(sessionId: string, cwd: string): Promise<ForkSessionResult>;
-
-	/**
-	 * List prompt templates available from the runtime.
-	 */
-	listPrompts(): Promise<PromptTemplateInfo[]>;
-
-	/**
-	 * Execute a prompt template in the current session.
-	 */
-	executePrompt(
-		sessionId: string,
-		promptId: string,
-		args?: string,
-	): Promise<void>;
 
 	/**
 	 * Compact session history to reduce context size.

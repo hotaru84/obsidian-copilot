@@ -1,4 +1,4 @@
-import type { AccountGetQuotaPayload, AccountGetQuotaResult, ActionResult, AssistantMessageEvent, AgentInfo, CustomCommandInfo, DiscoveredMCPServerList, ExtensionListResult, GetAuthStatusResponse, GetStatusResponse, HistoryCompactResult, HistoryTruncateResult, InstructionsGetSourcesResult, MCPConfigListResult, MessageOptions, PluginListResult, ModelInfo, PromptInfo, PermissionHandler, ResumeSessionConfig, ServerModelListResult, ServerModelsListPayload, ServerToolListResult, ServerToolsListPayload, SessionFleetStartResult, SessionFsConventions, SessionFsSetProviderResult, SessionModelGetCurrentResult, SessionModelSwitchToResult, SessionModeGetResult, SessionMode, SessionsForkResult, SessionShellExecResult, SessionShellKillResult, SessionCommandsHandlePendingResult, SessionToolsHandlePendingResult, SessionWorkspacesGetResult, SessionWorkspacesListFilesResult, SessionWorkspacesReadFileResult, SetWorkspaceResult, RestartServerResult, SessionMCPOAuthLoginOptions, SessionMCPOAuthLoginResult, SessionMCPServerList, SessionConfig, SessionEvent, SessionPlanReadResult, SessionRpcAgentGetCurrentResult, SessionRpcAgentList, SkillsDiscoverPayload, SkillListResult, UIElicitationResponse, UIElicitationResult, UIElicitationSchema, UsageGetMetricsResult } from "./types.js";
+import type { AccountGetQuotaPayload, AccountGetQuotaResult, ActionResult, AssistantMessageEvent, DiscoveredMCPServerList, ExtensionListResult, GetAuthStatusResponse, GetStatusResponse, HistoryCompactResult, HistoryTruncateResult, InstructionsGetSourcesResult, MCPConfigListResult, MessageOptions, PluginListResult, ModelInfo, PermissionHandler, ResumeSessionConfig, ServerModelListResult, ServerModelsListPayload, ServerToolListResult, ServerToolsListPayload, SessionFleetStartResult, SessionFsConventions, SessionFsSetProviderResult, SessionModelGetCurrentResult, SessionModelSwitchToResult, SessionModeGetResult, SessionMode, SessionsForkResult, SessionShellExecResult, SessionShellKillResult, SessionCommandsHandlePendingResult, SessionToolsHandlePendingResult, SessionWorkspacesGetResult, SessionWorkspacesListFilesResult, SessionWorkspacesReadFileResult, SetWorkspaceResult, RestartServerResult, SessionMCPOAuthLoginOptions, SessionMCPOAuthLoginResult, SessionMCPServerList, SessionConfig, SessionEvent, SessionPlanReadResult, SessionRpcAgentGetCurrentResult, SessionRpcAgentList, SkillsDiscoverPayload, SkillListResult, UIElicitationResponse, UIElicitationResult, UIElicitationSchema, UsageGetMetricsResult } from "./types.js";
 import { CopilotSession, type CopilotClientSessionBridge } from "./session.js";
 export interface WebSocketFactory {
     (url: string): WebSocket;
@@ -88,9 +88,6 @@ export declare class CopilotClient implements CopilotClientSessionBridge {
     getStatus(): Promise<GetStatusResponse>;
     getAuthStatus(): Promise<GetAuthStatusResponse>;
     listModels(): Promise<ModelInfo[]>;
-    listAgents(): Promise<AgentInfo[]>;
-    listCustomCommands(): Promise<CustomCommandInfo[]>;
-    listPrompts(): Promise<PromptInfo[]>;
     setWorkspace(cwd: string): Promise<SetWorkspaceResult>;
     restartServer(): Promise<RestartServerResult>;
     createSession(config: SessionConfig): Promise<CopilotSession>;
@@ -100,17 +97,9 @@ export declare class CopilotClient implements CopilotClientSessionBridge {
     _sessionDisconnect(sessionId: string): Promise<void>;
     _sessionGetMessages(sessionId: string): Promise<SessionEvent[]>;
     _sessionAbort(sessionId: string): Promise<void>;
-    _sessionLog(sessionId: string, message: string, options?: {
-        level?: "info" | "warning" | "error";
-        ephemeral?: boolean;
-    }): Promise<void>;
-    _sessionSetModel(sessionId: string, model: string, options?: {
-        reasoningEffort?: string;
-    }): Promise<void>;
     _sessionSetAgent(sessionId: string, agentId: string): Promise<void>;
     _sessionClearAgent(sessionId: string): Promise<void>;
     _sessionSetMode(sessionId: string, mode: SessionMode): Promise<void>;
-    _sessionExecutePrompt(sessionId: string, promptId: string, args?: string): Promise<AssistantMessageEvent | undefined>;
     _sessionAgentList(sessionId: string): Promise<SessionRpcAgentList>;
     _sessionAgentGetCurrent(sessionId: string): Promise<SessionRpcAgentGetCurrentResult>;
     _sessionAgentSelect(sessionId: string, name: string): Promise<void>;
@@ -179,9 +168,6 @@ export declare class CopilotTransportClient {
     getAuthState(): Promise<TransportAuthState>;
     complete(prompt: string, _maxTokens?: number): Promise<TransportCompletion>;
     listModels(): Promise<ModelInfo[]>;
-    listAgents(): Promise<AgentInfo[]>;
-    listCustomCommands(): Promise<CustomCommandInfo[]>;
-    listPrompts(): Promise<PromptInfo[]>;
     setWorkspace(cwd: string): Promise<SetWorkspaceResult>;
     restartServer(): Promise<RestartServerResult>;
     createSession(model?: string): Promise<TransportSession>;

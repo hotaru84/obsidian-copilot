@@ -27,7 +27,6 @@ import type { PromptContent } from "../../domain/models/prompt-content";
 import type { ProcessError } from "../../domain/models/agent-error";
 import type { SessionUpdate } from "../../domain/models/session-update";
 import type {
-	PromptTemplateInfo,
 	SlashCommand,
 	SessionMode,
 	SessionModel,
@@ -103,6 +102,14 @@ interface TerminalSnapshot {
 		signal?: string | null;
 	} | null;
 }
+
+type NormalizedElicitationUi = {
+	widget?: "text" | "textarea" | "password" | "json";
+	order?: number;
+	section?: string;
+	placeholder?: string;
+	rows?: number;
+};
 
 type CopilotClientOptionsWithCwd = ConstructorParameters<
 	typeof CopilotClient
@@ -659,7 +666,7 @@ export class RemoteAdapter implements IChatAgentClient {
 
 	private normalizeElicitationUi(
 		value: Record<string, unknown>,
-	): NonNullable<ElicitationSchema["properties"][string]["ui"]> | undefined {
+	): NormalizedElicitationUi | undefined {
 		const widget =
 			value.widget === "text" ||
 			value.widget === "textarea" ||
@@ -861,8 +868,8 @@ export class RemoteAdapter implements IChatAgentClient {
 		}
 
 		try {
-			await session.setAgent(probeAgentId);
-			await session.clearAgent();
+			await session.rpc.agent.select(probeAgentId);
+			await session.rpc.agent.deselect();
 			this.remoteAgentSelectionSupportByWorkingDirectory.set(
 				cacheKey,
 				true,
@@ -979,24 +986,38 @@ export class RemoteAdapter implements IChatAgentClient {
 		);
 	}
 
-	private normalizePromptInfo(prompt: unknown): PromptTemplateInfo | null {
-		if (!prompt || typeof prompt !== "object") {
+	private normalizeRemoteAgentInfo(agent: unknown): RemoteAgentInfo | null {
+		if (!agent || typeof agent !== "object") {
 			return null;
 		}
 
-		const record = prompt as Record<string, unknown>;
-		const promptId = safeString(record.id);
-		const name = safeString(record.name);
-		if (!promptId || !name) {
+		const record = agent as Record<string, unknown>;
+		if (record.enabled === false) {
 			return null;
 		}
+
+		const selectName = safeString(record.name);
+		if (!selectName) {
+			return null;
+		}
+		const displayName = safeString(record.displayName) || selectName;
+		const description = safeString(record.description);
 
 		return {
-			promptId,
-			name,
-			description: safeString(record.description),
-			prompt: safeString(record.prompt),
+			agentId: selectName,
+			name: displayName,
+			...(description ? { description } : {}),
 		};
+	}
+
+	private async listRemoteAgents(
+		session: CopilotSession,
+	): Promise<RemoteAgentInfo[]> {
+		const result = await session.rpc.agent.list();
+		const agents = Array.isArray(result.agents) ? result.agents : [];
+		return agents
+			.map((agent) => this.normalizeRemoteAgentInfo(agent))
+			.filter(isNonNull);
 	}
 
 	private async ensureBundledServer(): Promise<void> {
@@ -1131,11 +1152,10 @@ export class RemoteAdapter implements IChatAgentClient {
 		// Use the existing shared client for snapshot operations
 		const client = this.getClient(workingDirectory);
 		await this.ensureClientStarted(client, "load remote session snapshot");
-		const [models, customCommands, agents] = (await Promise.all([
+		const [models, agents] = (await Promise.all([
 			client.listModels().catch(() => []),
-			client.listCustomCommands().catch(() => []),
-			client.listAgents().catch(() => []),
-		])) as [unknown[], unknown[], unknown[]];
+			this.listRemoteAgents(session).catch(() => []),
+		])) as [unknown[], RemoteAgentInfo[]];
 
 		const availableModels: SessionModel[] = models
 			.map((model): SessionModel | null => {
@@ -1156,32 +1176,7 @@ export class RemoteAdapter implements IChatAgentClient {
 			})
 			.filter(isNonNull);
 
-		const availableRemoteAgents: RemoteAgentInfo[] = agents
-			.map((agent): RemoteAgentInfo | null => {
-				if (!agent || typeof agent !== "object") {
-					return null;
-				}
-
-				const record = agent as Record<string, unknown>;
-				if (record.enabled === false) {
-					return null;
-				}
-
-				const agentId = safeString(record.id);
-				const name = safeString(record.name);
-				if (!agentId || !name) {
-					return null;
-				}
-
-				const description = safeString(record.description);
-
-				return {
-					agentId,
-					name,
-					...(description ? { description } : {}),
-				};
-			})
-			.filter(isNonNull);
+		const availableRemoteAgents = agents;
 
 		let selectableRemoteAgents = availableRemoteAgents;
 
@@ -1207,28 +1202,13 @@ export class RemoteAdapter implements IChatAgentClient {
 		}
 
 		const remoteAgentSelectionById = new Map<string, string>(
-			selectableRemoteAgents.map((agent) => [agent.agentId, agent.name]),
+			selectableRemoteAgents.map((agent) => [
+				agent.agentId,
+				agent.agentId,
+			]),
 		);
 
-		const commandEntries: SlashCommand[] = customCommands
-			.map((command): SlashCommand | null => {
-				if (!command || typeof command !== "object") {
-					return null;
-				}
-
-				const record = command as Record<string, unknown>;
-				const name = safeString(record.name);
-				if (!name) {
-					return null;
-				}
-
-				return {
-					name,
-					description: safeString(record.description) || name,
-					source: "agent" as const,
-				};
-			})
-			.filter(isNonNull);
+		const commandEntries: SlashCommand[] = [];
 
 		const state: SessionState = {
 			session,
@@ -1986,7 +1966,7 @@ export class RemoteAdapter implements IChatAgentClient {
 
 	async setSessionMode(sessionId: string, modeId: string): Promise<void> {
 		const state = this.getSessionState(sessionId);
-		await state.session.setMode(toRemoteMode(modeId));
+		await state.session.rpc.mode.set(toRemoteMode(modeId));
 		state.currentModeId = modeId;
 		this.sessionUpdateCallback?.({
 			type: "current_mode_update",
@@ -1997,7 +1977,7 @@ export class RemoteAdapter implements IChatAgentClient {
 
 	async setSessionModel(sessionId: string, modelId: string): Promise<void> {
 		const state = this.getSessionState(sessionId);
-		await state.session.setModel(modelId);
+		await state.session.rpc.model.switchTo(modelId);
 		state.currentModelId = modelId;
 	}
 
@@ -2012,7 +1992,7 @@ export class RemoteAdapter implements IChatAgentClient {
 				const client = this.getClient(state.workingDirectory);
 				await this.ensureClientStarted(client, "set workspace");
 				await client.setWorkspace(state.workingDirectory ?? "");
-				await state.session.clearAgent();
+				await state.session.rpc.agent.deselect();
 			}, "clear remote agent");
 
 			state.currentRemoteAgentId = null;
@@ -2037,9 +2017,12 @@ export class RemoteAdapter implements IChatAgentClient {
 				(agent) => agent.agentId === agentId || agent.name === agentId,
 			);
 			const canonicalAgentId = selectedFromSnapshot?.agentId ?? agentId;
+			const selectName =
+				state.remoteAgentSelectionById.get(canonicalAgentId) ??
+				canonicalAgentId;
 
 			try {
-				await state.session.setAgent(canonicalAgentId);
+				await state.session.rpc.agent.select(selectName);
 				state.currentRemoteAgentId = canonicalAgentId;
 				this.rememberRemoteAgentSelection(
 					state.workingDirectory,
@@ -2047,27 +2030,15 @@ export class RemoteAdapter implements IChatAgentClient {
 				);
 			} catch (error) {
 				// If selection fails, try to refresh the agent list once and retry with the updated ID
-				const latestAgents = (await client
-					.listAgents()
-					.catch(() => [])) as unknown[];
+				const latestAgents = await this.listRemoteAgents(
+					state.session,
+				).catch(() => []);
 
 				const latestMatch = latestAgents.find((item) => {
-					if (!item || typeof item !== "object") {
-						return false;
-					}
-					const record = item as Record<string, unknown>;
-					return (
-						safeString(record.id) === agentId ||
-						safeString(record.name) === agentId
-					);
+					return item.agentId === agentId || item.name === agentId;
 				});
 
-				const latestCanonicalId =
-					latestMatch && typeof latestMatch === "object"
-						? safeString(
-								(latestMatch as Record<string, unknown>).id,
-							)
-						: undefined;
+				const latestCanonicalId = latestMatch?.agentId;
 
 				if (!latestCanonicalId) {
 					throw error;
@@ -2077,7 +2048,7 @@ export class RemoteAdapter implements IChatAgentClient {
 					`[RemoteAdapter] Failed to set remote agent by id '${canonicalAgentId}', retrying with refreshed id '${latestCanonicalId}'`,
 					error,
 				);
-				await state.session.setAgent(latestCanonicalId);
+				await state.session.rpc.agent.select(latestCanonicalId);
 
 				state.currentRemoteAgentId = latestCanonicalId;
 				this.rememberRemoteAgentSelection(
@@ -2252,31 +2223,6 @@ export class RemoteAdapter implements IChatAgentClient {
 			truncated: false,
 			exitStatus: undefined,
 		};
-	}
-
-	async listPrompts(): Promise<PromptTemplateInfo[]> {
-		const client = this.getClient(this.currentConfig?.workingDirectory);
-		await this.ensureClientStarted(client, "list prompt templates");
-		const prompts = await client.listPrompts();
-		return prompts
-			.map((prompt) => this.normalizePromptInfo(prompt))
-			.filter(isNonNull);
-	}
-
-	async executePrompt(
-		sessionId: string,
-		promptId: string,
-		args?: string,
-	): Promise<void> {
-		const state = this.getSessionState(sessionId);
-		await this.ensureClientStarted(
-			this.getClient(state.workingDirectory),
-			"execute prompt template",
-		);
-		const response = await state.session.executePrompt(promptId, args);
-		if (response) {
-			this.handleRemoteEvent(sessionId, response);
-		}
 	}
 
 	async compactHistory(sessionId: string): Promise<HistoryCompactionResult> {

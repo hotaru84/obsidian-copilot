@@ -4,9 +4,6 @@ export const PING_METHOD = "server.ping";
 export const RESTART_SERVER_METHOD = "server.restart";
 export const COPILOT_GET_AUTH_STATUS_METHOD = "copilot.getAuthStatus";
 export const COPILOT_LIST_MODELS_METHOD = "copilot.listModels";
-export const COPILOT_LIST_AGENTS_METHOD = "copilot.listAgents";
-export const COPILOT_LIST_PROMPTS_METHOD = "copilot.listPrompts";
-export const COPILOT_LIST_CUSTOM_COMMANDS_METHOD = "copilot.listCustomCommands";
 export const COPILOT_CREATE_SESSION_METHOD = "copilot.createSession";
 export const COPILOT_RESUME_SESSION_METHOD = "copilot.resumeSession";
 export const COPILOT_SESSION_SEND_METHOD = "copilot.session.send";
@@ -14,12 +11,9 @@ export const COPILOT_SESSION_SEND_AND_WAIT_METHOD = "copilot.session.sendAndWait
 export const COPILOT_SESSION_DISCONNECT_METHOD = "copilot.session.disconnect";
 export const COPILOT_SESSION_GET_MESSAGES_METHOD = "copilot.session.getMessages";
 export const COPILOT_SESSION_ABORT_METHOD = "copilot.session.abort";
-export const COPILOT_SESSION_LOG_METHOD = "copilot.session.log";
-export const COPILOT_SESSION_SET_MODEL_METHOD = "copilot.session.setModel";
 export const COPILOT_SESSION_SET_AGENT_METHOD = "copilot.session.setAgent";
 export const COPILOT_SESSION_CLEAR_AGENT_METHOD = "copilot.session.clearAgent";
 export const COPILOT_SESSION_SET_MODE_METHOD = "copilot.session.setMode";
-export const COPILOT_SESSION_EXECUTE_PROMPT_METHOD = "copilot.session.executePrompt";
 export const COPILOT_SESSION_AGENT_LIST_METHOD = "copilot.session.agent.list";
 export const COPILOT_SESSION_AGENT_GET_CURRENT_METHOD = "copilot.session.agent.getCurrent";
 export const COPILOT_SESSION_AGENT_SELECT_METHOD = "copilot.session.agent.select";
@@ -120,15 +114,6 @@ export function createGetAuthStatusRequest(id) {
 export function createListModelsRequest(id) {
     return createRequest(id, COPILOT_LIST_MODELS_METHOD, {});
 }
-export function createListAgentsRequest(id) {
-    return createRequest(id, COPILOT_LIST_AGENTS_METHOD, {});
-}
-export function createListPromptsRequest(id) {
-    return createRequest(id, COPILOT_LIST_PROMPTS_METHOD, {});
-}
-export function createListCustomCommandsRequest(id) {
-    return createRequest(id, COPILOT_LIST_CUSTOM_COMMANDS_METHOD, {});
-}
 export function createCreateSessionRequest(id, payload) {
     return createRequest(id, COPILOT_CREATE_SESSION_METHOD, payload);
 }
@@ -150,12 +135,6 @@ export function createSessionGetMessagesRequest(id, payload) {
 export function createSessionAbortRequest(id, payload) {
     return createRequest(id, COPILOT_SESSION_ABORT_METHOD, payload);
 }
-export function createSessionLogRequest(id, payload) {
-    return createRequest(id, COPILOT_SESSION_LOG_METHOD, payload);
-}
-export function createSessionSetModelRequest(id, payload) {
-    return createRequest(id, COPILOT_SESSION_SET_MODEL_METHOD, payload);
-}
 export function createSessionSetAgentRequest(id, payload) {
     return createRequest(id, COPILOT_SESSION_SET_AGENT_METHOD, payload);
 }
@@ -164,9 +143,6 @@ export function createSessionClearAgentRequest(id, payload) {
 }
 export function createSessionSetModeRequest(id, payload) {
     return createRequest(id, COPILOT_SESSION_SET_MODE_METHOD, payload);
-}
-export function createSessionExecutePromptRequest(id, payload) {
-    return createRequest(id, COPILOT_SESSION_EXECUTE_PROMPT_METHOD, payload);
 }
 export function createSetWorkspaceRequest(id, payload) {
     return createRequest(id, COPILOT_SET_WORKSPACE_METHOD, payload);
@@ -213,14 +189,6 @@ export function createGetAuthStatusResponse(id, state) {
     };
 }
 export function createListModelsResponse(id, response) {
-    return {
-        id,
-        type: "response",
-        ok: true,
-        payload: response,
-    };
-}
-export function createListAgentsResponse(id, response) {
     return {
         id,
         type: "response",
@@ -292,16 +260,6 @@ export function isGetAuthStatusRequest(value) {
 export function isListModelsRequest(value) {
     return (isRequestEnvelope(value) && value.method === COPILOT_LIST_MODELS_METHOD);
 }
-export function isListAgentsRequest(value) {
-    return (isRequestEnvelope(value) && value.method === COPILOT_LIST_AGENTS_METHOD);
-}
-export function isListPromptsRequest(value) {
-    return (isRequestEnvelope(value) && value.method === COPILOT_LIST_PROMPTS_METHOD);
-}
-export function isListCustomCommandsRequest(value) {
-    return (isRequestEnvelope(value) &&
-        value.method === COPILOT_LIST_CUSTOM_COMMANDS_METHOD);
-}
 export function isCreateSessionRequest(value) {
     return (isRequestEnvelope(value) && value.method === COPILOT_CREATE_SESSION_METHOD);
 }
@@ -326,13 +284,6 @@ export function isSessionGetMessagesRequest(value) {
 export function isSessionAbortRequest(value) {
     return (isRequestEnvelope(value) && value.method === COPILOT_SESSION_ABORT_METHOD);
 }
-export function isSessionLogRequest(value) {
-    return (isRequestEnvelope(value) && value.method === COPILOT_SESSION_LOG_METHOD);
-}
-export function isSessionSetModelRequest(value) {
-    return (isRequestEnvelope(value) &&
-        value.method === COPILOT_SESSION_SET_MODEL_METHOD);
-}
 export function isSessionSetAgentRequest(value) {
     return (isRequestEnvelope(value) &&
         value.method === COPILOT_SESSION_SET_AGENT_METHOD);
@@ -343,10 +294,6 @@ export function isSessionClearAgentRequest(value) {
 }
 export function isSessionSetModeRequest(value) {
     return (isRequestEnvelope(value) && value.method === COPILOT_SESSION_SET_MODE_METHOD);
-}
-export function isSessionExecutePromptRequest(value) {
-    return (isRequestEnvelope(value) &&
-        value.method === COPILOT_SESSION_EXECUTE_PROMPT_METHOD);
 }
 export function isSetWorkspaceRequest(value) {
     return (isRequestEnvelope(value) && value.method === COPILOT_SET_WORKSPACE_METHOD);

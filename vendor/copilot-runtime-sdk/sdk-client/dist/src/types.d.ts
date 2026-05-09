@@ -323,11 +323,6 @@ export interface SessionSendAndWaitPayload {
 export interface SessionIdPayload {
     sessionId: string;
 }
-export interface SessionSetModelPayload {
-    sessionId: string;
-    model: string;
-    reasoningEffort?: string;
-}
 export interface SessionSetAgentPayload {
     sessionId: string;
     agentId: string;
@@ -339,11 +334,6 @@ export interface SessionClearAgentPayload {
 export interface SessionSetModePayload {
     sessionId: string;
     mode: SessionMode;
-}
-export interface SessionExecutePromptPayload {
-    sessionId: string;
-    promptId: string;
-    args?: string;
 }
 export interface SessionAgentSelectPayload {
     sessionId: string;
@@ -395,12 +385,6 @@ export interface RestartServerResult {
     success: boolean;
     restarted: boolean;
     closedSessions: number;
-}
-export interface SessionLogPayload {
-    sessionId: string;
-    message: string;
-    level?: "info" | "warning" | "error";
-    ephemeral?: boolean;
 }
 export interface PermissionRespondPayload {
     requestId: string;

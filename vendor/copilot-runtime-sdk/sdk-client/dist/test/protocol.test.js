@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COPILOT_CREATE_SESSION_METHOD, COPILOT_GET_AUTH_STATUS_METHOD, COPILOT_LIST_CUSTOM_COMMANDS_METHOD, COPILOT_LIST_PROMPTS_METHOD, COPILOT_SET_WORKSPACE_METHOD, RESTART_SERVER_METHOD, COPILOT_LIST_MODELS_METHOD, COPILOT_SESSION_SET_AGENT_METHOD, COPILOT_SESSION_CLEAR_AGENT_METHOD, COPILOT_SESSION_SET_MODE_METHOD, COPILOT_SESSION_SEND_AND_WAIT_METHOD, HEALTH_METHOD, PING_METHOD, createCreateSessionRequest, createGetAuthStatusRequest, createHealthRequest, createListCustomCommandsRequest, createListPromptsRequest, createListModelsRequest, createPingRequest, createRestartServerRequest, createSetWorkspaceRequest, createSessionSetAgentRequest, createSessionClearAgentRequest, createSessionSetModeRequest, isCreateSessionRequest, isGetAuthStatusRequest, isHealthRequest, isListCustomCommandsRequest, isListPromptsRequest, isListModelsRequest, isPingRequest, isRestartServerRequest, isSetWorkspaceRequest, isSessionSetAgentRequest, isSessionClearAgentRequest, isSessionSetModeRequest, isSessionSendAndWaitRequest, } from "../src/protocol.js";
+import { COPILOT_CREATE_SESSION_METHOD, COPILOT_GET_AUTH_STATUS_METHOD, COPILOT_SET_WORKSPACE_METHOD, RESTART_SERVER_METHOD, COPILOT_LIST_MODELS_METHOD, COPILOT_SESSION_SET_AGENT_METHOD, COPILOT_SESSION_CLEAR_AGENT_METHOD, COPILOT_SESSION_SET_MODE_METHOD, COPILOT_SESSION_SEND_AND_WAIT_METHOD, HEALTH_METHOD, PING_METHOD, createCreateSessionRequest, createGetAuthStatusRequest, createHealthRequest, createListModelsRequest, createPingRequest, createRestartServerRequest, createSetWorkspaceRequest, createSessionSetAgentRequest, createSessionClearAgentRequest, createSessionSetModeRequest, isCreateSessionRequest, isGetAuthStatusRequest, isHealthRequest, isListModelsRequest, isPingRequest, isRestartServerRequest, isSetWorkspaceRequest, isSessionSetAgentRequest, isSessionClearAgentRequest, isSessionSetModeRequest, isSessionSendAndWaitRequest, } from "../src/protocol.js";
 describe("shared protocol", () => {
     it("creates a valid health request", () => {
         const request = createHealthRequest("req-1");
@@ -25,16 +25,6 @@ describe("shared protocol", () => {
         const request = createListModelsRequest("req-5");
         expect(request.method).toBe(COPILOT_LIST_MODELS_METHOD);
         expect(isListModelsRequest(request)).toBe(true);
-    });
-    it("creates a valid list custom commands request", () => {
-        const request = createListCustomCommandsRequest("req-5b");
-        expect(request.method).toBe(COPILOT_LIST_CUSTOM_COMMANDS_METHOD);
-        expect(isListCustomCommandsRequest(request)).toBe(true);
-    });
-    it("creates a valid list prompts request", () => {
-        const request = createListPromptsRequest("req-5c");
-        expect(request.method).toBe(COPILOT_LIST_PROMPTS_METHOD);
-        expect(isListPromptsRequest(request)).toBe(true);
     });
     it("creates a valid create session request", () => {
         const request = createCreateSessionRequest("req-6", {

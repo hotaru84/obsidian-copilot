@@ -12,10 +12,7 @@ import type {
 	ElicitationResponse,
 	MessageContent,
 } from "../models/chat-message";
-import type {
-	PromptTemplateInfo,
-	SessionUsageMetrics,
-} from "../models/chat-session";
+import type { SessionUsageMetrics } from "../models/chat-session";
 
 export interface TerminalOutputRequestLike {
 	terminalId: string;
@@ -50,12 +47,6 @@ export interface IChatAgentClient extends IAgentClient {
 	terminalOutput(
 		params: TerminalOutputRequestLike,
 	): Promise<TerminalOutputResponseLike>;
-	listPrompts(): Promise<PromptTemplateInfo[]>;
-	executePrompt(
-		sessionId: string,
-		promptId: string,
-		args?: string,
-	): Promise<void>;
 	compactHistory(sessionId: string): Promise<HistoryCompactionResult>;
 	truncateHistory(
 		sessionId: string,

@@ -69,51 +69,6 @@ describe("CopilotClient", () => {
                             payload: [{ id: "gpt-5", name: "GPT-5" }],
                         });
                     }
-                    if (request.method === "copilot.listAgents") {
-                        return JSON.stringify({
-                            id: request.id,
-                            type: "response",
-                            ok: true,
-                            payload: [
-                                {
-                                    id: "explore",
-                                    name: "Explore",
-                                    description: "Fast read-only codebase exploration",
-                                    source: "project",
-                                    enabled: true,
-                                },
-                            ],
-                        });
-                    }
-                    if (request.method === "copilot.listCustomCommands") {
-                        return JSON.stringify({
-                            id: request.id,
-                            type: "response",
-                            ok: true,
-                            payload: [
-                                {
-                                    name: "agent-customization",
-                                    description: "Manage agent customization files",
-                                    source: "project",
-                                    enabled: true,
-                                },
-                            ],
-                        });
-                    }
-                    if (request.method === "copilot.listPrompts") {
-                        return JSON.stringify({
-                            id: request.id,
-                            type: "response",
-                            ok: true,
-                            payload: [
-                                {
-                                    id: "explain-code",
-                                    name: "Explain Code",
-                                    description: "Explain selected code",
-                                },
-                            ],
-                        });
-                    }
                     if (request.method === "copilot.setWorkspace") {
                         return JSON.stringify({
                             id: request.id,
@@ -169,19 +124,6 @@ describe("CopilotClient", () => {
                             type: "response",
                             ok: true,
                             payload: { success: true },
-                        });
-                    }
-                    if (request.method === "copilot.session.executePrompt") {
-                        return JSON.stringify({
-                            id: request.id,
-                            type: "response",
-                            ok: true,
-                            payload: {
-                                type: "assistant.message",
-                                data: {
-                                    content: "Prompt executed",
-                                },
-                            },
                         });
                     }
                     if (request.method === "copilot.session.agent.list") {
@@ -448,11 +390,8 @@ describe("CopilotClient", () => {
         const status = await client.getStatus();
         const auth = await client.getAuthStatus();
         const models = await client.listModels();
-        const agents = await client.listAgents();
-        const prompts = await client.listPrompts();
         const workspace = await client.setWorkspace("C:/workspace");
         const restart = await client.restartServer();
-        const commands = await client.listCustomCommands();
         const session = await client.createSession({});
         await session.setAgent("explore");
         await session.clearAgent();
@@ -477,7 +416,6 @@ describe("CopilotClient", () => {
         await session.rpc.skills.disable("test-skill");
         await session.rpc.skills.reload();
         const instructionSources = await session.rpc.instructions.getSources();
-        const promptEvent = await session.executePrompt("explain-code", "x=1");
         const completion = await session.sendAndWait({
             prompt: "Write a function",
         });
@@ -490,11 +428,8 @@ describe("CopilotClient", () => {
         expect(status.version).toBe("bridge-v2");
         expect(auth.isAuthenticated).toBe(true);
         expect(models[0].id).toBe("gpt-5");
-        expect(agents[0].name).toBe("Explore");
-        expect(prompts[0].id).toBe("explain-code");
         expect(workspace.success).toBe(true);
         expect(restart.restarted).toBe(true);
-        expect(commands[0].name).toBe("agent-customization");
         expect(rpcAgents.agents[0]?.name).toBe("researcher");
         expect(rpcCurrentAgent.agent?.name).toBe("researcher");
         expect(rpcReloadedAgents.agents[0]?.displayName).toBe("Researcher");
@@ -506,7 +441,6 @@ describe("CopilotClient", () => {
         expect(oauth.authorizationUrl).toContain("oauth");
         expect(sessionSkills.skills[0].name).toBe("test-skill");
         expect(instructionSources.sources[0]?.id).toBe("repo");
-        expect(promptEvent?.type).toBe("assistant.message");
         expect(completion?.type).toBe("assistant.message");
         expect(completion?.data.content).toContain("Write a function");
         expect(discoveredMcp.servers[0].name).toBe("filesystem");
@@ -757,51 +691,6 @@ describe("CopilotClient", () => {
                         payload: [{ id: "gpt-5", name: "GPT-5" }],
                     });
                 }
-                if (request.method === "copilot.listAgents") {
-                    return JSON.stringify({
-                        id: request.id,
-                        type: "response",
-                        ok: true,
-                        payload: [
-                            {
-                                id: "explore",
-                                name: "Explore",
-                                description: "Fast read-only codebase exploration",
-                                source: "project",
-                                enabled: true,
-                            },
-                        ],
-                    });
-                }
-                if (request.method === "copilot.listCustomCommands") {
-                    return JSON.stringify({
-                        id: request.id,
-                        type: "response",
-                        ok: true,
-                        payload: [
-                            {
-                                name: "agent-customization",
-                                description: "Manage agent customization files",
-                                source: "project",
-                                enabled: true,
-                            },
-                        ],
-                    });
-                }
-                if (request.method === "copilot.listPrompts") {
-                    return JSON.stringify({
-                        id: request.id,
-                        type: "response",
-                        ok: true,
-                        payload: [
-                            {
-                                id: "explain-code",
-                                name: "Explain Code",
-                                description: "Explain selected code",
-                            },
-                        ],
-                    });
-                }
                 if (request.method === "copilot.setWorkspace") {
                     return JSON.stringify({
                         id: request.id,
@@ -863,20 +752,14 @@ describe("CopilotClient", () => {
         const status = await client.getStatus();
         const ping = await client.ping("legacy");
         const auth = await client.getAuthState();
-        const agents = await client.listAgents();
-        const prompts = await client.listPrompts();
         const workspace = await client.setWorkspace("C:/workspace");
-        const commands = await client.listCustomCommands();
         const completion = await client.complete("say hello", 64);
         const session = await client.createSession("gpt-5");
         expect(status.state).toBe("ready");
         expect(status.version).toBe("bridge-v2");
         expect(ping.pong).toBe(true);
         expect(auth.configured).toBe(true);
-        expect(agents[0].name).toBe("Explore");
-        expect(prompts[0].id).toBe("explain-code");
         expect(workspace.success).toBe(true);
-        expect(commands[0].name).toBe("agent-customization");
         expect(completion.text).toContain("say hello");
         expect(completion.model).toBe("gpt-5");
         expect(session.sessionId).toBe("gpt-5");

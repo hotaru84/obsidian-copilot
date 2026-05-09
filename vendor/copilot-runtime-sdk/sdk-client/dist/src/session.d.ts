@@ -5,17 +5,9 @@ export interface CopilotClientSessionBridge {
     _sessionDisconnect(sessionId: string): Promise<void>;
     _sessionGetMessages(sessionId: string): Promise<SessionEvent[]>;
     _sessionAbort(sessionId: string): Promise<void>;
-    _sessionLog(sessionId: string, message: string, options?: {
-        level?: "info" | "warning" | "error";
-        ephemeral?: boolean;
-    }): Promise<void>;
-    _sessionSetModel(sessionId: string, model: string, options?: {
-        reasoningEffort?: string;
-    }): Promise<void>;
     _sessionSetAgent(sessionId: string, agentId: string): Promise<void>;
     _sessionClearAgent(sessionId: string): Promise<void>;
     _sessionSetMode(sessionId: string, mode: SessionMode): Promise<void>;
-    _sessionExecutePrompt(sessionId: string, promptId: string, args?: string): Promise<AssistantMessageEvent | undefined>;
     _sessionAgentList(sessionId: string): Promise<SessionRpcAgentList>;
     _sessionAgentGetCurrent(sessionId: string): Promise<SessionRpcAgentGetCurrentResult>;
     _sessionAgentSelect(sessionId: string, name: string): Promise<void>;
@@ -173,17 +165,9 @@ export declare class CopilotSession {
     getMessages(): Promise<SessionEvent[]>;
     disconnect(): Promise<void>;
     abort(): Promise<void>;
-    setModel(model: string, options?: {
-        reasoningEffort?: string;
-    }): Promise<void>;
     setAgent(agentId: string): Promise<void>;
     clearAgent(): Promise<void>;
     setMode(mode: SessionMode): Promise<void>;
-    executePrompt(promptId: string, args?: string): Promise<AssistantMessageEvent | undefined>;
-    log(message: string, options?: {
-        level?: "info" | "warning" | "error";
-        ephemeral?: boolean;
-    }): Promise<void>;
     get capabilities(): SessionCapabilities;
     setCapabilities(capabilities: SessionCapabilities | undefined): void;
     _dispatchEvent(event: SessionEvent): void;

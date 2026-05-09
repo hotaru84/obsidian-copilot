@@ -35,12 +35,12 @@ import { useSessionHistory } from "./useSessionHistory";
 
 // Domain model imports
 import type {
-	PromptTemplateInfo,
 	SlashCommand,
 	SessionModeState,
 	SessionModelState,
 	SessionRemoteAgentState,
 } from "../domain/models/chat-session";
+import type { PromptFileMeta } from "../domain/models/scheduled-prompt";
 import type { ImagePromptContent } from "../domain/models/prompt-content";
 import type {
 	ChatMessage,
@@ -52,6 +52,61 @@ import type {
 interface AgentInfo {
 	id: string;
 	displayName: string;
+}
+
+interface LocalPromptSlashCommand {
+	command: SlashCommand;
+	filePath: string;
+}
+
+function toSlashCommandName(value: string): string {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "-")
+		.replace(/[\\/:*?"<>|#%{}\[\]^`~!$&'()*+,;=@]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
+}
+
+function fallbackCommandNameFromPath(path: string): string {
+	const fileName = path.split("/").pop() ?? path;
+	return toSlashCommandName(fileName.replace(/\.md$/i, ""));
+}
+
+function buildLocalPromptSlashCommands(
+	entries: Array<{ meta: PromptFileMeta; body: string }>,
+	logger: Logger,
+): LocalPromptSlashCommand[] {
+	const commands: LocalPromptSlashCommand[] = [];
+	const usedNames = new Set<string>();
+
+	for (const entry of entries) {
+		const baseName =
+			toSlashCommandName(entry.meta.title) ||
+			fallbackCommandNameFromPath(entry.meta.filePath);
+		const commandName = baseName || `prompt-${commands.length + 1}`;
+
+		if (usedNames.has(commandName)) {
+			logger.warn(
+				`[useChatController] Duplicate custom prompt slash command '${commandName}' skipped for ${entry.meta.filePath}`,
+			);
+			continue;
+		}
+
+		usedNames.add(commandName);
+		commands.push({
+			filePath: entry.meta.filePath,
+			command: {
+				name: commandName,
+				description: entry.meta.description || entry.meta.title,
+				hint: entry.meta.title,
+				source: "local",
+			},
+		});
+	}
+
+	return commands;
 }
 
 function hasAssistantResponseInLatestTurn(
@@ -264,31 +319,23 @@ export function useChatController(
 	const { messages, isSending } = chat;
 
 	const permission = usePermission(acpAdapter, messages);
-	const [promptTemplates, setPromptTemplates] = useState<
-		PromptTemplateInfo[]
+	const [customPromptCommands, setCustomPromptCommands] = useState<
+		LocalPromptSlashCommand[]
 	>([]);
-
-	const promptCommands = useMemo(() => {
-		return promptTemplates.map((prompt) => ({
-			name: prompt.promptId,
-			description: prompt.description || prompt.name,
-			hint: prompt.name,
-			source: "agent" as const,
-		}));
-	}, [promptTemplates]);
 
 	const mergedSlashCommands = useMemo(() => {
 		const byName = new Map<string, SlashCommand>();
 		for (const command of session.availableCommands || []) {
 			byName.set(command.name, command);
 		}
-		for (const command of promptCommands) {
+		for (const promptCommand of customPromptCommands) {
+			const command = promptCommand.command;
 			if (!byName.has(command.name)) {
 				byName.set(command.name, command);
 			}
 		}
 		return Array.from(byName.values());
-	}, [promptCommands, session.availableCommands]);
+	}, [customPromptCommands, session.availableCommands]);
 
 	const mentions = useMentions(vaultAccessAdapter, plugin);
 	const autoMention = useAutoMention(vaultAccessAdapter);
@@ -301,31 +348,33 @@ export function useChatController(
 		let isDisposed = false;
 
 		if (!session.sessionId || !isSessionReady) {
-			setPromptTemplates([]);
+			setCustomPromptCommands([]);
 			return;
 		}
 
-		void acpAdapter
-			.listPrompts()
-			.then((prompts) => {
+		void plugin
+			.loadPromptsFromFolder()
+			.then((entries) => {
 				if (!isDisposed) {
-					setPromptTemplates(prompts);
+					setCustomPromptCommands(
+						buildLocalPromptSlashCommands(entries, logger),
+					);
 				}
 			})
 			.catch((error) => {
 				logger.warn(
-					"[useChatController] Failed to load runtime prompt templates",
+					"[useChatController] Failed to load custom prompts for slash commands",
 					error,
 				);
 				if (!isDisposed) {
-					setPromptTemplates([]);
+					setCustomPromptCommands([]);
 				}
 			});
 
 		return () => {
 			isDisposed = true;
 		};
-	}, [acpAdapter, isSessionReady, logger, session.sessionId]);
+	}, [isSessionReady, logger, plugin, session.sessionId]);
 
 	const autoExport = useAutoExport(plugin);
 
@@ -426,30 +475,19 @@ export function useChatController(
 	const handleSendMessage = useCallback(
 		async (content: string, images?: ImagePromptContent[]) => {
 			const isFirstMessage = messages.length === 0;
-			// Match slash commands like /explain or /explain arg1 arg2
+			// Match slash commands like /prompt-name or /prompt-name arg1 arg2
 			const promptMatch = content.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
 			const matchedPrompt = promptMatch
-				? promptTemplates.find(
-						(prompt) => prompt.promptId === promptMatch[1],
+				? customPromptCommands.find(
+						(prompt) => prompt.command.name === promptMatch[1],
 					)
 				: undefined;
 
 			if (matchedPrompt && (!images || images.length === 0)) {
-				// Execute as a prompt template
-				// Arguments are everything after the slash command
-				const args = promptMatch?.[2]?.trim();
-				await chat.executePromptTemplate(
-					matchedPrompt.promptId,
-					content,
-					args,
+				// Run via the scheduled prompt runner manual path (same route as RunPromptModal).
+				await plugin.scheduledPromptRunner.runNow(
+					matchedPrompt.filePath,
 				);
-
-				if (isFirstMessage && session.sessionId) {
-					await sessionHistory.saveSessionLocally(
-						session.sessionId,
-						content,
-					);
-				}
 				return;
 			}
 
@@ -476,7 +514,7 @@ export function useChatController(
 		[
 			chat,
 			autoMention,
-			promptTemplates,
+			customPromptCommands,
 			plugin,
 			messages.length,
 			session.sessionId,

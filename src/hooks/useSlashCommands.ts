@@ -31,7 +31,7 @@ export interface UseSlashCommandsReturn {
 /**
  * Hook for managing slash command dropdown state and logic.
  *
- * @param availableCommands - Available slash commands from the agent session
+ * @param availableCommands - Available slash commands from runtime and local prompts
  * @param onAutoMentionToggle - Callback to enable/disable auto-mention
  *        (slash commands require auto-mention to be disabled so "/" stays at the start)
  */
@@ -44,10 +44,10 @@ export function useSlashCommands(
 
 	const isOpen = suggestions.length > 0;
 
-	// ACP agent-provided commands only
+	// Keep both agent and local command sources.
 	const allCommands = useMemo(() => {
 		return availableCommands
-			.map((cmd) => ({ ...cmd, source: "agent" as const }))
+			.map((cmd) => ({ ...cmd }))
 			.sort((a, b) => a.name.localeCompare(b.name));
 	}, [availableCommands]);
 
@@ -83,7 +83,7 @@ export function useSlashCommands(
 
 			const query = afterSlash.toLowerCase();
 
-			// Filter ACP commands
+			// Filter all available slash commands
 			const filtered = allCommands.filter((cmd) =>
 				cmd.name.toLowerCase().includes(query),
 			);
@@ -91,7 +91,7 @@ export function useSlashCommands(
 			setSuggestions(filtered);
 			setSelectedIndex(0);
 			// Disable auto-mention when slash command is detected
-			// (ACP requires slash commands to be at the very beginning)
+			// (slash commands require '/' at the beginning)
 			onAutoMentionToggle?.(true);
 		},
 		[allCommands, onAutoMentionToggle, suggestions.length],

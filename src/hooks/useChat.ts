@@ -63,16 +63,6 @@ export interface UseChatReturn {
 	) => Promise<void>;
 
 	/**
-	 * Execute a runtime prompt template within the current session.
-	 * Adds the slash command as a user message and waits for session updates.
-	 */
-	executePromptTemplate: (
-		promptId: string,
-		commandText: string,
-		args?: string,
-	) => Promise<void>;
-
-	/**
 	 * Clear all messages (e.g., when starting a new session).
 	 */
 	clearMessages: () => void;
@@ -1039,55 +1029,6 @@ export function useChat(
 		],
 	);
 
-	const executePromptTemplate = useCallback(
-		async (
-			promptId: string,
-			commandText: string,
-			args?: string,
-		): Promise<void> => {
-			if (!sessionContext.sessionId) {
-				setErrorInfo({
-					title: "Cannot Execute Prompt",
-					message: "No active session. Please wait for connection.",
-				});
-				return;
-			}
-
-			addMessage({
-				id: crypto.randomUUID(),
-				role: "user",
-				content: [
-					{
-						type: "text",
-						text: commandText,
-					},
-				],
-				timestamp: new Date(),
-			});
-
-			setIsSending(true);
-			isSendingRef.current = true;
-			setLastUserMessage(commandText);
-
-			try {
-				await agentClient.executePrompt(
-					sessionContext.sessionId,
-					promptId,
-					args,
-				);
-			} catch (error) {
-				isSendingRef.current = false;
-				setIsSending(false);
-				setErrorInfo({
-					title: "Prompt Execution Failed",
-					message:
-						error instanceof Error ? error.message : String(error),
-				});
-			}
-		},
-		[addMessage, agentClient, sessionContext.sessionId],
-	);
-
 	/**
 	 * Truncate local messages after a specific event ID.
 	 */
@@ -1109,7 +1050,6 @@ export function useChat(
 		setInitialMessages,
 		setMessagesFromLocal,
 		clearError,
-		executePromptTemplate,
 		addMessage,
 		updateLastMessage,
 		updateMessage,

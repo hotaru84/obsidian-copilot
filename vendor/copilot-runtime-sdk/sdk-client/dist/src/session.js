@@ -122,9 +122,6 @@ export class CopilotSession {
     async abort() {
         await this.client._sessionAbort(this.sessionId);
     }
-    async setModel(model, options) {
-        await this.client._sessionSetModel(this.sessionId, model, options);
-    }
     async setAgent(agentId) {
         await this.client._sessionSetAgent(this.sessionId, agentId);
     }
@@ -133,12 +130,6 @@ export class CopilotSession {
     }
     async setMode(mode) {
         await this.client._sessionSetMode(this.sessionId, mode);
-    }
-    async executePrompt(promptId, args) {
-        return this.client._sessionExecutePrompt(this.sessionId, promptId, args);
-    }
-    async log(message, options) {
-        await this.client._sessionLog(this.sessionId, message, options);
     }
     get capabilities() {
         return this._capabilities;
