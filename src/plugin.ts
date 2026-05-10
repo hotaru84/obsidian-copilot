@@ -39,7 +39,6 @@ import type { SavedSessionInfo } from "./domain/models/session-info";
 import { initializeLogger } from "./shared/logger";
 import type {
 	PromptConditionConfigFile,
-	PromptEventType,
 	PromptExecutionCondition,
 	PromptFileMeta,
 	PromptExecutionRecord,
@@ -88,30 +87,6 @@ function truncateText(value: string, maxLength: number): string {
 	return `${value.slice(0, maxLength - 1)}…`;
 }
 
-function buildDailyNoteEventContext(filePath: string, content: string): string {
-	return [
-		`A daily note was created: ${filePath}`,
-		"Use the note below as context.",
-		"",
-		"[Daily Note Content]",
-		content,
-	].join("\n");
-}
-
-function buildDailyNoteManualContext(
-	filePath: string,
-	date: string,
-	content: string,
-): string {
-	return [
-		`A daily note was selected for manual execution (${date}): ${filePath}`,
-		"Use the note below as context.",
-		"",
-		"[Daily Note Content]",
-		content,
-	].join("\n");
-}
-
 function buildExternalFileEventContext(filePath: string): string {
 	return `A new external file was created: ${filePath}`;
 }
@@ -148,23 +123,6 @@ function dailyNoteFormatToRegex(format: string): RegExp | null {
 		.replace(/YYYY/g, "\\d{4}")
 		.replace(/MM/g, "\\d{2}")
 		.replace(/DD/g, "\\d{2}");
-	return new RegExp(`^${pattern}$`);
-}
-
-function dailyNoteFormatToDateCaptureRegex(format: string): RegExp | null {
-	if (!format || typeof format !== "string") return null;
-	const escaped = format.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const pattern = escaped
-		.replace(/YYYY/g, "(?<year>\\d{4})")
-		.replace(/MM/g, "(?<month>\\d{2})")
-		.replace(/DD/g, "(?<day>\\d{2})");
-	if (
-		!pattern.includes("?<year>") ||
-		!pattern.includes("?<month>") ||
-		!pattern.includes("?<day>")
-	) {
-		return null;
-	}
 	return new RegExp(`^${pattern}$`);
 }
 
@@ -210,48 +168,6 @@ function isDailyNoteByConfig(filePath: string, app: App): boolean {
 
 	// Fallback: yyyy-mm-dd
 	return /^\d{4}-\d{2}-\d{2}$/.test(fileName);
-}
-
-function extractDailyNoteDate(filePath: string, app: App): string | null {
-	const { format } = getDailyNotesPluginOptions(app);
-	const fileName = filePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
-
-	if (!format) {
-		return /^\d{4}-\d{2}-\d{2}$/.test(fileName) ? fileName : null;
-	}
-
-	const regex = dailyNoteFormatToDateCaptureRegex(format);
-	if (!regex) {
-		return /^\d{4}-\d{2}-\d{2}$/.test(fileName) ? fileName : null;
-	}
-
-	const match = regex.exec(fileName);
-	if (!match?.groups) return null;
-	const year = Number(match.groups.year);
-	const month = Number(match.groups.month);
-	const day = Number(match.groups.day);
-	if (
-		!Number.isInteger(year) ||
-		!Number.isInteger(month) ||
-		!Number.isInteger(day) ||
-		month < 1 ||
-		month > 12 ||
-		day < 1 ||
-		day > 31
-	) {
-		return null;
-	}
-
-	const date = new Date(year, month - 1, day);
-	if (
-		date.getFullYear() !== year ||
-		date.getMonth() !== month - 1 ||
-		date.getDate() !== day
-	) {
-		return null;
-	}
-
-	return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /** Maximum seconds to wait for a new chat view to register after opening one. */
@@ -729,57 +645,6 @@ export default class AgentClientPlugin extends Plugin {
 		this.updateSchedulerStatusBar();
 	}
 
-	private findDailyNoteForDate(date: string): TFile | null {
-		for (const file of this.app.vault.getMarkdownFiles()) {
-			if (!isDailyNoteByConfig(file.path, this.app)) continue;
-			if (extractDailyNoteDate(file.path, this.app) === date) {
-				return file;
-			}
-		}
-		return null;
-	}
-
-	async runPromptNowWithDailyNoteDate(
-		filePath: string,
-		dailyNoteDate: string,
-	): Promise<void> {
-		if (!/^\d{4}-\d{2}-\d{2}$/.test(dailyNoteDate)) {
-			new Notice("[Agent Client] Invalid date format. Use YYYY-MM-DD");
-			return;
-		}
-
-		const file = this.findDailyNoteForDate(dailyNoteDate);
-		if (!file) {
-			new Notice(
-				`[Agent Client] Daily note not found for date: ${dailyNoteDate}`,
-			);
-			return;
-		}
-
-		let contextText: string;
-		try {
-			const raw = await this.app.vault.read(file);
-			const maxLen = this.settings.displaySettings.maxNoteLength;
-			const limited =
-				raw.length > maxLen
-					? `${raw.slice(0, maxLen)}\n\n[Truncated to ${maxLen} chars]`
-					: raw;
-			contextText = buildDailyNoteManualContext(
-				file.path,
-				dailyNoteDate,
-				limited,
-			);
-		} catch (error) {
-			console.warn(
-				`[Agent Client] Failed to read daily note for manual context: ${file.path}`,
-				error,
-			);
-			contextText = `A daily note was selected for manual execution (${dailyNoteDate}): ${file.path}`;
-		}
-
-		await this.scheduledPromptRunner.runNow(filePath, { contextText });
-	}
-
 	private startPromptObservers(): void {
 		this.stopPromptObservers();
 
@@ -793,15 +658,9 @@ export default class AgentClientPlugin extends Plugin {
 
 			void (async () => {
 				try {
-					const raw = await this.app.vault.read(file);
-					const maxLen = this.settings.displaySettings.maxNoteLength;
-					const limited =
-						raw.length > maxLen
-							? `${raw.slice(0, maxLen)}\n\n[Truncated to ${maxLen} chars]`
-							: raw;
 					await this.scheduledPromptRunner.runByEvent(
 						"daily-note-created",
-						buildDailyNoteEventContext(file.path, limited),
+						`A daily note was created: ${file.path}`,
 					);
 				} catch (error) {
 					console.warn(
@@ -1595,7 +1454,6 @@ export default class AgentClientPlugin extends Plugin {
 			this.scheduledPromptRunner.getPendingExecutionCount();
 		const next = this.scheduledPromptRunner.getNextScheduledExecution(now);
 		const todayHistory = this.getTodayPromptHistory();
-		const latestRecord = this.settings.promptExecutionHistory.at(-1);
 
 		if (running) {
 			const elapsedMs =

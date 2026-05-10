@@ -73,8 +73,6 @@ export interface ManualPromptRunOptions {
 	contextText?: string;
 }
 
-/** Maximum retry attempts while waiting for the session to become ready (1 attempt/s). */
-const MAX_SESSION_INIT_RETRY_ATTEMPTS = 30;
 /** Maximum time (ms) to wait for the agent to finish generating after prompt is sent. */
 const MAX_RESPONSE_WAIT_MS = 5 * 60 * 1000; // 5 minutes
 /** Polling interval (ms) when waiting for idle. */
@@ -152,11 +150,6 @@ function shouldRunPrompt(
 		if (!meta.daysOfWeek.includes(now.getDay())) return false;
 	}
 	return meta.timeWindows.some((w) => isInTimeWindow(now, w));
-}
-
-function appendExecutionContext(body: string, contextText?: string): string {
-	if (!contextText) return body;
-	return `${body.trim()}\n\n[Execution Context]\n${contextText}`;
 }
 
 /**
@@ -348,8 +341,12 @@ export class ScheduledPromptRunner {
 			new Notice(`[Agent Client] Prompt file not found: ${filePath}`);
 			return;
 		}
-		const body = appendExecutionContext(entry.body, options?.contextText);
-		this.enqueueExecution(entry.meta, body, "manual", options?.contextText);
+		this.enqueueExecution(
+			entry.meta,
+			entry.body,
+			"manual",
+			options?.contextText,
+		);
 		await this.processQueue();
 	}
 
@@ -365,10 +362,9 @@ export class ScheduledPromptRunner {
 			if (meta.condition.mode !== "event") continue;
 			if (!meta.condition.enabled) continue;
 			if (meta.condition.eventType !== eventType) continue;
-			const text = appendExecutionContext(body, contextText);
 			this.enqueueExecution(
 				meta,
-				text,
+				body,
 				`event:${eventType}`,
 				contextText,
 			);
@@ -499,20 +495,7 @@ export class ScheduledPromptRunner {
 				return;
 			}
 
-			let sent = false;
-			for (
-				let attempt = 0;
-				attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS;
-				attempt++
-			) {
-				sent = await view.sendTextPrompt(body);
-				if (sent) break;
-				if (attempt < MAX_SESSION_INIT_RETRY_ATTEMPTS - 1) {
-					await new Promise<void>((resolve) =>
-						window.setTimeout(resolve, 1000),
-					);
-				}
-			}
+			const sent = await view.sendTextPrompt(body);
 
 			if (sent) {
 				// Wait for the agent to finish generating the response before

@@ -270,14 +270,7 @@ export class CustomPromptsModal extends Modal {
 		});
 		setIcon(runBtn, "play");
 		runBtn.addEventListener("click", () => {
-			void (async () => {
-				const date = await selectDailyNoteDate(this.app);
-				if (!date) return;
-				await this.plugin.runPromptNowWithDailyNoteDate(
-					meta.filePath,
-					date,
-				);
-			})();
+			void this.plugin.scheduledPromptRunner.runNow(meta.filePath);
 		});
 
 		const editBtn = bodyActionsEl.createEl("button", {

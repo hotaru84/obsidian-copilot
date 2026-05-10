@@ -6,7 +6,6 @@ import type { AttachedImage } from "../components/chat/ImagePreviewStrip";
 import { SessionHistoryModal } from "../components/chat/SessionHistoryModal";
 import { ConfirmDeleteModal } from "../components/chat/ConfirmDeleteModal";
 import { ElicitationModal } from "../components/chat/ElicitationModal";
-import { selectDailyNoteDate } from "../components/chat/DailyNoteDateModal";
 
 // Service imports
 import { NoteMentionService } from "../adapters/obsidian/mention-service";
@@ -484,13 +483,19 @@ export function useChatController(
 					)
 				: undefined;
 
-			if (matchedPrompt && (!images || images.length === 0)) {
-				// Run via the scheduled prompt runner manual path (same route as RunPromptModal).
-				const date = await selectDailyNoteDate(plugin.app);
-				if (!date) return;
-				await plugin.runPromptNowWithDailyNoteDate(
+			if (
+				matchedPrompt &&
+				(!images || images.length === 0) &&
+				promptMatch
+			) {
+				const commandArgs = promptMatch[2] || "";
+				const contextText = commandArgs.trim()
+					? `Command arguments:\n${commandArgs}`
+					: undefined;
+
+				await plugin.scheduledPromptRunner.runNow(
 					matchedPrompt.filePath,
-					date,
+					{ contextText },
 				);
 				return;
 			}

@@ -72,12 +72,12 @@ export function useSlashCommands(
 			const afterSlash = textUpToCursor.slice(1); // Remove leading '/'
 
 			// If there's a space, the command is complete and user is typing arguments
-			// Close dropdown but keep auto-mention disabled
+			// Close dropdown and enable auto-mention for file mention support in command args
 			if (afterSlash.includes(" ")) {
 				setSuggestions([]);
 				setSelectedIndex(0);
-				// Keep auto-mention disabled (slash command is still active)
-				onAutoMentionToggle?.(true);
+				// Enable auto-mention so @-mentions work in command arguments
+				onAutoMentionToggle?.(false);
 				return;
 			}
 

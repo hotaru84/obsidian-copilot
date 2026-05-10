@@ -8,7 +8,6 @@
 import { FuzzySuggestModal, App } from "obsidian";
 import type { PromptFileMeta } from "../../domain/models/scheduled-prompt";
 import type AgentClientPlugin from "../../plugin";
-import { selectDailyNoteDate } from "./DailyNoteDateModal";
 
 export class RunPromptModal extends FuzzySuggestModal<PromptFileMeta> {
 	private prompts: PromptFileMeta[];
@@ -37,12 +36,7 @@ export class RunPromptModal extends FuzzySuggestModal<PromptFileMeta> {
 
 	onChooseItem(item: PromptFileMeta): void {
 		void (async () => {
-			const date = await selectDailyNoteDate(this.app);
-			if (!date) return;
-			await this.plugin.runPromptNowWithDailyNoteDate(
-				item.filePath,
-				date,
-			);
+			await this.plugin.scheduledPromptRunner.runNow(item.filePath);
 		})();
 	}
 }
