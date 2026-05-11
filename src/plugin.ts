@@ -171,7 +171,7 @@ function isDailyNoteByConfig(filePath: string, app: App): boolean {
 }
 
 /** Maximum seconds to wait for a new chat view to register after opening one. */
-const MAX_VIEW_REGISTRATION_WAIT_SECONDS = 10;
+const MAX_VIEW_REGISTRATION_WAIT_SECONDS = 20;
 
 /**
  * Send message shortcut configuration.
@@ -957,6 +957,21 @@ export default class AgentClientPlugin extends Plugin {
 		const registeredAfterTimeout = this.viewRegistry.get(viewId);
 		if (registeredAfterTimeout) {
 			return registeredAfterTimeout;
+		}
+
+		// Registration timeout: close the view.
+		// But first, wait a bit longer if there are pending waiters
+		// (another executePrompt might be waiting for readiness).
+		if (chatView.hasPendingWaiters()) {
+			// Wait up to 5 more seconds for pending waiters to resolve
+			for (let i = 0; i < 5; i++) {
+				if (!chatView.hasPendingWaiters()) {
+					break;
+				}
+				await new Promise<void>((resolve) =>
+					window.setTimeout(resolve, 1000),
+				);
+			}
 		}
 
 		this.scheduledPromptViewIds.delete(viewId);

@@ -88,6 +88,10 @@ export class FloatingViewContainer implements IChatViewContainer {
 	private containerEl: HTMLElement;
 	private callbacks: FloatingViewCallbacks | null = null;
 
+	// Ready-state waiting (Promise-based, no polling)
+	private _isViewReady = false;
+	private _readyWaiters: Array<(ready: boolean) => void> = [];
+
 	constructor(plugin: AgentClientPlugin, instanceId: string) {
 		this.plugin = plugin;
 		// viewId format: "floating-chat-{instanceId}" to match useChatController's adapter key
@@ -114,6 +118,9 @@ export class FloatingViewContainer implements IChatViewContainer {
 				onRegisterCallbacks={(cbs) => {
 					this.callbacks = cbs;
 				}}
+				onReadyStateChange={(isReady) =>
+					this.notifyReadyStateChange(isReady)
+				}
 			/>,
 		);
 
@@ -126,6 +133,9 @@ export class FloatingViewContainer implements IChatViewContainer {
 	 */
 	unmount(): void {
 		this.plugin.viewRegistry.unregister(this.viewId);
+		// Resolve any pending waiters as not-ready when the container unmounts
+		this._isViewReady = false;
+		this._drainReadyWaiters(false);
 
 		if (this.root) {
 			this.root.unmount();
@@ -195,8 +205,58 @@ export class FloatingViewContainer implements IChatViewContainer {
 		return this.callbacks?.isIdle() ?? true;
 	}
 
+	/**
+	 * Called by FloatingChatComponent whenever ready state changes.
+	 * Wakes up any callers waiting in waitUntilReady().
+	 */
+	notifyReadyStateChange(isReady: boolean): void {
+		this._isViewReady = isReady;
+		if (isReady) {
+			this._drainReadyWaiters(true);
+		}
+	}
+
+	private _drainReadyWaiters(ready: boolean): void {
+		const waiters = this._readyWaiters.splice(0);
+		for (const resolve of waiters) {
+			resolve(ready);
+		}
+	}
+
+	/**
+	 * Wait until the session is ready to accept a prompt.
+	 * Resolves true when ready, false if timeoutMs elapses first.
+	 * Resolves immediately with true if already ready.
+	 */
+	waitUntilReady(timeoutMs: number): Promise<boolean> {
+		if (this._isViewReady) {
+			return Promise.resolve(true);
+		}
+		return new Promise<boolean>((resolve) => {
+			let settled = false;
+			const settle = (ready: boolean) => {
+				if (settled) return;
+				settled = true;
+				const idx = this._readyWaiters.indexOf(onReady);
+				if (idx !== -1) this._readyWaiters.splice(idx, 1);
+				resolve(ready);
+			};
+			const onReady = (ready: boolean) => settle(ready);
+			this._readyWaiters.push(onReady);
+			window.setTimeout(() => settle(false), timeoutMs);
+		});
+	}
+
 	async cancelOperation(): Promise<void> {
 		await this.callbacks?.cancelOperation();
+	}
+
+	/**
+	 * Check if there are pending waiters waiting for ready state.
+	 * Used to avoid closing a view while waitUntilReady() is still in progress.
+	 */
+	hasPendingWaiters(): boolean {
+		return this._readyWaiters.length > 0;
 	}
 
 	async close(): Promise<void> {
@@ -218,6 +278,7 @@ interface FloatingChatComponentProps {
 	initialExpanded?: boolean;
 	initialPosition?: { x: number; y: number };
 	onRegisterCallbacks?: (callbacks: FloatingViewCallbacks) => void;
+	onReadyStateChange?: (isReady: boolean) => void;
 }
 
 function FloatingChatComponent({
@@ -226,6 +287,7 @@ function FloatingChatComponent({
 	initialExpanded = false,
 	initialPosition,
 	onRegisterCallbacks,
+	onReadyStateChange,
 }: FloatingChatComponentProps) {
 	// ============================================================
 	// Chat Controller Hook (Centralized Logic)
@@ -676,6 +738,11 @@ function FloatingChatComponent({
 		handleSendMessage,
 		handleStopGeneration,
 	]);
+
+	// Notify FloatingViewContainer when ready state changes so waitUntilReady() can resolve
+	useEffect(() => {
+		onReadyStateChange?.(isSessionReady && !sessionHistory.loading);
+	}, [onReadyStateChange, isSessionReady, sessionHistory.loading]);
 
 	// ============================================================
 	// Workspace Events (Hotkeys) - same as ChatView.ChatComponent

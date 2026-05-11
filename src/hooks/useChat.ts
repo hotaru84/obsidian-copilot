@@ -286,8 +286,11 @@ export function useChat(
 	const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
 	const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
 	const isSendingRef = useRef(false);
+	const activeSessionIdRef = useRef<string | null>(sessionContext.sessionId);
 	const sessionUpdateQueueRef = useRef<SessionUpdate[]>([]);
 	const isProcessingSessionUpdateRef = useRef(false);
+
+	activeSessionIdRef.current = sessionContext.sessionId;
 
 	/**
 	 * Add a new message to the chat.
@@ -543,6 +546,15 @@ export function useChat(
 	const handleSessionUpdate = useCallback(
 		(update: SessionUpdate): void => {
 			const processSessionUpdate = (next: SessionUpdate): void => {
+				// Ignore updates from non-active sessions to prevent cross-session
+				// events (e.g. session_idle) from affecting current send state.
+				if (
+					activeSessionIdRef.current &&
+					next.sessionId !== activeSessionIdRef.current
+				) {
+					return;
+				}
+
 				switch (next.type) {
 					case "agent_message_chunk":
 						updateLastMessage({

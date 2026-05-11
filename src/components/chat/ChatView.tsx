@@ -372,6 +372,11 @@ function ChatComponent({
 		cancelForBroadcast,
 	]);
 
+	// Notify ChatView class when ready state changes so waitUntilReady() can resolve
+	useEffect(() => {
+		view.notifyReadyStateChange(isSessionReady && !sessionHistory.loading);
+	}, [view, isSessionReady, sessionHistory.loading]);
+
 	// ============================================================
 	// Effects - Workspace Events (Hotkeys)
 	// ============================================================
@@ -675,6 +680,10 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	private cancelCallback: CancelCallback | null = null;
 	private isIdleCallback: IsIdleCallback | null = null;
 
+	// Ready-state waiting (Promise-based, no polling)
+	private _isViewReady = false;
+	private _readyWaiters: Array<(ready: boolean) => void> = [];
+
 	private displayText: string = "Copilot chat";
 
 	constructor(leaf: WorkspaceLeaf, plugin: AgentClientPlugin) {
@@ -844,6 +853,62 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		this.canSendCallback = null;
 		this.cancelCallback = null;
 		this.isIdleCallback = null;
+		// Note: do NOT drain _readyWaiters here.
+		// This method is called on every React effect re-run (not only on unmount),
+		// so draining waiters here would cancel valid in-flight waitUntilReady() calls.
+		// Waiter cleanup is handled exclusively in close().
+	}
+
+	/**
+	 * Called by the React component whenever the ready state changes
+	 * (isSessionReady && !sessionHistory.loading).
+	 * Wakes up any callers waiting in waitUntilReady().
+	 */
+	notifyReadyStateChange(isReady: boolean): void {
+		this._isViewReady = isReady;
+		if (isReady) {
+			this._drainReadyWaiters(true);
+		}
+	}
+
+	private _drainReadyWaiters(ready: boolean): void {
+		const waiters = this._readyWaiters.splice(0);
+		for (const resolve of waiters) {
+			resolve(ready);
+		}
+	}
+
+	/**
+	 * Wait until the session is ready to accept a prompt.
+	 * Resolves true when ready, false if timeoutMs elapses first.
+	 * Resolves immediately with true if already ready.
+	 */
+	waitUntilReady(timeoutMs: number): Promise<boolean> {
+		if (this._isViewReady) {
+			return Promise.resolve(true);
+		}
+		return new Promise<boolean>((resolve) => {
+			let settled = false;
+			const settle = (ready: boolean) => {
+				if (settled) return;
+				settled = true;
+				// Remove from waiter list in case we are timing out
+				const idx = this._readyWaiters.indexOf(onReady);
+				if (idx !== -1) this._readyWaiters.splice(idx, 1);
+				resolve(ready);
+			};
+			const onReady = (ready: boolean) => settle(ready);
+			this._readyWaiters.push(onReady);
+			window.setTimeout(() => settle(false), timeoutMs);
+		});
+	}
+
+	/**
+	 * Check if there are pending waiters waiting for ready state.
+	 * Used to avoid closing a view while waitUntilReady() is still in progress.
+	 */
+	hasPendingWaiters(): boolean {
+		return this._readyWaiters.length > 0;
 	}
 
 	getDisplayName(): string {
@@ -875,6 +940,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	/**
 	 * Send an arbitrary text prompt directly to the agent.
 	 * Returns true if the prompt was sent, false if the session is not ready.
+	 * Call waitUntilReady() before invoking this method.
 	 */
 	async sendTextPrompt(text: string): Promise<boolean> {
 		return (await this.sendTextPromptCallback?.(text)) ?? false;
@@ -910,6 +976,9 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		}
 
 		this.isClosing = true;
+		// Resolve any pending waiters as not-ready when the view closes
+		this._isViewReady = false;
+		this._drainReadyWaiters(false);
 		try {
 			this.leaf.detach();
 		} catch (error) {

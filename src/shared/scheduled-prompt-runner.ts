@@ -77,6 +77,8 @@ export interface ManualPromptRunOptions {
 const MAX_RESPONSE_WAIT_MS = 5 * 60 * 1000; // 5 minutes
 /** Polling interval (ms) when waiting for idle. */
 const IDLE_POLL_INTERVAL_MS = 500;
+/** Maximum time (ms) to wait for the session to become ready before sending a prompt. */
+const READY_WAIT_TIMEOUT_MS = 15_000; // 15 seconds
 
 // ──────────────────────────────────────────────────────────────
 // Time Utilities
@@ -495,7 +497,29 @@ export class ScheduledPromptRunner {
 				return;
 			}
 
-			const sent = await view.sendTextPrompt(body);
+			// Wait for the session to become ready before sending.
+			// This resolves immediately if already ready, or awaits the React state
+			// change event (isSessionReady && !sessionHistory.loading) via Promise.
+			// For event-triggered prompts, use longer timeout since view creation is happening in parallel.
+			const waitTimeout = trigger.startsWith("event:")
+				? 25_000
+				: READY_WAIT_TIMEOUT_MS;
+			const ready = await view.waitUntilReady(waitTimeout);
+			if (!ready) {
+				record.error = "Session not ready";
+				new Notice(
+					`[Agent Client] Scheduled prompt "${meta.title}": Session not ready`,
+					5000,
+				);
+				return;
+			}
+
+			const promptToSend =
+				trigger.startsWith("event:") && contextText?.trim()
+					? `${body}\n\n---\nEvent context:\n${contextText}`
+					: body;
+
+			const sent = await view.sendTextPrompt(promptToSend);
 
 			if (sent) {
 				// Wait for the agent to finish generating the response before
@@ -517,9 +541,11 @@ export class ScheduledPromptRunner {
 					3000,
 				);
 			} else {
-				record.error = "Session not ready";
+				// sendTextPrompt returned false despite waitUntilReady() succeeding;
+				// this can happen if isSending is true (another message in flight).
+				record.error = "Session busy";
 				new Notice(
-					`[Agent Client] Scheduled prompt "${meta.title}": Session not ready`,
+					`[Agent Client] Scheduled prompt "${meta.title}": Session busy`,
 					5000,
 				);
 			}

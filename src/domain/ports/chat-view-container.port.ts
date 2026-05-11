@@ -141,10 +141,24 @@ export interface IChatViewContainer {
 	 * Send an arbitrary text prompt directly to the agent, bypassing input state.
 	 * Used by the scheduled prompt runner to inject prompts without
 	 * disturbing the user's in-progress input.
+	 * Always call waitUntilReady() before sendTextPrompt() to ensure the session is ready.
 	 * @param text - Prompt text to send
 	 * @returns Promise<boolean> - true if the prompt was sent, false if the session is not ready
 	 */
 	sendTextPrompt(text: string): Promise<boolean>;
+
+	/**
+	 * Wait until the session is ready to accept a prompt (isSessionReady && !sessionHistory.loading).
+	 * Resolves true when ready, false if timeoutMs elapses before the session becomes ready.
+	 * Resolves immediately with true if already ready.
+	 */
+	waitUntilReady(timeoutMs: number): Promise<boolean>;
+
+	/**
+	 * Check if there are pending waiters waiting for ready state.
+	 * Used to avoid closing a view while waitUntilReady() is still in progress.
+	 */
+	hasPendingWaiters(): boolean;
 
 	/**
 	 * Whether the session is idle (not generating a response).
